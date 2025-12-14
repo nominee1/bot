@@ -78,15 +78,17 @@ export const getDefaultAppIdAndUrl = () => {
     return { app_id, server_url };
 };
 
+
 export const getAppId = () => {
     let app_id = null;
-    window.localStorage.setItem('config.app_id', '67468');   //MY app Id  37016
+    window.localStorage.setItem('config.app_id', '36300');   //Verify  80656  | site.denaratool 84662 | denara pro71070// base  111123 binoflix(113358)
     const config_app_id = window.localStorage.getItem('config.app_id');
     const current_domain = getCurrentProductionDomain() ?? '';
 
     if (config_app_id) {
         app_id = config_app_id;
     } else if (isStaging()) {
+
         app_id = APP_IDS.STAGING;
     } else if (isTestLink()) {
         app_id = APP_IDS.LOCALHOST;

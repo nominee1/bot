@@ -1,0 +1,115 @@
+.binary-tetris {
+    // ... (keep existing styles)
+  
+    .bt-board {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      min-height: 500px;
+    }
+  
+    .bt-col {
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(255,255,255,.03);
+      
+      .bt-col-head {
+        padding: 10px 12px;
+        font-weight: 900;
+        letter-spacing: .6px;
+        font-size: 12px;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        
+        .bt-count {
+          font-size: 11px;
+          opacity: 0.7;
+        }
+        
+        &.even { 
+          background: rgba(46, 204, 113, .08);
+          color: #2ecc71;
+        }
+        &.odd { 
+          background: rgba(231, 76, 60, .08);
+          color: #e74c3c;
+        }
+      }
+    }
+  
+    .bt-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      padding: 10px;
+      min-height: 400px;
+    }
+  
+    .bt-column {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+  
+    .bt-cell {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 8px;
+      border: 1px dashed rgba(255,255,255,.08);
+      background: rgba(0,0,0,.10);
+      position: relative;
+      overflow: hidden;
+    }
+  
+    .bt-block {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      font-weight: 900;
+      letter-spacing: .5px;
+      font-size: 14px;
+      text-shadow: 0 1px 10px rgba(0,0,0,.35);
+      
+      &.even {
+        background: rgba(46, 204, 113, .26);
+        border: 1px solid rgba(46, 204, 113, .45);
+        color: #dff7ea;
+      }
+      
+      &.odd {
+        background: rgba(231, 76, 60, .24);
+        border: 1px solid rgba(231, 76, 60, .45);
+        color: #ffe6e2;
+      }
+      
+      &.falling {
+        animation: fallAnimation 0.3s ease-out;
+      }
+      
+      &.fresh {
+        animation: pulse 0.5s ease-in-out 2;
+      }
+    }
+  
+    @keyframes fallAnimation {
+      from {
+        transform: translateY(-100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+  
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+  }

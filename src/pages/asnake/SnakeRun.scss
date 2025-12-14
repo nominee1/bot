@@ -1,0 +1,31 @@
+/* ===========================================================================
+ *  SnakeRun visual styles
+ * =========================================================================== */
+
+ .snake-run {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    margin: 1rem auto;
+  
+    &.crashed {
+      animation: shake 0.4s ease-in-out;
+    }
+  }
+  
+  .snake-seg {
+    border-radius: 2px;
+    animation: pop 0.15s ease-out;
+  }
+  
+  @keyframes pop {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+  
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%,60% { transform: translateX(-3px); }
+    40%,80% { transform: translateX(3px); }
+  }
+  

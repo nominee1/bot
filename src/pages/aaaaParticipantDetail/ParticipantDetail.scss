@@ -1,0 +1,30 @@
+.pd { display:flex; flex-direction:column; gap:12px; }
+.pd__summary { display:grid; grid-template-columns: repeat(6, minmax(140px,1fr)); gap:8px; border:1px solid #e7ebf0; border-radius:14px; background:#fff; padding:10px; }
+.s { border:1px solid #eef1f5; border-radius:10px; padding:8px; background:#fafbfd; }
+.label { font-size:.8rem; color:#6b7380; }
+.val { font-weight:800; }
+.val.pos { color:#0e8a3a; } .val.neg { color:#d12d2d; }
+
+.pd__table { border:1px solid #e7ebf0; border-radius:14px; background:#fff; overflow:hidden; }
+.head { display:grid; grid-template-columns: 170px 110px 160px 100px 130px 140px; gap:12px; padding:10px 14px; background:#f7f9fb; border-bottom:1px solid #eceff2; font-weight:600; color:#596068; }
+.scroller { max-height:70vh; overflow-y:auto; }
+.list { list-style:none; margin:0; padding:0; }
+.row { display:grid; grid-template-columns: 170px 110px 160px 100px 130px 140px; gap:12px; padding:12px 14px; border-bottom:1px solid #f0f2f5; }
+.row:nth-child(odd){ background:#fcfdff; }
+.col--amt.pos { color:#0e8a3a; font-weight:700; }
+.col--amt.neg { color:#d12d2d; font-weight:700; }
+.status { padding:12px 14px; text-align:center; color:#60656b; }
+.status.err { color:#c62828; }
+
+.pd__pager { display:flex; gap:10px; justify-content:center; align-items:center; }
+.btn { border:1px solid #3353d1; background:#3b5bfd; color:#fff; border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; }
+.btn--ghost { border:1px solid #d9dde1; background:#fff; color:#101828; }
+
+@media (max-width: 900px){
+  .pd__summary { grid-template-columns: repeat(2, minmax(140px,1fr)); }
+  .head { display:none; }
+  .row { display:block; border:1px solid #e8ecf1; border-radius:12px; margin:10px 12px; padding:12px; box-shadow:0 2px 10px rgba(0,0,0,.03); }
+  .row .col { display:grid; grid-template-columns: 120px 1fr; gap:8px; padding:6px 0; border-bottom:1px dashed #edf1f5; }
+  .row .col:last-child { border-bottom:none; padding-bottom:0; }
+  .row .col::before { content: attr(data-label); color:#6b737a; font-weight:600; }
+}

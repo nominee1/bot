@@ -1,0 +1,422 @@
+/* =========================================================
+   Denara Copytrading Hub — SCOPED STYLES (no global leaks)
+   Everything lives under `.cth-root`
+   ========================================================= */
+
+/* ---------------- Theme tokens ---------------- */
+.cth-root {
+  /* Light (default) */
+  --bg: #bda19f;
+  --panel: #ffffffcc;        /* glass */
+  --panel-solid: #ffffff;    /* solid panel */
+  --ink: #0f172a;
+  --ink-soft: #334155;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 20px 45px rgba(2, 6, 23, 0.08);
+  --accent: #2563eb;
+  --pos: #16a34a;
+  --neg: #dc2626;
+  --warn: #b45309;
+  --chip: #6fbcd0;
+  --chip-free: #ecfdf5;
+  --chip-warn: #fff7ed;
+  --glass-blur: 12px;
+
+  /* backdrop */
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(96,165,250,.10), transparent 60%),
+    radial-gradient(1000px 500px at 100% 10%, rgba(168,85,247,.10), transparent 60%),
+    var(--bg);
+  color: var(--ink);
+
+  /* local scroll container */
+  height: 100vh;
+  width: 100vw;
+  padding: 18px 14px 18px 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Firefox */
+}
+.cth-root::-webkit-scrollbar { width: 0; height: 0; }
+
+.cth-root[data-theme="dark"] {
+  --bg: #0b0f19;
+  --panel: rgba(20,24,38,0.55);
+  --panel-solid: #151a28;
+  --ink: #e5edff;
+  --ink-soft: #c7d2fe;
+  --muted: #9aa3b2;
+  --border: #1f2434;
+  --shadow: 0 24px 60px rgba(0,0,0,.6);
+  --accent: #60a5fa;
+  --pos: #22c55e;
+  --neg: #ef4444;
+  --warn: #f59e0b;
+  --chip: rgba(96,165,250,.14);
+  --chip-free: rgba(34,197,94,.14);
+  --chip-warn: rgba(245,158,11,.14);
+  --glass-blur: 14px;
+}
+
+/* ---------------- Base reset-ish ---------------- */
+.cth-root * { box-sizing: border-box; }
+.cth-root h1, .cth-root h2, .cth-root h3 { margin: 0 0 10px; }
+.cth-root a { color: var(--accent); text-decoration: none; }
+
+/* ---------------- Buttons & Inputs ---------------- */
+.cth-root .btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform .12s ease, background .2s ease, border-color .2s ease;
+}
+.cth-root .btn:hover { transform: translateY(-1px); }
+.cth-root .btn:active { transform: translateY(0); }
+.cth-root .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.cth-root .btn.ghost { background: transparent; border-color: var(--border); }
+.cth-root .btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.cth-root input[type="text"],
+.cth-root input[type="search"],
+.cth-root input[type="number"],
+.cth-root input[type="datetime-local"],
+.cth-root input[type="password"]{
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-solid) 80%, transparent);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.cth-root input:focus {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ---------------- Glass helper ---------------- */
+.cth-root .glass{
+  background: var(--panel);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 16px;
+}
+
+/* ---------------- Topbar ---------------- */
+.cth-root .topbar{
+  position: sticky; top: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 14px 18px; margin: 0 0 16px 0;
+}
+.cth-root .brand{ display:flex; align-items:center; gap:10px; }
+.cth-root .topbar__actions{ display:flex; gap:8px; }
+
+/* ---------------- Layout grid ---------------- */
+.cth-root .ct-hub__grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding-bottom: 20rem;
+}
+@media (max-width:1024px){ .cth-root .ct-hub__grid{ grid-template-columns: 1fr; } }
+
+/* ---------------- Cards & forms ---------------- */
+.cth-root .card{ padding:16px; border-radius:16px; }
+.cth-root .card--form .form-grid{
+  display:grid; grid-template-columns:1fr 1fr; gap:12px;
+}
+.cth-root .card--form .form-grid .span-2{ grid-column: span 2; }
+.cth-root .card--form .form-grid label{ display:grid; gap:6px; }
+.cth-root .card--form .form-grid label span{ font-size:12px; color:var(--muted); }
+.cth-root .card--form .form-grid label .err{ color:var(--neg); font-size:12px; }
+.cth-root .card--form .form-grid .actions{ display:flex; gap:10px; align-items:center; justify-content:flex-end; }
+
+@media (max-width:640px){
+  .cth-root .card--form .form-grid{ grid-template-columns:1fr; }
+  .cth-root .card--form .form-grid .span-2{ grid-column:auto; }
+}
+
+/* ---------------- Lists & skeletons ---------------- */
+.cth-root .card .trader-list{ list-style:none; margin:12px 0 0; padding:0; display:grid; gap:12px; }
+.cth-root .skeleton-list{ display:grid; gap:12px; }
+.cth-root .skeleton-card{ @extend .glass; padding:14px; }
+.cth-root .skeleton-card .sk-row,
+.cth-root .skeleton-card .sk-kpis{
+  height:14px; border-radius:8px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--panel-solid) 70%, transparent) 0%,
+    color-mix(in srgb, var(--panel-solid) 90%, transparent) 50%,
+    color-mix(in srgb, var(--panel-solid) 70%, transparent) 100%);
+  background-size:200% 100%; animation: shine 1.2s linear infinite; margin:8px 0;
+}
+.cth-root .skeleton-card .sk-kpis{ height:46px; }
+@keyframes shine{ to{ background-position: -200% 0; } }
+
+/* ---------------- Badges & chips ---------------- */
+.cth-root .badge-row{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.cth-root .badge-row .badge{
+  font-weight:800; color:var(--ink);
+  background: color-mix(in srgb, var(--panel-solid) 60%, transparent);
+  border:1px solid var(--border); padding:6px 10px; border-radius:12px;
+}
+.cth-root .badge-row .chip{
+  padding:6px 10px; border-radius:999px; font-size:12px; line-height:1;
+  border:1px solid var(--border); background:var(--chip);
+}
+.cth-root .badge-row .chip--free{
+  background: var(--chip-free); color: var(--pos);
+  border-color: color-mix(in srgb, var(--pos) 50%, var(--border)); font-weight:700;
+}
+.cth-root .badge-row .chip--warn{
+  background: var(--chip-warn); color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); font-weight:700;
+}
+.cth-root .badge-row .chip--ghost{ background:transparent; }
+.chip--gold{
+  background: linear-gradient(90deg, #cdaa00, #ffd54a);
+  color:#1a1a1a; border:1px solid rgba(0,0,0,.08);
+}
+
+/* ---------------- Trader card ---------------- */
+.cth-root .trader-card{ @extend .glass; padding:16px; display:grid; gap:12px; }
+.cth-root .trader-card__main{ display:grid; gap:10px; }
+.cth-root .trader-card .meta-grid{
+  display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px 12px; font-size:14px; color:var(--ink-soft);
+}
+.cth-root .trader-card .meta-grid .small{ font-size:12px; color:var(--muted); }
+.cth-root .trader-card .meta-grid .muted{ color:var(--muted); }
+.cth-root .trader-card__actions{ display:flex; gap:8px; }
+.cth-root .trader-card .copy-inline{ display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+.cth-root .trader-card .copy-inline input{ flex:1; min-width:160px; }
+.cth-root .active-copiers{ margin-top:10px; }
+.cth-root .active-copiers ul{ display:grid; gap:6px; list-style:none; padding:0; margin:0; }
+.cth-root .active-copiers .tag{ padding:4px 8px; background:rgba(0,0,0,.06); border-radius:8px; }
+.cth-root .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-left:6px; background:#bbb; }
+.cth-root .dot.on{ background:var(--pos); }
+
+/* ---------------- Empty / error ---------------- */
+.cth-root .empty{
+  padding:18px; border:1px dashed var(--border); border-radius:12px; text-align:center; color:var(--muted);
+}
+.cth-root .empty.err{ color:var(--neg); border-color: color-mix(in srgb, var(--neg) 40%, var(--border));
+  background: color-mix(in srgb, var(--neg) 6%, transparent); }
+
+/* ---------------- Modal ---------------- */
+.cth-root .modal-backdrop{
+  position:fixed; inset:0;
+  background: radial-gradient(600px 300px at 20% -10%, rgba(96,165,250,.20), transparent 60%), rgba(2,6,23,.55);
+  display:grid; place-items:center; z-index:60; padding:16px; backdrop-filter: blur(6px);  overflow-y:auto; 
+}
+.cth-root .modal{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:var(--shadow);
+  width:min(1100px, 100%);
+  height:90vh;                /* ⬅ always take 90% viewport height */
+  max-height:90vh;
+  display:flex;               /* ⬅ use flex instead of grid */
+  flex-direction:column;
+  overflow:hidden;
+}
+
+@media screen and (max-width:980px){
+  .cth-root .modal{
+    height:75vh;              /* a bit shorter on smaller screens */
+    max-height:75vh;
+  }
+}
+
+.cth-root .modal__head{
+  padding:14px 16px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.cth-root .modal__head h3{ margin:0; font-size:16px; color:var(--ink); }
+.cth-root .icon-btn{ appearance:none; background:transparent; border:none; font-size:22px; line-height:1; cursor:pointer; color:var(--ink-soft); }
+.cth-root .icon-btn:hover{ color:var(--ink); transform: scale(1.05); }
+.cth-root .modal__body{ overflow:auto; background: color-mix(in srgb, var(--panel-solid) 40%, transparent); }
+.cth-root .modal__foot{ padding:12px 16px; border-top:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+.cth-root .modal__foot--spread{ justify-content:space-between; }
+.cth-root .modal__foot--spread .actions{ display:flex; gap:8px; }
+
+/* ------ Payment OTP modal tweaks ------ */
+.cth-root .otp-modal{ max-width:520px; }
+.cth-root .otp-modal .pay-summary{ display:grid; gap:10px; margin-bottom:12px; }
+.cth-root .otp-modal .pay-summary .row{
+  display:grid; grid-template-columns:1fr auto; align-items:center;
+  padding:8px 10px; border-radius:10px; background:rgba(127,127,127,.08);
+}
+.cth-root .otp-modal .otp-field{ display:grid; gap:6px; margin:10px 0 6px; }
+.cth-root .otp-modal .otp-field input{ letter-spacing:2px; font-weight:600; text-align:center; }
+
+/* ---------------- Toasts (scoped) ---------------- */
+.cth-root .toasts{
+  position:fixed; right:16px; bottom:16px; z-index:80;
+  display:grid; gap:8px; width:min(360px, calc(100vw - 32px));
+}
+.cth-root .toast{
+  display:grid; grid-template-columns:10px 1fr auto; gap:10px; align-items:center;
+  padding:12px 12px 12px 10px; border-radius:12px; border:1px solid var(--border);
+  backdrop-filter: blur(10px); background:var(--panel); color:var(--ink); box-shadow:var(--shadow);
+  animation: slide-in .2s ease both;
+}
+.cth-root .toast.success .toast__dot{ background:var(--pos); box-shadow:0 0 12px var(--pos); }
+.cth-root .toast.error .toast__dot{ background:var(--neg); box-shadow:0 0 12px var(--neg); }
+.cth-root .toast.info .toast__dot{ background:var(--accent); box-shadow:0 0 12px var(--accent); }
+.cth-root .toast__dot{ width:8px; height:8px; border-radius:50%; }
+.cth-root .toast__text{ font-weight:600; }
+.cth-root .toast__x{ appearance:none; border:none; background:transparent; color:var(--muted); font-size:18px; cursor:pointer; line-height:1; }
+.cth-root .toast__x:hover{ color:var(--ink); }
+@keyframes slide-in{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:translateY(0);} }
+
+/* ---------------- Text helpers ---------------- */
+.cth-root .muted{ color:var(--muted); }
+.cth-root .small{ font-size:12px; }
+.cth-root .xsmall{ font-size:11px; }
+
+/* =========================================================
+   STATEMENTS (modal) — TABLE + RESPONSIVE MEDIA
+   Mirrors the “participants/stm-shell” behavior
+   ========================================================= */
+
+/* Head row (sticky) */
+.cth-root .statements__head{
+  display:grid;
+  grid-template-columns: 180px 120px 1fr 100px 150px 140px 140px; /* time action refid app reftype amt bal */
+  gap:8px; padding:10px 16px;
+  border-bottom:1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+  position:sticky; top:0; z-index:1;
+}
+.cth-root .statements__head .col{
+  font-size:12px; font-weight:800; color:var(--ink-soft);
+  text-transform:uppercase; letter-spacing:.02em;
+}
+
+/* Rows */
+.cth-root .statements__list{ list-style:none; margin:0; padding:0; }
+.cth-root .statements__row{
+  display:grid;
+  grid-template-columns: 180px 120px 1fr 100px 150px 140px 140px;
+  gap:8px; padding:10px 16px;
+  border-bottom:1px solid var(--border);
+  background: var(--panel-solid);
+}
+.cth-root .statements__row:nth-child(odd){
+  background: color-mix(in srgb, var(--panel-solid) 80%, transparent);
+}
+
+.cth-root .statements__row .col{ font-size:14px; color:var(--ink-soft); }
+.cth-root .statements__row .col--time{ color:var(--ink); font-weight:700; }
+.cth-root .statements__row .col--action{ text-transform:capitalize; font-weight:700; }
+.cth-root .statements__row .col--action.buy{ color:#0b6bcb; }
+.cth-root .statements__row .col--action.sell{ color:#7a3ef2; }
+.cth-root .statements__row .col--action.deposit{ color:var(--pos); }
+.cth-root .statements__row .col--action.withdrawal{ color:var(--neg); }
+.cth-root .statements__row .col--action.transfer{ color:var(--warn); }
+.cth-root .statements__row .col--amt{ font-weight:800; }
+.cth-root .statements__row .col--amt.pos{ color:var(--pos); }
+.cth-root .statements__row .col--amt.neg{ color:var(--neg); }
+
+.cth-root .statements__status{
+  padding:14px 16px; font-size:14px; color:var(--ink-soft);
+}
+.cth-root .statements__status.loading{ color:var(--ink); }
+.cth-root .statements__status.error{
+  color:var(--neg);
+  background: color-mix(in srgb, var(--neg) 7%, transparent);
+  border-top:1px solid color-mix(in srgb, var(--neg) 35%, var(--border));
+  border-bottom:1px solid color-mix(in srgb, var(--neg) 35%, var(--border));
+}
+.cth-root .statements__status.end{ color:var(--muted); }
+
+/* ---- Visible Summary (above table) ---- */
+.cth-root .visible-summary{
+  margin: 8px 0 12px; padding:12px 14px; border-radius:12px;
+  background: var(--panel); box-shadow: var(--shadow);
+}
+.cth-root .visible-summary .vs__row{
+  display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:12px;
+}
+.cth-root .visible-summary .vs__item{ min-width:0; }
+.cth-root .visible-summary .vs__label{
+  font-size:11px; color:var(--muted); margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cth-root .visible-summary .vs__value{ font-weight:700; font-size:14px; }
+.cth-root .visible-summary .vs__value.pos{ color:var(--pos); }
+.cth-root .visible-summary .vs__value.neg{ color:var(--neg); }
+.cth-root .visible-summary .vs__range{ margin-top:8px; }
+
+/* ---------------- RESPONSIVE MEDIA ---------------- */
+
+/* Medium screens: tighten columns */
+@media (max-width: 920px){
+  .cth-root .statements__head,
+  .cth-root .statements__row{
+    grid-template-columns: 160px 110px 1fr 100px 140px 120px 120px;
+  }
+}
+
+/* Stack on small screens: card rows, head hidden.
+   Uses data-label if present; otherwise falls back to nth-child labels. */
+@media (max-width: 720px){
+  .cth-root .statements__head{ display:none; }
+
+  .cth-root .statements__row{
+    display:block;
+    background:#fff;
+    border:1px solid #e8ecf1;
+    border-radius:12px;
+    margin:10px 12px;
+    padding:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.03);
+  }
+
+  .cth-root .statements__row .col{
+    display:grid;
+    grid-template-columns:130px 1fr;
+    align-items:center;
+    gap:8px;
+    padding:8px 0;
+    border-bottom:1px dashed #edf1f5;
+    font-size:.95rem;
+  }
+  .cth-root .statements__row .col:last-child{ border-bottom:none; padding-bottom:0; }
+
+  /* Prefer explicit data-label from DOM… */
+  .cth-root .statements__row .col::before{
+    content: attr(data-label);
+    color:#6b737a; font-weight:600;
+  }
+  /* …but if not provided, fall back by position */
+  .cth-root .statements__row .col:nth-child(1)::before{ content: attr(data-label, "Time"); }
+  .cth-root .statements__row .col:nth-child(2)::before{ content: attr(data-label, "Action"); }
+  .cth-root .statements__row .col:nth-child(3)::before{ content: attr(data-label, "Reference ID"); }
+  .cth-root .statements__row .col:nth-child(4)::before{ content: attr(data-label, "App ID"); }
+  .cth-root .statements__row .col:nth-child(5)::before{ content: attr(data-label, "Type"); }
+  .cth-root .statements__row .col:nth-child(6)::before{ content: attr(data-label, "Amount"); }
+  .cth-root .statements__row .col:nth-child(7)::before{ content: attr(data-label, "Balance"); }
+
+  .cth-root .visible-summary .vs__row{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+/* Very small: narrower label column */
+@media (max-width: 420px){
+  .cth-root .statements__row .col{ grid-template-columns:110px 1fr; }
+}
+
+/* ---------------- Minor utilities ---------------- */
+.cth-root .pay-explainer{ margin-top:8px; }
+.cth-root .winner-badge{ font-weight:600; margin-bottom:6px; }
+// .cth-root .is-hidden-for-now{ display:none !important; }

@@ -46,6 +46,7 @@
         "framer-motion": "^6.5.1",
         "html-react-parser": "^5.1.18",
         "js-cookie": "^3.0.5",
+        "lightweight-charts": "^5.0.8",
         "localforage": "^1.10.0",
         "lz-string": "^1.5.0",
         "mobx": "^6.12.3",

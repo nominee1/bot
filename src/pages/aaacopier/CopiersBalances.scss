@@ -1,0 +1,41 @@
+.copier-balance-card {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 14px;
+    padding: 14px;
+    background: var(--panel, #ffffff);
+    box-shadow: var(--shadow, 0 12px 30px rgba(2,6,23,0.06));
+    max-width: 420px;
+  
+    .cbc__head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+      h3 { margin: 0; font-weight: 700; font-size: 16px; }
+      .btn { padding: 8px 12px; border-radius: 10px; }
+    }
+  
+    .cbc__status.error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-top: 8px;
+    }
+  
+    .cbc__body {
+      .cbc__row {
+        display: flex; justify-content: space-between;
+        padding: 10px 0; border-bottom: 1px solid #f1f5f9;
+  
+        .cbc__label { color: var(--muted, #6b7280); font-size: 13px; }
+        .cbc__value { font-weight: 700; }
+      }
+  
+      .cbc__foot {
+        display: flex; gap: 12px; justify-content: flex-end;
+        padding-top: 10px; font-size: 12px;
+        .muted { color: var(--muted, #6b7280); }
+      }
+    }
+  }
+  

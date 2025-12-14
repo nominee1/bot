@@ -1,5 +1,5 @@
 import { standalone_routes } from '@/components/shared';
-import { LegacyDerivIcon } from '@deriv/quill-icons/Legacy';
+import { LegacyDerivIcon, LegacyGoogleIcon } from '@deriv/quill-icons/Legacy';
 import { useTranslations } from '@deriv-com/translations';
 import { Tooltip } from '@deriv-com/ui';
 
@@ -14,7 +14,7 @@ const Deriv = () => {
             target='_blank'
             tooltipContent={localize('Go to denaradigitpro.com')}
         >
-            <LegacyDerivIcon iconSize='xs' />
+            <LegacyGoogleIcon iconSize='xs' />
         </Tooltip>
     );
 };

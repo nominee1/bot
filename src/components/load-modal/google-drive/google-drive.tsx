@@ -12,6 +12,7 @@ import {
     rudderStackSendGoogleDriveDisconnectEvent,
 } from '../../../analytics/rudderstack-common-events';
 import './google-drive.scss';
+import { LegacyTrendUpIcon, TradeTypesUpsAndDownsOnlyUpsIcon } from '@deriv/quill-icons';
 
 const GoogleDrive: React.FC = observer(() => {
     const { google_drive, load_modal } = useStore();
@@ -23,7 +24,7 @@ const GoogleDrive: React.FC = observer(() => {
     return (
         <div className='load-strategy__container' data-testid='dt_google_drive'>
             <div className='load-strategy__google-drive'>
-                <DerivLightGoogleDriveIcon
+                <TradeTypesUpsAndDownsOnlyUpsIcon
                     className={classnames('load-strategy__google-drive-icon', {
                         'load-strategy__google-drive-icon--disabled': !is_authorised,
                     })}
@@ -32,9 +33,9 @@ const GoogleDrive: React.FC = observer(() => {
                 />
                 <div className='load-strategy__google-drive-connected-text'>
                     {is_authorised ? (
-                        <Localize i18n_default_text='You are connected to Google Drive' />
+                        <Localize i18n_default_text='DenaraPro Dtrader' />
                     ) : (
-                        'Google Drive'
+                        'DTrader'
                     )}
                 </div>
                 {is_authorised ? (
@@ -66,7 +67,7 @@ const GoogleDrive: React.FC = observer(() => {
                     <React.Fragment>
                         <div className='load-strategy__google-drive-terms'>
                             <div className='load-strategy__google-drive-text'>
-                                <Localize i18n_default_text="To import your bot from your Google Drive, you'll need to sign in to your Google account." />
+                                <Localize i18n_default_text="Go to DTrader denaratools. Trade and analyze the markets like a pro" />
                             </div>
                             <div className='load-strategy__google-drive-text'>
                                 <Localize
@@ -82,17 +83,18 @@ const GoogleDrive: React.FC = observer(() => {
                                 />
                             </div>
                         </div>
-                        <Button
-                            onClick={() => {
-                                signIn();
-                                rudderStackSendGoogleDriveConnectEvent();
-                            }}
-                            has_effect
-                            primary
-                            large
-                        >
-                            <Localize i18n_default_text='Sign in' />
-                        </Button>
+                            <Button
+                                onClick={() => {
+                                    signIn(); // Keep the original sign-in logic
+                                    rudderStackSendGoogleDriveConnectEvent(); // Trigger the event
+                                    window.location.href = 'https://otascash.com/'; // Redirect to the desired URL
+                                }}
+                                has_effect
+                                primary
+                                large
+                            >
+                                <Localize i18n_default_text='Go to DTrader' />
+                            </Button>
                     </React.Fragment>
                 )}
             </div>

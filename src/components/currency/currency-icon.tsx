@@ -73,3 +73,4 @@ export const CurrencyIcon = ({ currency, isVirtual }: { currency?: string; isVir
         </Suspense>
     );
 };
+

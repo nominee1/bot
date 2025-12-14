@@ -1,0 +1,957 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './Deposit.scss';
+
+const API_BASE = 'https://dtraderhub.com/api';
+
+/** ================= Types (match backend) ================= */
+type TraderKpi =
+  | {
+      currency: string;
+      baseline_time: number; // epoch ms
+      start_balance: number | null;
+      end_balance: number | null;
+      net_pl: number;
+      trades: number;
+      wins: number;
+      win_rate: number; // %
+      growth_pct: number | null; // %
+      period_start: number; // epoch sec
+      period_end: number;   // epoch sec
+      error?: undefined;
+    }
+  | {
+      error: string;
+      period_start: number;
+      period_end: number;
+      currency?: undefined;
+      baseline_time?: undefined;
+      start_balance?: undefined;
+      end_balance?: undefined;
+      net_pl?: undefined;
+      trades?: undefined;
+      wins?: undefined;
+      win_rate?: undefined;
+      growth_pct?: undefined;
+    };
+
+type TraderRow = {
+  id: number;
+  username: string;
+  min_balance: number | string;
+  price_usd: number | string | null;
+  created_at: string;
+  active_copiers: number | string | null;
+};
+
+type Trader = {
+  id: string;
+  username: string;
+  min_balance: number;
+  price_usd: number | null;
+  active_copiers: number;
+  created_at: number;
+  kpi?: TraderKpi;
+};
+
+type StatementTx = {
+  transaction_id?: number | string;
+  action_type?: string;
+  amount?: number;
+  balance?: number;
+  balance_after?: number;
+  transaction_time?: number;
+  time?: number;
+  contract_id?: string | number;
+  reference_id?: string | number;
+  app_id?: number | null;
+  reference_type?: string;
+  transaction_type?: string;
+  category?: string;
+  type?: string;
+  contract_type?: string;
+};
+
+type Relationship = {
+  id: number;
+  trader_id: number;
+  copier_username: string;
+  active: 0 | 1 | boolean;
+  created_at: string;
+};
+
+/** ================= Helpers & formatters ================= */
+const currencyFmt = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 2,
+});
+const pctFmt = (p?: number | null) =>
+  typeof p === 'number' ? `${p.toFixed(2)}%` : '—';
+
+const priceWithinLimit = (val: string): boolean => {
+  if (!val.trim()) return true;
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 0 && n <= 5;
+};
+const isPositiveNum = (val: string): boolean => {
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 0;
+};
+const norm = (s?: string) => (s ? String(s).replace(/_/g, ' ').toLowerCase() : '');
+const txEpochMs = (t: StatementTx) =>
+  typeof t.transaction_time === 'number'
+    ? t.transaction_time * 1000
+    : typeof t.time === 'number'
+    ? t.time * 1000
+    : 0;
+const txKey = (t: StatementTx) => `${String(t.transaction_id ?? t.contract_id ?? '')}::${txEpochMs(t)}`;
+
+/** Nairobi month window (epoch sec) */
+function getNairobiMonthWindow(): [number, number] {
+  const now = new Date();
+  const NAIROBI_OFFSET_HOURS = 3;
+  const nowN = new Date(now.getTime() + NAIROBI_OFFSET_HOURS * 3600 * 1000);
+  const y = nowN.getUTCFullYear();
+  const m = nowN.getUTCMonth();
+  const monthStartNairobi = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+  const fromMs = monthStartNairobi.getTime() - NAIROBI_OFFSET_HOURS * 3600 * 1000;
+  const toMs = now.getTime();
+  return [Math.floor(fromMs / 1000), Math.floor(toMs / 1000)];
+}
+
+/** Mask an email for UI */
+const maskEmail = (email: string) => {
+  const [user, domain] = email.split('@');
+  if (!domain) return email;
+  const u = user.length <= 2 ? user[0] + '*' : user[0] + '*'.repeat(user.length - 2) + user.slice(-1);
+  const [d1, d2] = domain.split('.');
+  const d1m = d1.length <= 2 ? d1[0] + '*' : d1[0] + '*'.repeat(d1.length - 2) + d1.slice(-1);
+  return `${u}@${d1m}.${d2 || ''}`;
+};
+
+/** ================= Minimal Toast system ================= */
+type Toast = { id: string; text: string; type?: 'info'|'success'|'error' };
+const Toasts: React.FC<{ items: Toast[], onDismiss: (id: string)=>void }> = ({ items, onDismiss }) => {
+  useEffect(() => {
+    const timers = items.map(t =>
+      setTimeout(() => onDismiss(t.id), 3500)
+    );
+    return () => { timers.forEach(clearTimeout); };
+  }, [items, onDismiss]);
+
+  return (
+    <div className="toasts">
+      {items.map(t => (
+        <div key={t.id} className={`toast ${t.type || 'info'}`}>
+          <div className="toast__dot" />
+          <div className="toast__text">{t.text}</div>
+          <button className="toast__x" onClick={() => onDismiss(t.id)}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/** ================= Sparkline (SVG) ================= */
+const Sparkline: React.FC<{ start?: number|null; end?: number|null; width?: number; height?: number }> = ({
+  start, end, width = 96, height = 28
+}) => {
+  if (typeof start !== 'number' || typeof end !== 'number' || start <= 0) {
+    return <svg width={width} height={height} />;
+  }
+  const points = [start, (start*0.98 + end*0.02), (start*0.9 + end*0.1), (start*0.7 + end*0.3), (start*0.4 + end*0.6), end];
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const pad = 2;
+  const W = width - pad*2;
+  const H = height - pad*2;
+
+  const d = points.map((v, i) => {
+    const x = pad + (i/(points.length-1))*W;
+    const y = pad + (1 - (v - min)/(max - min || 1))*H;
+    return `${i===0 ? 'M' : 'L'}${x},${y}`;
+  }).join(' ');
+  const rising = end >= start;
+  return (
+    <svg width={width} height={height} className={`spark ${rising ? 'up' : 'down'}`} aria-hidden>
+      <path d={d} fill="none" strokeWidth="2" stroke="currentColor" />
+    </svg>
+  );
+};
+
+/** ================= Main Component ================= */
+const CopyTradingHub: React.FC = () => {
+  /** Theme (scoped) */
+  const [theme, setTheme] = useState<'dark'|'light'>(() => (localStorage.getItem('denara.theme') as any) || 'light');
+  useEffect(() => { localStorage.setItem('denara.theme', theme); }, [theme]);
+
+  /** Toasts */
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const pushToast = (text: string, type?: Toast['type']) =>
+    setToasts((prev) => [...prev, { id: Math.random().toString(36).slice(2), text, type }]);
+  const removeToast = (id: string) => setToasts((prev) => prev.filter(t => t.id !== id));
+
+  /** Collections */
+  const [traders, setTraders] = useState<Trader[]>([]);
+  const [loadingList, setLoadingList] = useState<boolean>(false);
+  const [listErr, setListErr] = useState<string | null>(null);
+
+  /** KPI sequencer state */
+  const [recompute, setRecompute] = useState(false);
+  const kpiAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+  const [kpiBusy, setKpiBusy] = useState(false);
+
+  /** Forms */
+  const [tUser, setTUser] = useState('');
+  const [tMinBal, setTMinBal] = useState('');
+  const [tToken, setTToken] = useState('');
+  const [tPrice, setTPrice] = useState('');
+  const [submittingTrader, setSubmittingTrader] = useState(false);
+
+  const [cUser, setCUser] = useState('');
+  const [cToken, setCToken] = useState('');
+  const [submittingCopier, setSubmittingCopier] = useState(false);
+
+  /** UI helpers */
+  const [filter, setFilter] = useState('');
+  const [statementModalFor, setStatementModalFor] = useState<Trader | null>(null);
+
+  /** Copy start/stop inline state per trader */
+  const [copyUsernameByTrader, setCopyUsernameByTrader] = useState<Record<string, string>>({});
+  const [copyBusyByTrader, setCopyBusyByTrader] = useState<Record<string, boolean>>({});
+  const [stopBusyByTrader, setStopBusyByTrader] = useState<Record<string, boolean>>({});
+  const [activeListByTrader, setActiveListByTrader] = useState<Record<string, Relationship[] | null>>({});
+  const [activeBusyByTrader, setActiveBusyByTrader] = useState<Record<string, boolean>>({});
+
+  /** Statements modal state */
+  const [stmItems, setStmItems] = useState<StatementTx[]>([]);
+  const [stmOffset, setStmOffset] = useState(0);
+  const [stmHasMore, setStmHasMore] = useState(true);
+  const [stmLoading, setStmLoading] = useState(false);
+  const [stmErr, setStmErr] = useState<string | null>(null);
+  const [fromSec, toSec] = getNairobiMonthWindow();
+
+  /** ======== Payment (fee + OTP) modal state ======== */
+  const [payOpen, setPayOpen] = useState(false);
+  const [payTrader, setPayTrader] = useState<Trader | null>(null);
+  const [payCopierName, setPayCopierName] = useState('');
+  const [invoiceId, setInvoiceId] = useState<number | null>(null);
+  const [invoiceAmt, setInvoiceAmt] = useState<number>(0);
+  const [invoiceCur, setInvoiceCur] = useState<string>('USD');
+  const [otpEmailMasked, setOtpEmailMasked] = useState<string>('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpConfirming, setOtpConfirming] = useState(false);
+
+  /** Load list (FAST, no metrics) */
+  const loadTraders = async () => {
+    setLoadingList(true);
+    setListErr(null);
+    try {
+      const res = await fetch(`${API_BASE}/traders`, { credentials: 'omit' });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 150)}`);
+      }
+      const data: TraderRow[] = await res.json();
+      const mapped: Trader[] = data.map((r) => ({
+        id: String(r.id),
+        username: r.username,
+        min_balance: Number(r.min_balance ?? 0),
+        price_usd: r.price_usd === null ? null : Number(r.price_usd),
+        active_copiers: Number(r.active_copiers ?? 0),
+        created_at: Date.parse(r.created_at || new Date().toISOString()),
+      }));
+      setTraders(mapped);
+      void loadKpisSequentially(mapped, false);
+    } catch (e: any) {
+      setListErr(e?.message || 'Failed to load traders.');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTraders();
+    return () => { kpiAbortRef.current.cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Filtering */
+  const filteredTraders = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return traders;
+    return traders.filter(
+      (t) =>
+        t.username.toLowerCase().includes(q) ||
+        (t.price_usd != null && String(t.price_usd).includes(q))
+    );
+  }, [traders, filter]);
+
+  /** Register Trader */
+  const submitTrader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tUser.trim() || !tToken.trim()) return;
+    if (!isPositiveNum(tMinBal)) return;
+    if (!priceWithinLimit(tPrice)) return;
+
+    setSubmittingTrader(true);
+    try {
+      const res = await fetch(`${API_BASE}/traders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: tUser.trim(),
+          min_balance: Number(tMinBal || 0),
+          token: tToken.trim(),
+          price_usd: tPrice.trim() ? Number(tPrice) : null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const row = (await res.json()) as TraderRow;
+      const newTrader: Trader = {
+        id: String(row.id),
+        username: row.username,
+        min_balance: Number(row.min_balance ?? 0),
+        price_usd: row.price_usd === null ? null : Number(row.price_usd),
+        active_copiers: Number(row.active_copiers ?? 0),
+        created_at: Date.parse(row.created_at || new Date().toISOString()),
+      };
+      setTraders((prev) => [newTrader, ...prev]);
+      void loadKpisSequentially([newTrader], true);
+      setTUser(''); setTMinBal(''); setTToken(''); setTPrice('');
+      pushToast('Trader registered', 'success');
+    } catch (err: any) {
+      pushToast(err?.message || 'Failed to register trader', 'error');
+    } finally {
+      setSubmittingTrader(false);
+    }
+  };
+
+  /** Register Copier */
+  const submitCopier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cUser.trim() || !cToken.trim()) return;
+
+    setSubmittingCopier(true);
+    try {
+      const res = await fetch(`${API_BASE}/copiers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cUser.trim(), token: cToken.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      setCUser(''); setCToken('');
+      pushToast('Copier registered', 'success');
+    } catch (err: any) {
+      pushToast(err?.message || 'Failed to register copier', 'error');
+    } finally {
+      setSubmittingCopier(false);
+    }
+  };
+
+  /** KPI pass (sequential, gentle pacing) */
+  const applyKpi = (id: string, kpi: TraderKpi) =>
+    setTraders(prev => prev.map(t => (t.id === id ? { ...t, kpi } : t)));
+
+  const loadKpisSequentially = async (list: Trader[], forceRecompute: boolean) => {
+    if (!list || list.length === 0) return;
+    kpiAbortRef.current.cancelled = false;
+    setKpiBusy(true);
+
+    for (const t of list) {
+      if (kpiAbortRef.current.cancelled) break;
+
+      try {
+        const url = new URL(`${API_BASE}/traders/${t.id}/summary`);
+        if (forceRecompute) url.searchParams.set('recompute', '1');
+        const res = await fetch(url.toString());
+        const data = await res.json();
+        if (!res.ok || !data?.ok || data?.summary?.error) {
+          const err = data?.summary?.error || data?.error || `HTTP ${res.status}`;
+          applyKpi(t.id, { error: String(err), period_start: 0, period_end: 0 });
+        } else {
+          applyKpi(t.id, data.summary as TraderKpi);
+        }
+      } catch (e: any) {
+        applyKpi(t.id, { error: e?.message || 'Failed', period_start: 0, period_end: 0 });
+      }
+      await new Promise(r => setTimeout(r, 220));
+    }
+
+    setKpiBusy(false);
+  };
+
+  /** ========== COPY START / STOP with fees ========== */
+
+  // Payments: prepare → open modal with OTP
+  const paymentsPrepare = async (tr: Trader, copierUsername: string) => {
+    const res = await fetch(`${API_BASE}/payments/prepare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trader_id: Number(tr.id), copier_username: copierUsername }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
+
+    const inv = data.invoice;
+    const email = data?.otp?.to || '';
+    setInvoiceId(inv.id);
+    setInvoiceAmt(inv.amount);
+    setInvoiceCur(inv.currency || 'USD');
+    setOtpEmailMasked(email ? maskEmail(email) : '');
+    setOtpCode('');
+    setPayTrader(tr);
+    setPayCopierName(copierUsername);
+    setPayOpen(true);
+  };
+
+  // Payments: confirm → withdraw + start copy
+  const paymentsConfirm = async () => {
+    if (!invoiceId || !payTrader) return;
+    setOtpConfirming(true);
+    try {
+      const res = await fetch(`${API_BASE}/payments/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId, verification_code: otpCode.trim() || '000000' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      // Success → bump active copiers, clear input, close modal
+      setTraders(prev => prev.map(t => t.id === payTrader.id
+        ? { ...t, active_copiers: (t.active_copiers || 0) + 1 }
+        : t
+      ));
+      setCopyUsernameByTrader(prev => ({ ...prev, [payTrader.id]: '' }));
+      setPayOpen(false);
+      setPayTrader(null);
+      pushToast(`Payment ${currencyFmt.format(invoiceAmt)} and copy started: ${payCopierName} → ${payTrader?.username}`, 'success');
+
+      // Refresh active list if visible
+      if (activeListByTrader[payTrader.id]) await loadActiveRelations(payTrader);
+    } catch (e: any) {
+      pushToast(e?.message || 'Payment/Copy failed', 'error');
+    } finally {
+      setOtpConfirming(false);
+    }
+  };
+
+  // Existing: raw copy start (for free traders)
+  const rawCopyStart = async (tr: Trader, copierUsername: string) => {
+    const res = await fetch(`${API_BASE}/copy/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trader_id: Number(tr.id), copier_username: copierUsername }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
+  };
+
+  const startCopy = async (tr: Trader) => {
+    const name = (copyUsernameByTrader[tr.id] || '').trim();
+    if (!name) return;
+    setCopyBusyByTrader(prev => ({ ...prev, [tr.id]: true }));
+    try {
+      // If trader is free, go straight to existing copy start
+      if (tr.price_usd == null) {
+        await rawCopyStart(tr, name);
+        setTraders(prev => prev.map(t => t.id === tr.id
+          ? { ...t, active_copiers: (t.active_copiers || 0) + 1 }
+          : t
+        ));
+        setCopyUsernameByTrader(prev => ({ ...prev, [tr.id]: '' }));
+        pushToast(`Copy started: ${name} → ${tr.username}`, 'success');
+        if (activeListByTrader[tr.id]) await loadActiveRelations(tr);
+        return;
+      }
+
+      // Paid: run prepare (sends OTP) and open modal
+      await paymentsPrepare(tr, name);
+      pushToast('Verification code sent to your Deriv email', 'info');
+    } catch (e: any) {
+      pushToast(e?.message || 'Failed to start copy', 'error');
+    } finally {
+      setCopyBusyByTrader(prev => ({ ...prev, [tr.id]: false }));
+    }
+  };
+
+  const stopCopy = async (tr: Trader) => {
+    const name = (copyUsernameByTrader[tr.id] || '').trim();
+    if (!name) { pushToast('Enter copier username to stop', 'info'); return; }
+    setStopBusyByTrader(prev => ({ ...prev, [tr.id]: true }));
+    try {
+      const res = await fetch(`${API_BASE}/copy/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trader_id: Number(tr.id), copier_username: name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      setTraders(prev => prev.map(t => t.id === tr.id
+        ? { ...t, active_copiers: Math.max(0, (t.active_copiers || 0) - 1) }
+        : t
+      ));
+      pushToast(`Copy stopped: ${name} ↛ ${tr.username}`, 'success');
+      if (activeListByTrader[tr.id]) await loadActiveRelations(tr);
+    } catch (e: any) {
+      pushToast(e?.message || 'Failed to stop copy', 'error');
+    } finally {
+      setStopBusyByTrader(prev => ({ ...prev, [tr.id]: false }));
+    }
+  };
+
+  const loadActiveRelations = async (tr: Trader) => {
+    setActiveBusyByTrader(prev => ({ ...prev, [tr.id]: true }));
+    try {
+      const res = await fetch(`${API_BASE}/relationships?trader_id=${encodeURIComponent(tr.id)}`);
+      const data = await res.json();
+      if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
+      const list = Array.isArray(data) ? (data as Relationship[]) : (data?.results ?? []);
+      setActiveListByTrader(prev => ({ ...prev, [tr.id]: list }));
+    } catch (e: any) {
+      pushToast(e?.message || 'Failed to load active copiers', 'error');
+      setActiveListByTrader(prev => ({ ...prev, [tr.id]: null }));
+    } finally {
+      setActiveBusyByTrader(prev => ({ ...prev, [tr.id]: false }));
+    }
+  };
+
+  /** Statements modal */
+  const openStatements = async (trader: Trader) => {
+    setStatementModalFor(trader);
+    setStmItems([]); setStmOffset(0); setStmHasMore(true); setStmErr(null);
+    await loadMoreStatements(trader, 0);
+  };
+  const closeStatements = () => setStatementModalFor(null);
+
+  const loadMoreStatements = async (trader: Trader, offset: number) => {
+    if (!trader) return;
+    setStmLoading(true);
+    setStmErr(null);
+    try {
+      const url = new URL(`${API_BASE}/traders/${trader.id}/statements`);
+      const [from, to] = getNairobiMonthWindow();
+      url.searchParams.set('from', String(from));
+      url.searchParams.set('to', String(to));
+      url.searchParams.set('limit', '100');
+      url.searchParams.set('offset', String(offset));
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 160)}`);
+      }
+      const data = await res.json();
+      const page: StatementTx[] = data?.statement?.transactions ?? [];
+      setStmItems((prev) => [...prev, ...page]);
+      setStmOffset(offset + (Array.isArray(page) ? page.length : 0));
+      setStmHasMore(Array.isArray(page) && page.length === 100);
+    } catch (e: any) {
+      setStmErr(e?.message || 'Failed to load statements');
+      setStmHasMore(false);
+    } finally {
+      setStmLoading(false);
+    }
+  };
+
+  /** Render */
+  return (
+    <div className="cth-root" data-theme={theme}>
+      {/* Top bar */}
+      <header className="topbar glass">
+        <div className="brand">Denara Copytrading Hub</div>
+        <div className="topbar__actions">
+          <button className="btn ghost" onClick={() => setTheme(t => t==='dark'?'light':'dark')}>
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+          <button className="btn" onClick={() => loadTraders()}>Refresh</button>
+          <button
+            className={`btn ${recompute ? 'primary' : 'ghost'}`}
+            onClick={() => {
+              setRecompute(v => !v);
+              setTimeout(() => { if (!kpiBusy) void loadKpisSequentially(traders, true); }, 0);
+            }}
+            title="Bypass server cache for KPI"
+          >
+            {recompute ? (kpiBusy ? 'Recomputing…' : 'Recompute ON') : 'Recompute OFF'}
+          </button>
+        </div>
+      </header>
+
+      {/* Grid */}
+      <div className="ct-hub__grid">
+        {/* Left column: forms */}
+        <section className="card card--form glass">
+          <h2>Register Trader</h2>
+          <form onSubmit={submitTrader} className="form-grid">
+            <label>
+              <span>Username</span>
+              <input type="text" placeholder="trader" value={tUser} onChange={(e)=>setTUser(e.target.value)} required />
+            </label>
+            <label>
+              <span>Minimum Required Balance (USD)</span>
+              <input type="number" min={0} step="0.01" placeholder="0.00" value={tMinBal} onChange={(e)=>setTMinBal(e.target.value)} />
+              {!isPositiveNum(tMinBal) && <em className="err">Enter a valid amount ≥ 0</em>}
+            </label>
+            <label className="span-2">
+              <span>Deriv Token</span>
+              <input type="text" placeholder="Paste trader's Deriv token" value={tToken} onChange={(e)=>setTToken(e.target.value)} required />
+            </label>
+            <label>
+              <span>Price (USD)</span>
+              <input type="number" min={0} max={5} step="0.01" placeholder="Leave blank for free" value={tPrice} onChange={(e)=>setTPrice(e.target.value)} />
+              {!priceWithinLimit(tPrice) && <em className="err">Max allowed is $5.00</em>}
+            </label>
+            <div className="actions span-2">
+              <button className="btn primary" type="submit" disabled={submittingTrader || !tUser.trim() || !tToken.trim() || !isPositiveNum(tMinBal) || !priceWithinLimit(tPrice)}>
+                {submittingTrader ? 'Registering…' : 'Register Trader'}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section className="card card--form glass">
+          <h2>Register Copier</h2>
+          <form onSubmit={submitCopier} className="form-grid">
+            <label>
+              <span>Username</span>
+              <input type="text" placeholder="e.g. denara_fan01" value={cUser} onChange={(e)=>setCUser(e.target.value)} required />
+            </label>
+            <label className="span-2">
+              <span>Deriv Token (copier)</span>
+              <input type="text" placeholder="Paste copier's Deriv token" value={cToken} onChange={(e)=>setCToken(e.target.value)} required />
+            </label>
+            <div className="actions span-2">
+              <button className="btn primary" type="submit" disabled={submittingCopier || !cUser.trim() || !cToken.trim()}>
+                {submittingCopier ? 'Registering…' : 'Register Copier'}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* Right column: directory */}
+        <section className="card card--list glass">
+          <div className="list-head">
+            <h2>Active Traders {kpiBusy ? <small className="muted">— computing KPIs…</small> : null}</h2>
+            <div className="filters">
+              <input
+                type="search"
+                placeholder="Search by username or price…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {loadingList ? (
+            <div className="skeleton-list">
+              {Array.from({length: 5}).map((_,i)=>(
+                <div key={i} className="skeleton-card">
+                  <div className="sk-row" />
+                  <div className="sk-kpis" />
+                </div>
+              ))}
+            </div>
+          ) : listErr ? (
+            <div className="empty err">{listErr}</div>
+          ) : filteredTraders.length === 0 ? (
+            <div className="empty">No traders yet. Register your first trader on the left.</div>
+          ) : (
+            <ul className="trader-list">
+              {filteredTraders.map((tr) => {
+                const k = tr.kpi;
+                const hasKpi = k && !('error' in k);
+                const kErr = k && 'error' in k ? k.error : null;
+                const tId = tr.id;
+                const copierName = copyUsernameByTrader[tId] || '';
+                const startBusy = !!copyBusyByTrader[tId];
+                const stopBusy = !!stopBusyByTrader[tId];
+                const activeBusy = !!activeBusyByTrader[tId];
+                const activeList = activeListByTrader[tId];
+
+                return (
+                  <li key={tr.id} className="trader-card">
+                    <div className="trader-card__main">
+                      <div className="badge-row">
+                        <span className="badge">{tr.username}</span>
+                        {tr.price_usd == null ? (
+                          <span className="chip chip--free">Free</span>
+                        ) : (
+                          <span className="chip">{currencyFmt.format(tr.price_usd)}</span>
+                        )}
+                        <span className="chip chip--ghost">Copiers: {tr.active_copiers}</span>
+                        {kErr && <span className="chip chip--warn" title={kErr}>KPI ⚠</span>}
+                        <div className="spark-wrap">
+                          <Sparkline start={hasKpi ? k.start_balance ?? null : null} end={hasKpi ? k.end_balance ?? null : null} />
+                        </div>
+                      </div>
+
+                      <div className="meta-grid">
+                        <div><strong>Min Balance:</strong> ${tr.min_balance.toFixed(2)}</div>
+                        <div className="muted small">ID: {tr.id}</div>
+                        <div className="muted small">Joined: {new Date(tr.created_at).toLocaleDateString()}</div>
+                      </div>
+
+                      {/* KPI grid */}
+                      <div className="kpi-grid">
+                        <div className="kpi">
+                          <div className="kpi__label">Starting Balance</div>
+                          <div className="kpi__value">{hasKpi && typeof k.start_balance === 'number' ? currencyFmt.format(k.start_balance) : '—'}</div>
+                        </div>
+                        <div className="kpi">
+                          <div className="kpi__label">Current Balance</div>
+                          <div className="kpi__value">{hasKpi && typeof k.end_balance === 'number' ? currencyFmt.format(k.end_balance) : '—'}</div>
+                        </div>
+                        <div className="kpi">
+                          <div className="kpi__label">Net P/L</div>
+                          <div className={`kpi__value ${hasKpi && (k.net_pl ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                            {hasKpi ? currencyFmt.format(k.net_pl) : '—'}
+                          </div>
+                        </div>
+                        <div className="kpi">
+                          <div className="kpi__label">Growth</div>
+                          <div className={`kpi__value ${hasKpi && (k.growth_pct ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                            {hasKpi ? pctFmt(k.growth_pct) : '—'}
+                          </div>
+                        </div>
+                        <div className="kpi">
+                          <div className="kpi__label">Win Rate</div>
+                          <div className="kpi__value">{hasKpi ? pctFmt(k.win_rate) : '—'}</div>
+                        </div>
+                        <div className="kpi">
+                          <div className="kpi__label">Trades</div>
+                          <div className="kpi__value">{hasKpi ? String(k.trades) : '—'}</div>
+                        </div>
+                      </div>
+
+                      {hasKpi && k.baseline_time ? (
+                        <div className="muted xsmall">
+                          Baseline set: {new Date(k.baseline_time).toLocaleString()}
+                        </div>
+                      ) : null}
+
+                      {/* Copy relationship controls */}
+                      <div className="copy-inline">
+                        <input
+                          type="text"
+                          placeholder="Copier username"
+                          value={copierName}
+                          onChange={(e) =>
+                            setCopyUsernameByTrader(prev => ({ ...prev, [tId]: e.target.value }))
+                          }
+                        />
+                        <button
+                          className="btn"
+                          disabled={!copierName.trim() || startBusy}
+                          onClick={() => startCopy(tr)}
+                          title="Start copy (fee flow runs if trader has price)"
+                        >
+                          {startBusy ? 'Starting…' : 'Copy Start'}
+                        </button>
+                        <button
+                          className="btn ghost"
+                          disabled={!copierName.trim() || stopBusy}
+                          onClick={() => stopCopy(tr)}
+                          title="Stop server-side copy for this trader→copier"
+                        >
+                          {stopBusy ? 'Stopping…' : 'Copy Stop'}
+                        </button>
+
+                        <button
+                          className="btn ghost"
+                          onClick={() => loadActiveRelations(tr)}
+                          disabled={activeBusy}
+                          title="Show active copiers for this trader"
+                        >
+                          {activeBusy ? 'Loading…' : 'Active Copiers'}
+                        </button>
+                      </div>
+
+                      {Array.isArray(activeList) && (
+                        <div className="active-copiers">
+                          {activeList.length === 0 ? (
+                            <div className="muted small">No active copiers.</div>
+                          ) : (
+                            <ul>
+                              {activeList.map(rel => (
+                                <li key={rel.id}>
+                                  <span className="tag">{rel.copier_username}</span>
+                                  <span className={`dot ${rel.active ? 'on' : 'off'}`} />
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="trader-card__actions">
+                      <button className="btn ghost" onClick={() => openStatements(tr)}>
+                        View Statements (Month-to-date)
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {/* Statements Modal */}
+      {statementModalFor && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Trader statements">
+          <div className="modal">
+            <div className="modal__head">
+              <h3>{statementModalFor.username} — Statements (MTD)</h3>
+              <button className="icon-btn" onClick={() => setStatementModalFor(null)} aria-label="Close">×</button>
+            </div>
+
+            <div className="modal__body">
+              {stmErr && <div className="statements__status error">{stmErr}</div>}
+              {!stmErr && (
+                <>
+                  <div className="statements__head">
+                    <div className="col col--time">Time</div>
+                    <div className="col col--action">Action</div>
+                    <div className="col col--refid">Reference ID</div>
+                    <div className="col col--app">App ID</div>
+                    <div className="col col--reftype">Type</div>
+                    <div className="col col--amt">Amount</div>
+                    <div className="col col--bal">Balance</div>
+                  </div>
+
+                  <ul className="statements__list">
+                    {stmItems.map((t) => {
+                      const tms = txEpochMs(t);
+                      const action = norm(t.action_type);
+                      const amt = typeof t.amount === 'number' ? t.amount : undefined;
+                      const bal =
+                        typeof t.balance_after === 'number'
+                          ? t.balance_after
+                          : typeof t.balance === 'number'
+                          ? t.balance
+                          : undefined;
+
+                      return (
+                        <li key={txKey(t)} className="statements__row">
+                          <div className="col col--time">{tms ? new Date(tms).toLocaleString() : '—'}</div>
+                          <div className={`col col--action ${action || ''}`}>{action || '—'}</div>
+                          <div className="col col--refid">{t.reference_id ?? '—'}</div>
+                          <div className="col col--app">{t.app_id ?? '—'}</div>
+                          <div className="col col--reftype">
+                            {norm(t.reference_type) ||
+                              norm(t.transaction_type) ||
+                              norm(t.category) ||
+                              norm(t.type) ||
+                              norm(t.contract_type) ||
+                              '—'}
+                          </div>
+                          <div className={`col col--amt ${(amt ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                            {typeof amt === 'number' ? `${amt >= 0 ? '+' : ''}${amt.toFixed(2)} USD` : '—'}
+                          </div>
+                          <div className="col col--bal">
+                            {typeof bal === 'number' ? `${bal.toFixed(2)} USD` : '—'}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <div className="modal__foot modal__foot--spread">
+                    <div className="muted small">
+                      Window: {new Date(fromSec * 1000).toLocaleString()} → {new Date(toSec * 1000).toLocaleString()}
+                    </div>
+                    <div className="actions">
+                      <button
+                        className="btn"
+                        disabled={stmLoading || !stmHasMore}
+                        onClick={() => loadMoreStatements(statementModalFor!, stmOffset)}
+                      >
+                        {stmLoading ? 'Loading…' : stmHasMore ? 'Load more' : 'End'}
+                      </button>
+                      <button className="btn ghost" onClick={() => setStatementModalFor(null)}>Close</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======== Payment OTP Modal ======== */}
+      {payOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Payment verification">
+          <div className="modal otp-modal">
+            <div className="modal__head">
+              <h3>Confirm Payment</h3>
+              <button className="icon-btn" onClick={() => setPayOpen(false)} aria-label="Close">×</button>
+            </div>
+
+            <div className="modal__body">
+              <div className="pay-summary">
+                <div className="row">
+                  <span>Trader</span>
+                  <strong>{payTrader?.username}</strong>
+                </div>
+                <div className="row">
+                  <span>Amount</span>
+                  <strong>{currencyFmt.format(invoiceAmt)} {invoiceCur}</strong>
+                </div>
+                <div className="row">
+                  <span>Verification Email</span>
+                  <strong>{otpEmailMasked || 'your Deriv email'}</strong>
+                </div>
+              </div>
+
+              <label className="otp-field">
+                <span>Enter the verification code</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 12345"
+                  value={otpCode}
+                  onChange={(e)=>setOtpCode(e.target.value)}
+                />
+              </label>
+
+              <div className="muted xsmall">
+                A code was sent to your Deriv email after you initiated payment. Paste it here to complete the withdrawal to our Payment Agent.
+              </div>
+            </div>
+
+            <div className="modal__foot modal__foot--spread">
+              <div className="muted small">
+                Invoice #{invoiceId ?? '—'}
+              </div>
+              <div className="actions">
+                <button
+                  className="btn"
+                  disabled={otpConfirming || !otpCode.trim()}
+                  onClick={paymentsConfirm}
+                >
+                  {otpConfirming ? 'Confirming…' : 'Confirm & Start Copy'}
+                </button>
+                <button className="btn ghost" onClick={() => setPayOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toasts */}
+      <Toasts items={toasts} onDismiss={removeToast} />
+    </div>
+  );
+};
+
+export default CopyTradingHub;

@@ -1,0 +1,80 @@
+.view-toggle {
+    display: flex;
+    flex-direction: column;
+    width: 75vw;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 13px;
+    background-color: white!important;
+    color: var(--text-general);
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* Smooth scrolling on iOS */
+    scroll-behavior: smooth;
+    /* Smooth scrolling animation */
+  
+    /* Hide scrollbar for cleaner look (optional) */
+    scrollbar-width: none;
+    
+    
+  
+    .toggle-controls {
+      display: flex;
+      gap: 8px;
+      padding-top: 10px;
+      padding-bottom: 10px;
+      align-items: center;
+      border-bottom: 1px solid var(--border-normal);
+  
+      .toggle-btn {
+        display: flex;
+        flex-direction: row;
+        align-items: center;       
+         padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        background: var(--general-section-1);
+        color: var(--text-general);
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+        @media (max-width: 768px) {
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+          padding: 3px;
+          scrollbar-width: none;
+        
+          &::-webkit-scrollbar {
+            display: none;
+          }
+
+        }
+        
+        &:hover {
+          background: var(--state-hover);
+        }
+        
+        &.active {
+          background: rgb(0, 128, 109);
+          color: white;
+        }
+      }
+    }
+  
+    .view-content {
+      flex-grow: 1;
+      overflow: hidden;
+      
+      > * {
+        height: 100%;
+        width: 100%;
+      }
+    }
+  }
+  @media (max-width: 768px) {
+    .view-toggle {
+      width: 100vw;
+    }
+  }
+  

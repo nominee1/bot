@@ -24,8 +24,8 @@ const Footer = () => {
 
     const openLanguageSettingModal = () => showModal('DesktopLanguagesModal');
 
-    const { data } = useRemoteConfig(true);
-    const { cs_chat_whatsapp } = data;
+    // const { data } = useRemoteConfig(true);
+    // const { cs_chat_whatsapp } = data;
 
     return (
         <footer className='app-footer'>
@@ -34,11 +34,11 @@ const Footer = () => {
             <HelpCentre />
             <div className='app-footer__vertical-line' />
             <ChangeTheme />
-            <AccountLimits />
-            <ResponsibleTrading />
+            {/* <AccountLimits /> */}
+            {/* <ResponsibleTrading /> */}
             <Deriv />
             <Livechat />
-            {cs_chat_whatsapp && <WhatsApp />}
+            {/* {cs_chat_whatsapp && <WhatsApp />} */}
             <div className='app-footer__vertical-line' />
             <ServerTime />
             <div className='app-footer__vertical-line' />

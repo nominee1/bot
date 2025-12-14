@@ -55,13 +55,43 @@ const Toolbox = observer(() => {
         return (
             <div className='db-toolbox' data-testid='dashboard__toolbox'>
                 <ToolbarButton
-                    popover_message={localize('Click here to start trading with denara AI strategies.')}
+                    popover_message={localize('Click here to start trading on.')}
                     button_id='db-toolbar__get-started-button'
                     button_classname='toolbar__btn toolbar__btn--icon toolbar__btn--start'
-                    buttonOnClick={handleQuickStrategyOpen}
-                    button_text={localize('Denara Bots & $trategies')} // Denara Bots & Strategies
+                    buttonOnClick={() => {
+                        window.location.href = 'https://www.denaratool.com/'; // Direct redirection on click
+                    }}
+                    button_text={localize('Go to DTrader')} // Denara Bots & Strategies
                 />
-                <div id='gtm-toolbox' className='db-toolbox__content'>
+                {/* <ToolbarButton
+                    popover_message={localize('Click here to start trading on.')}
+                    button_id='db-toolbar__get-started-button'
+                    button_classname='toolbar__btn toolbar__btn--icon toolbar__btn--start'
+                    buttonOnClick={() => {
+                        window.location.href = 'https://www.'; // Direct redirection on click
+                    }}
+                    button_text={localize('Go to DenaraDigitPro')} // Denara Bots & Strategies
+                /> */}
+                <ToolbarButton
+                    popover_message={localize('Click here to start trading on.')}
+                    button_id='db-toolbar__get-started-button'
+                    button_classname='toolbar__btn toolbar__btn--icon toolbar__btn--start'
+                    buttonOnClick={() => {
+                        window.location.href = 'https://www.denaradigitpro.com'; // Direct redirection on click
+                    }}
+                    button_text={localize('DenaraDigitPro')} // Denara Bots & Strategies
+                />
+                {/* <ToolbarButton
+                    popover_message={localize('Click here to start trading on.')}
+                    button_id='db-toolbar__get-started-button'
+                    button_classname='toolbar__btn toolbar__btn--icon toolbar__btn--start'
+                    buttonOnClick={() => {
+                        window.location.href = 'https://www.'; // Direct redirection on click
+                    }}
+                    button_text={localize('Telegram')} // Denara Bots & Strategies
+                /> */}
+
+                {/* <div id='gtm-toolbox' className='db-toolbox__content'>
                     <div className='db-toolbox__header'>
                         <div
                             className='db-toolbox__title'
@@ -167,7 +197,7 @@ const Toolbox = observer(() => {
                                 })}
                         </div>
                     </div>
-                </div>
+                </div> */}
             </div>
         );
     }

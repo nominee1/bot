@@ -1,0 +1,131 @@
+/* components/pinned-bots/pinned-loader.scss */
+
+.pinned-loader {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.75rem 0;
+  
+    /* Nice spacing if you later add headings/text */
+    &__section-title {
+      width: 100%;
+      margin-bottom: 0.25rem;
+    }
+  }
+  
+  /* Style both plain <button> and an optional .pinned-loader__btn class */
+  .pinned-loader button,
+  .pinned-loader__btn {
+    appearance: none;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    line-height: 1;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  
+    /* Colors via app variables with sensible fallbacks */
+    background: var(--brand-primary, #2874a6);
+    color: var(--text-on-color, #fff);
+    box-shadow:
+      0 1px 0 rgba(0, 0, 0, 0.06),
+      0 4px 12px rgba(0, 0, 0, 0.08);
+  
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease,
+      background-color 120ms ease,
+      opacity 120ms ease;
+  
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow:
+        0 2px 0 rgba(0, 0, 0, 0.06),
+        0 8px 18px rgba(0, 0, 0, 0.12);
+      background: var(--brand-primary-hover, #1f5c84);
+    }
+  
+    &:active {
+      transform: translateY(0);
+      box-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.05),
+        0 4px 10px rgba(0, 0, 0, 0.10);
+      background: var(--brand-primary-active, #194b6b);
+    }
+  
+    &:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 2px var(--page-background, #fff),
+        0 0 0 4px var(--brand-primary, #2874a6);
+    }
+  
+    &:disabled,
+    &[aria-disabled='true'] {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.04),
+        0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+  }
+  
+  /* Optional secondary style if you need a different look later */
+  .pinned-loader__btn--secondary {
+    background: var(--fill-normal, #fff);
+    color: var(--text-prominent, #222);
+    border: 1px solid var(--general-section-1, #e6e6e6);
+  
+    &:hover {
+      background: var(--general-hover, #f6f6f6);
+    }
+  
+    &:active {
+      background: var(--general-active, #efefef);
+    }
+  
+    &:focus-visible {
+      box-shadow:
+        0 0 0 2px var(--page-background, #fff),
+        0 0 0 4px var(--brand-primary, #2874a6);
+    }
+  }
+  
+  /* Dark theme support (if your app toggles a data-theme attr) */
+  :root[data-theme='dark'] .pinned-loader button,
+  :root[data-theme='dark'] .pinned-loader__btn {
+    background: var(--brand-primary, #3498db);
+    color: var(--text-on-color, #fff);
+    box-shadow:
+      0 1px 0 rgba(0, 0, 0, 0.25),
+      0 6px 16px rgba(0, 0, 0, 0.35);
+  
+    &:hover {
+      background: var(--brand-primary-hover, #2d81b8);
+    }
+  }
+  
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .pinned-loader button,
+    .pinned-loader__btn {
+      transition: none;
+    }
+  }
+  
+  /* Responsive tweaks */
+  @media (max-width: 480px) {
+    .pinned-loader {
+      gap: 0.5rem;
+    }
+    .pinned-loader button,
+    .pinned-loader__btn {
+      padding: 0.55rem 0.9rem;
+      font-size: 0.88rem;
+    }
+  }
+  

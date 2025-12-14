@@ -56,7 +56,7 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
                                 className={classNames('subtitle', { 'subtitle__has-list': has_dashboard_strategies })}
                             >
                                 {localize(
-                                    'Import a bot from your computer or Google Drive or trade with Denara Bots.'
+                                    'Denara Pro | Powered By deriv'
                                 )}
                             </Text>
                         </div>

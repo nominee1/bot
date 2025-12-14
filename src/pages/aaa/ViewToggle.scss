@@ -1,0 +1,64 @@
+.view-toggle-container {
+    display: flex;
+    flex-direction: column;
+    width: 75vw;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 13px;
+    background-color: white!important;
+    color: var(--text-general);
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* Smooth scrolling on iOS */
+    scroll-behavior: smooth;
+    /* Smooth scrolling animation */
+  
+    /* Hide scrollbar for cleaner look (optional) */
+    scrollbar-width: none;
+    
+  
+    .toggle-controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      align-items: center;
+      border-bottom: 1px solid var(--border-normal);
+  
+      .toggle-btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        background: var(--general-section-1);
+        color: var(--text-general);
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+        
+        &:hover {
+          background: var(--state-hover);
+        }
+        
+        &.active {
+          background: rgb(0, 128, 109);
+          color: white;
+        }
+      }
+    }
+  
+    .view-content {
+      flex-grow: 1;
+      overflow: hidden;
+      
+      > * {
+        height: 100%;
+        width: 100%;
+      }
+    }
+  }
+  @media (max-width: 768px) {
+    .view-toggle-container {
+      width: 100vw;
+    }
+  }
+  

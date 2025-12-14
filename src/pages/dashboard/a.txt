@@ -1,0 +1,1 @@
+import oracleV1 from './../../xml/oracleV2.xml';

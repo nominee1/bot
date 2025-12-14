@@ -92,7 +92,7 @@ const Download = observer(({ tab }: TDownloadProps) => {
             message={popover_message}
             zIndex='5'
         >
-            <Button
+            {/* <Button
                 id='download-button'
                 disabled={disabled}
                 className='download__button'
@@ -100,7 +100,7 @@ const Download = observer(({ tab }: TDownloadProps) => {
                 secondary
             >
                 <Localize i18n_default_text='Download' />
-            </Button>
+            </Button> */}
         </Popover>
     );
 });

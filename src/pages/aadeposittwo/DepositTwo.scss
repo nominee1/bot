@@ -1,0 +1,140 @@
+/* CopierDashboard.scss */
+
+.copier-container {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 13px;
+    width: 71vw;
+    margin: 0 auto;
+    padding: 15px;
+    background-color: #FEFCF3 !important;
+    color: var(--text-general);
+    line-height: 1.6;
+    padding-bottom: 20rem;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+  
+    @media screen and (max-width: 768px) {
+      width: 100vw;
+    }
+    .copier-dashboard{
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+  
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 2rem;
+      font-size: 2.2rem;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 0.5rem;
+      display: inline-block;
+    }
+  
+    .copier-card,
+    .trader-card {
+      background: white;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+  
+      &:hover {
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+      }
+  
+      p {
+        margin: 0.75rem 0;
+        font-size: 1.1rem;
+  
+        strong {
+          color: #2c3e50;
+          display: inline-block;
+          width: 100px;
+        }
+      }
+    }
+  
+    .trader-management {
+      margin-top: 2rem;
+  
+      .traders-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+  
+        @media (max-width: 768px) {
+          grid-template-columns: 1fr !important;
+        }
+      }
+    }
+  
+    .trader-card {
+      position: relative;
+      border-left: 4px solid #3498db;
+  
+      h3 {
+        color: #16a085;
+        margin-top: 0;
+
+      }
+    .header{
+        display: flex;
+        width: 100%;
+        @media (max-width: 768px) {
+            
+              display: flex;
+              justify-content: center;
+              /* if you had padding/margins, you may need to reset them here */
+            }
+        
+    }
+    
+  
+      button {
+        margin-top: 1rem;
+        padding: 0.5rem;
+        width: 100%;
+        border: none;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.3s;
+  
+        &[disabled] {
+          background-color: #22a28f;
+          color: #7f8c8d;
+          cursor: default;
+        }
+  
+        &:not([disabled]) {
+          background-color: #e74c3c;
+          color: white;
+  
+          &:hover {
+            background-color: #c0392b;
+          }
+        }
+      }
+    }
+  
+    /* Loading & empty states */
+    .loading {
+      color: #7f8c8d;
+      font-style: italic;
+    }
+  
+    .traders-list p {
+      font-size: 1rem;
+      color: #7f8c8d;
+      text-align: center;
+    }
+  }
+  

@@ -12,7 +12,7 @@ const WhatsApp = () => {
             className='app-footer__icon'
             href={URLConstants.whatsApp}
             target='_blank'
-            tooltipContent={localize('WhatsApp')}
+            tooltipContent={localize('Yoo')}
         >
             <LegacyWhatsappIcon iconSize='xs' />
         </Tooltip>

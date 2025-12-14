@@ -462,3 +462,72 @@
         margin-inline-start: 0.4rem;
     }
 }
+
+/* === Overrides for the dashboard tiles component ONLY === */
+/* Keep everything else untouched. Place after the existing rules. */
+
+/* 1) Tile container: flex -> responsive grid (mobile-first) */
+.tab__dashboard__table .tab__dashboard__table__tiles {
+    display: grid;
+    grid-template-columns: repeat( auto-fill, minmax(110px, 1fr) );
+    gap: 12px;
+    padding: 1.6rem;
+  
+    @media (min-width: 768px) {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 16px;
+      padding: 2.4rem;
+    }
+  }
+  
+  /* 2) Each tile block: remove heavy side padding so grid spacing controls layout */
+  .tab__dashboard__table .tab__dashboard__table__block {
+    padding-inline-end: 0;
+  }
+  
+  /* 3) Labels: let them wrap naturally instead of fixed width */
+  .tab__dashboard__table .tab__dashboard__table__block span {
+    width: auto; /* was 9.1rem in base */
+  }
+  
+  /* If your labels come via the Text component (.dc-text), keep it neat */
+  .tab__dashboard__table .tab__dashboard__table__block .dc-text {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap; /* change to normal if you prefer wrapping */
+    margin-top: 0.4rem;
+    text-align: center;
+  }
+  
+  /* 4) Card button: larger tap target, subtle hover; don't interfere when minimized */
+  .tab__dashboard__table .tab__dashboard__table__images {
+    width: 100%;
+    min-height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.6rem; /* smoother corners */
+    border: 1px solid var(--general-section-1, rgba(0,0,0,0.08));
+    background: var(--general-section-2, #fff);
+    transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease;
+    box-shadow: 0 8px 22px rgba(249, 2, 2, 0.18);
+
+  }
+  
+  /* keep your existing minimized sizing intact */
+  .tab__dashboard__table .tab__dashboard__table__images--minimized {
+    /* no change — preserves your current mobile sizing */
+  }
+  
+  /* polish: hover lift on non-minimized only (desktop-ish) */
+  @media (hover: hover) {
+    .tab__dashboard__table .tab__dashboard__table__images:not(.tab__dashboard__table__images--minimized):hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(1, 193, 14, 0.18);
+      border-color: var(--button-primary-default, rgba(0,0,0,.12));
+    }
+  }
+
+    

@@ -1,0 +1,38 @@
+this is my current app. import { useEffect, useRef } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useStore } from '@/hooks/useStore';
+import './BotIframe.scss';
+
+const BotIframe = observer(() => {
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const { ui } = useStore();
+
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            if (iframeRef.current?.contentWindow === event.source) {
+                console.log('Message from iframe:', event.data);
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, []);
+
+    return (
+        <div className="bot__iframe-container">
+            <div className="bot__iframe-container-wrapper">
+                <iframe
+                    ref={iframeRef}
+                    src="https://predicto-mocha.vercel.app/"
+                    title="Bot Settings"
+                    className="bot__iframe"
+                    style={{
+                        background: ui.is_dark_mode_on ? 'var(--general-main-1)' : 'transparent'
+                    }}
+                />
+            </div>
+        </div>
+    );
+});
+
+export default BotIframe;

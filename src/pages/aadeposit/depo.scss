@@ -1,0 +1,93 @@
+.dashboard {
+    width: 60vw;
+    margin: 0 auto;
+    font-size: 14px;
+    padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  
+    header {
+      margin-bottom: 20px;
+      h1 {
+        color: #333;
+      }
+      .client-info {
+        display: flex;
+        gap: 20px;
+        margin-top: 10px;
+        color: #555;
+      }
+    }
+  
+    .exchange-rate {
+      background: #f0f8ff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      p {
+        margin: 5px 0;
+        font-size: 1.1rem;
+      }
+    }
+  
+    .transfer-section {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+  
+      .amount-input {
+        margin: 15px 0;
+        label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: bold;
+        }
+        input {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+        }
+        .converted-amount {
+          margin-top: 5px;
+          color: #666;
+          font-size: 0.9rem;
+        }
+      }
+  
+      .transfer-button {
+        background: #4CAF50;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        &:hover {
+          background: #45a049;
+        }
+      }
+    }
+  
+    .transactions {
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        th, td {
+          padding: 10px;
+          text-align: left;
+          border-bottom: 1px solid #ddd;
+        }
+        th {
+          background: #f2f2f2;
+        }
+        .type-deposit {
+          color: #4CAF50;
+        }
+        .type-withdrawal {
+          color: #f44336;
+        }
+      }
+    }
+  }

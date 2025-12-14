@@ -227,7 +227,7 @@ const LABEL_REVERSE_DALEMBERT_UNIT = (): TConfigItem => ({
 const UNIT = (): TConfigItem => ({
     type: 'number',
     name: 'unit',
-    validation: ['number', 'required', 'ceil', NUMBER_DEFAULT_VALIDATION()],
+    // validation: ['number', 'required', 'ceil', NUMBER_DEFAULT_VALIDATION()],
 });
 
 const CHECKBOX_MAX_STAKE = (): TConfigItem => ({
@@ -429,22 +429,8 @@ export const STRATEGIES = (): TStrategies => ({
         rs_strategy_name: '1-3-2-6',
         description: STRATEGY_1_3_2_6(),
         fields: [
-            [
-                // LABEL_SYMBOL(),
-                // SYMBOL(),
-                // LABEL_TRADETYPE(),
-                // TRADETYPE(),
-                // LABEL_PURCHASE_TYPE(),
-                // PURCHASE_TYPE(),
-                // LABEL_LAST_DIGIT_PREDICTION(),
-                // LAST_DIGIT_PREDICTION(),
-                // LABEL_STAKE(),
-                // STAKE(),
-                // LABEL_DURATION(),
-                // DURATION_TYPE(),
-                // DURATION(),
-            ],
-            // [LABEL_PROFIT(), PROFIT(), LABEL_LOSS(), LOSS()],
+            [], // Empty array for first column
+            [], // Empty array for second column
         ],
     },
     

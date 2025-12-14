@@ -1,5 +1,5 @@
 import { standalone_routes } from '@/components/shared';
-import { LegacyHelpCentreIcon } from '@deriv/quill-icons/Legacy';
+import { LegacyHelpCentreIcon, LegacyTelegramIcon } from '@deriv/quill-icons/Legacy';
 import { useTranslations } from '@deriv-com/translations';
 import { Tooltip } from '@deriv-com/ui';
 
@@ -14,7 +14,7 @@ const HelpCentre = () => {
             target='_blank'
             tooltipContent={localize('Help centre')}
         >
-            <LegacyHelpCentreIcon iconSize='xs' />
+            <LegacyTelegramIcon iconSize='xs' />
         </Tooltip>
     );
 };

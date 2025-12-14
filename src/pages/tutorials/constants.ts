@@ -58,14 +58,14 @@ export const guide_content = (): TGuideContent[] => [
         src: getImageLocation('how_to_use_martingale.jpg'),
         search_id: `${VIDEOS}-2`,
     },
-    // {
-    //     id: 4,
-    //     type: 'DBotVideo',
-    //     content: localize('Pro Aviator AI'),
-    //     url: 'https://www.youtube.com/embed/GWcRype5XuA',
-    //     src: getImageLocation('introducing_accumulators_on_deriv_bot.png'),
-    //     search_id: `${VIDEOS}-3`,
-    // },
+    {
+        id: 4,
+        type: 'DBotVideo',
+        content: localize('Pro Aviator AI'),
+        url: 'https://www.youtube.com/embed/GWcRype5XuA',
+        src: getImageLocation('introducing_accumulators_on_deriv_bot.png'),
+        search_id: `${VIDEOS}-3`,
+    },
   
 ];
 

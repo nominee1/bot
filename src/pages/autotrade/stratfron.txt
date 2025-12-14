@@ -1,0 +1,797 @@
+/* ====================================================================== */
+/*  Strategy.tsx – Complete Version with Authorization                    */
+/*  Mirrors auth logic from first bot while keeping all original features */
+/* ====================================================================== */
+
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useStore } from '@/hooks/useStore';
+import { api_base } from '@/external/bot-skeleton';
+import './Strategy.scss';
+
+/* ────────────────────────────────────────────────────────────────────
+ *  1. Authorization Setup (mirrors first bot exactly)
+ * ──────────────────────────────────────────────────────────────────── */
+const useAuthorization = () => {
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      api_base.api.authorize(token).catch(console.error);
+    }
+  }, []);
+};
+
+/* ────────────────────────────────────────────────────────────────────
+ *  2. Tick Stream Hook (unchanged)
+ * ──────────────────────────────────────────────────────────────────── */
+function useTickStream(symbol: string, onTick: (p: number) => void) {
+    useEffect(() => {
+      let active = true;
+      const sub = async () => {
+        await api_base.api.send({ ticks: symbol, subscribe: 1 });
+        api_base.api.onMessage().subscribe(({ data }: any) => {
+          if (active && data.msg_type === 'tick' && data.tick?.quote !== undefined) {
+            onTick(data.tick.quote); // This stays the same
+          }
+        });
+      };
+      sub();
+      return () => {
+        active = false;
+        api_base.api.send({ forget_all: 'ticks' }).catch(() => {});
+      };
+    }, [symbol, onTick]);
+  }
+
+/* ────────────────────────────────────────────────────────────────────
+ *  3. DigitAnalyzer (unchanged)
+ * ──────────────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────
+ * 3. DigitAnalyzer – revised “direction” rules
+ *    • Over|Under   → contrarian streak logic
+ *    • Differs      → fires DIGITDIFF on repeat digit(s)
+ *    • Even|Odd and Rise|Fall unchanged
+ * ────────────────────────────────────────────────────────────── */
+class DigitAnalyzer {
+    // Track digit counts and streaks
+    consecutiveCounts = Array<number>(10).fill(0);
+    streaks = { even: 0, odd: 0, rise: 0, fall: 0 };
+    lastPrice: number | null = null;
+    digitSeq: number[] = [];
+    
+    // Market-specific decimal precision configuration
+    private readonly marketPrecision: Record<string, number> = {
+        'R_10': 3,
+        'R_25': 3,
+        'R_50': 4,
+        'R_75': 4,
+        'default': 2
+    };
+
+    /**
+     * Process a new tick price with market-specific precision
+     * @param price Current tick price
+     * @param market Market symbol (e.g., 'R_10')
+     */
+    process(price: number, market: string): void {
+        const lastDigit = this.getLastDigit(price, market);
+        const isEven = lastDigit % 2 === 0;
+        const isRise = this.lastPrice !== null ? price > this.lastPrice : null;
+
+        // Update consecutive digit counts
+        this.consecutiveCounts = this.consecutiveCounts.map((count, digit) => 
+            digit === lastDigit ? count + 1 : 0
+        );
+
+        // Update streaks
+        this.streaks = {
+            even: isEven ? this.streaks.even + 1 : 0,
+            odd: !isEven ? this.streaks.odd + 1 : 0,
+            rise: isRise ? this.streaks.rise + 1 : 0,
+            fall: isRise === false ? this.streaks.fall + 1 : 0
+        };
+
+        this.lastPrice = price;
+        
+        // Maintain digit sequence (last 50 digits)
+        this.digitSeq.push(lastDigit);
+        if (this.digitSeq.length > 50) {
+            this.digitSeq.shift();
+        }
+    }
+
+    /**
+     * Reset all counters and history
+     */
+    reset(): void {
+        this.consecutiveCounts.fill(0);
+        this.streaks = { even: 0, odd: 0, rise: 0, fall: 0 };
+        this.lastPrice = null;
+        this.digitSeq = [];
+    }
+
+    /**
+     * Check for pattern matches based on strategy type
+     * @param type Strategy type
+     * @param settings Strategy parameters
+     * @returns Signal object or null
+     */
+    checkPattern(
+        type: 'over-under' | 'even-odd' | 'rise-fall' | 'differs',
+        settings: { 
+            over: number; 
+            under: number; 
+            consecutive: number; 
+            preds: number[] 
+        }
+    ): { type: string; barrier?: string } | null {
+        switch (type) {
+            case 'over-under':
+                return this.#checkOverUnder(settings.over, settings.under, settings.consecutive);
+            case 'even-odd':
+                return this.#checkEvenOdd(settings.consecutive);
+            case 'rise-fall':
+                return this.#checkRiseFall(settings.consecutive);
+            case 'differs':
+                return this.#checkDiffers(settings.preds, settings.consecutive);
+            default:
+                return null;
+        }
+    }
+
+    // --- Private Methods ---
+
+    /**
+     * Extract the last digit with market-specific precision
+     */
+    private getLastDigit(price: number, market: string): number {
+        const precision = this.marketPrecision[market] || this.marketPrecision.default;
+        const priceString = price.toFixed(precision);
+        return parseInt(priceString.slice(-1));
+    }
+
+    /**
+     * Check for Over/Under digit patterns
+     */
+    #checkOverUnder(over: number, under: number, threshold: number) {
+        let overCount = 0;
+        let underCount = 0;
+
+        for (let i = this.digitSeq.length - 1; i >= 0; i--) {
+            const digit = this.digitSeq[i];
+
+            // Check OVER condition (digits ≤ boundary)
+            if (digit <= over) {
+                overCount++;
+                if (overCount >= threshold) {
+                    return { type: 'DIGITOVER', barrier: over.toString() };
+                }
+            } else {
+                overCount = 0;
+            }
+
+            // Check UNDER condition (digits ≥ boundary)
+            if (digit >= under) {
+                underCount++;
+                if (underCount >= threshold) {
+                    return { type: 'DIGITUNDER', barrier: under.toString() };
+                }
+            } else {
+                underCount = 0;
+            }
+
+            // Early exit if threshold can't be reached
+            if (Math.max(overCount, underCount) + i < threshold) {
+                break;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Check for Even/Odd patterns
+     */
+    #checkEvenOdd(threshold: number) {
+        if (this.streaks.odd >= threshold) {
+            return { type: 'DIGITEVEN' }; // Bet against odd streak
+        }
+        if (this.streaks.even >= threshold) {
+            return { type: 'DIGITODD' }; // Bet against even streak
+        }
+        return null;
+    }
+
+    /**
+     * Check for Rise/Fall patterns
+     */
+    #checkRiseFall(threshold: number) {
+        if (this.streaks.rise >= threshold) {
+            return { type: 'PUT' }; // Bet price will fall
+        }
+        if (this.streaks.fall >= threshold) {
+            return { type: 'CALL' }; // Bet price will rise
+        }
+        return null;
+    }
+
+    /**
+     * Check for repeated digit patterns
+     */
+    #checkDiffers(predictedDigits: number[], threshold: number) {
+        // Validate predicted digits
+        const validDigits = predictedDigits.filter(d => d >= 0 && d <= 9);
+        
+        for (const digit of validDigits) {
+            if (this.consecutiveCounts[digit] >= threshold) {
+                return { type: 'DIGITDIFF', barrier: digit.toString() };
+            }
+        }
+        return null;
+    }
+}
+
+
+/* ────────────────────────────────────────────────────────────────────
+ *  4. AutoTrader with Auth Checks (enhanced)
+ * ──────────────────────────────────────────────────────────────────── */
+type StrategyID = 'even-odd' | 'over-under' | 'rise-fall' | 'differs';
+
+interface StrategySettings {
+    type: StrategyID;
+    market: string;
+    stake: number;
+    martingale: number;
+    duration: number;
+    consecutive: number;
+    over: number;
+    under: number;
+    preds: number[];
+}
+
+class AutoTrader {
+    constructor(
+        private sendWS: (msg: any) => Promise<any>,
+        private balanceFn: () => number,
+        private tradeCb: () => void,
+        private statusCb: (id: StrategyID, m: string, l: string) => void,
+    ) { }
+
+    strategies: Record<
+        StrategyID,
+        {
+            active: boolean;
+            settings: StrategySettings;
+            analyzer: DigitAnalyzer;
+            cooldown: boolean;
+            currentStake: number;
+            contractId?: string;
+        }
+    > = Object.create(null);
+
+    trades: Array<{
+        id: string;
+        strategy: StrategyID;
+        profit: number | null;
+    }> = [];
+
+    feedTick(price: number) {
+        Object.entries(this.strategies).forEach(([sid, p]) => {
+            if (!p.active) return;
+            
+            // Updated to pass market parameter
+            p.analyzer.process(price, p.settings.market);
+            
+            if (p.cooldown) return;
+            const sig = p.analyzer.checkPattern(p.settings.type, p.settings);
+            
+            if (sig) {
+                console.log('[SIGNAL]', sid, sig);
+                this.#attemptBuy(sid as StrategyID, sig);
+            }
+        });
+    }
+
+    start(id: StrategyID, s: StrategySettings) {
+        this.strategies[id] = {
+            active: true,
+            settings: s,
+            analyzer: new DigitAnalyzer(),
+            cooldown: false,
+            currentStake: s.stake,
+        };
+        this.statusCb(id, 'Started', 'info');
+    }
+
+    stop(id: StrategyID) {
+        this.strategies[id].active = false;
+        this.statusCb(id, 'Stopped', 'info');
+    }
+
+    async #attemptBuy(id: StrategyID, sig: any) {
+        console.log('[BUY-TRY]', id, sig);
+        const p = this.strategies[id];
+        
+        // Auth check mirroring first bot
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            this.statusCb(id, 'Not authorized', 'error');
+            return;
+        }
+
+        if (p.currentStake > this.balanceFn()) {
+            this.statusCb(id, 'Insufficient balance', 'error');
+            return;
+        }
+
+        const req = {
+            buy: 1,
+            price: p.currentStake,
+            parameters: {
+                amount: p.currentStake,
+                basis: 'stake',
+                currency: 'USD',
+                contract_type: sig.type,
+                duration: p.settings.duration,
+                duration_unit: 't',
+                symbol: p.settings.market,
+                ...(sig.barrier && { barrier: sig.barrier }),
+            },
+        };
+
+        p.cooldown = true;
+
+        try {
+            const { buy } = await this.sendWS(req);
+            p.contractId = buy.contract_id;
+            this.trades.unshift({ id: buy.contract_id, strategy: id, profit: null });
+            this.tradeCb();
+
+            await this.sendWS({
+                proposal_open_contract: 1,
+                contract_id: buy.contract_id,
+                subscribe: 1,
+            });
+        } catch (e: any) {
+            p.cooldown = false;
+            this.statusCb(id, e.message || 'Buy failed', 'error');
+        }
+    }
+
+    onContract(c: any) {
+        const id = Object.keys(this.strategies).find(
+            (k) => this.strategies[k as StrategyID].contractId === c.contract_id,
+        ) as StrategyID | undefined;
+        if (!id) return;
+
+        const p = this.strategies[id];
+        if (c.status === 'open') return;
+
+        const t = this.trades.find((x) => x.id === c.contract_id);
+        if (t) t.profit = c.profit;
+
+        p.cooldown = false;
+        p.analyzer.reset();
+        p.contractId = undefined;
+        this.tradeCb();
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ *  5. Main Component with Auth Integration
+ * ──────────────────────────────────────────────────────────────────── */
+const Strategy = observer(() => {
+    const { ui } = useStore();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [activeMarkets, setActiveMarkets] = useState<Set<string>>(new Set());
+    const [isAuthorized, setIsAuthorized] = useState(false);
+    const traderRef = useRef<AutoTrader>();
+    const [, forceRerender] = useState({});
+
+    // Initialize authorization and trader
+    useEffect(() => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            console.error('No auth token found');
+            return;
+        }
+
+        api_base.api.authorize(token)
+            .then(() => {
+                setIsAuthorized(true);
+                traderRef.current = new AutoTrader(
+                    (msg) => api_base.api.send(msg),
+                    () => {
+                        const txt = document.getElementById('balance')?.textContent || '0';
+                        return parseFloat(txt.replace(/[^0-9.-]+/g, '')) || 0;
+                    },
+                    () => forceRerender({}),
+                    (id, m) => {
+                        const el = document.getElementById(`tradeStatus-${id}`);
+                        if (el) el.textContent = m;
+                    },
+                );
+            })
+            .catch((error) => {
+                console.error('Authorization failed:', error);
+                setIsAuthorized(false);
+            });
+    }, []);
+
+    const tickHandler = useCallback(
+        (price: number) => traderRef.current?.feedTick(price),
+        []
+    );
+
+    const MultiTick: React.FC<{ symbols: Set<string> }> = ({ symbols }) => {
+        symbols.forEach((sym) => useTickStream(sym, tickHandler));
+        return null;
+    };
+
+    useEffect(() => {
+        const sub = api_base.api.onMessage().subscribe(({ data }: any) => {
+            if (data.proposal_open_contract)
+                traderRef.current?.onContract(data.proposal_open_contract);
+        });
+        return () => sub.unsubscribe();
+    }, []);
+
+    const updateActiveMarkets = () => {
+        const s = new Set<string>();
+        Object.values(traderRef.current?.strategies ?? {}).forEach((p) => {
+            if (p.active) s.add(p.settings.market);
+        });
+        setActiveMarkets(s);
+    };
+
+    const readSettings = (card: Element): StrategySettings => {
+        const q = (sel: string) =>
+            card.querySelector(sel) as HTMLInputElement | HTMLSelectElement;
+        const num = (el: HTMLElement | null, d = 0) =>
+            el && +((el as HTMLInputElement).value || 0) > 0
+                ? +((el as HTMLInputElement).value || 0)
+                : d;
+                const preds = Array.from(card.querySelectorAll('.strategy__prediction-input'))
+                .map(i => {
+                    const val = Number((i as HTMLInputElement).value);
+                    return (val >= 0 && val <= 9) ? val : 0;  // Force valid digits
+                })
+                .filter((v, i, a) => a.indexOf(v) === i);  // Remove duplicates
+
+        return {
+            type: card.getAttribute('data-strategy-id') as StrategyID,
+            market: (q('.strategy__market-select') as HTMLSelectElement).value,
+            stake: num(q('.strategy__stake-input'), 1),
+            martingale: num(q('.strategy__martingale-input'), 1),
+            duration: num(q('.strategy__duration-input'), 1),
+            consecutive: num(q('.strategy__Consecutive-input'), 1),
+            over: preds[0] ?? 1,
+            under: preds[1] ?? 8,
+            preds,
+        };
+    };
+
+    const totalPL = traderRef.current?.trades.reduce(
+        (s, t) => s + (t.profit ?? 0),
+        0,
+    );
+
+    const handleToggleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (!isAuthorized) {
+            console.error('Not authorized to trade');
+            return;
+        }
+
+        const btn = e.currentTarget;
+        const card = btn.closest('.strategy__card')!;
+        const id = card.getAttribute('data-strategy-id') as StrategyID;
+        const isOn = btn.dataset.active === 'true';
+
+        if (isOn) {
+            traderRef.current?.stop(id);
+            btn.dataset.active = 'false';
+            btn.textContent = 'Start';
+            updateActiveMarkets();
+        } else {
+            const settings = readSettings(card);
+            traderRef.current?.start(id, settings);
+            btn.dataset.active = 'true';
+            btn.textContent = 'Stop';
+            updateActiveMarkets();
+        }
+    };
+
+
+    return (
+        <div
+            className="strategy__container"
+            ref={containerRef}
+            style={{
+                background: ui.is_dark_mode_on ? 'var(--general-main-1)' : 'transparent',
+            }}
+        >
+            {!isAuthorized ? (
+                <div className="strategy__auth-error">
+                    Not authorized. Please login first.
+                </div>
+            ) : (
+                <>
+                    <MultiTick symbols={activeMarkets} />
+                    
+                    {/* Navbar */}
+                    <div className="strategy__navbar">
+                        <div className="strategy__navbar-brand">
+                            <span>⏱️ Instant Fill</span>
+                        </div>
+                        <div className="strategy__navbar-auth">
+                            <div className="strategy__auth-info">
+                                <span>Connected</span>
+                                <span id="balance">$10,000.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Strategies Grid */}
+                    <div className="strategy__grid">
+                        {/* Over/Under Strategy */}
+                        <div className="strategy__card" data-strategy-id="over-under">
+                            <div className="strategy__card-header">
+                                <div className="strategy__card-name">⚙️ Over|Under 🦅</div>
+                                <button
+                                    className="strategy__trade-btn"
+                                    data-active="false"
+                                    onClick={handleToggleClick}
+                                >
+                                    Start
+                                </button>
+                            </div>
+
+                            <div className="strategy__form-group">
+                                <label>Market</label>
+                                <select className="strategy__market-select">
+                                    <option value="R_10">Volatility 10 Index</option>
+                                    <option value="1HZ10V">Volatility 10 (1s)</option>
+                                    <option value="R_25">Volatility 25 Index</option>
+                                    <option value="1HZ25V">Volatility 25 (1s)</option>
+                                </select>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Stake Amount</label>
+                                    <input type="number" className="strategy__stake-input" min="1" defaultValue="10" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Martingale</label>
+                                    <input type="number" className="strategy__martingale-input" min="1" defaultValue="2" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Duration (ticks)</label>
+                                    <input type="number" className="strategy__duration-input" min="1" defaultValue="1" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Consecutive Count</label>
+                                    <input type="number" className="strategy__Consecutive-input" min="1" defaultValue="3" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__prediction-controls">
+                                <div className="strategy__form-row">
+                                    <div className="strategy__form-group">
+                                        <label>Prediction 1 (OVER)</label>
+                                        <input type="number" className="strategy__prediction-input" defaultValue="1" min="1" max="9" />
+                                    </div>
+                                    <div className="strategy__form-group">
+                                        <label>Prediction 2 (UNDER)</label>
+                                        <input type="number" className="strategy__prediction-input" defaultValue="8" min="1" max="9" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="strategy__trade-status" id="tradeStatus-over-under"></div>
+                        </div>
+
+                        {/* Rise/Fall Strategy */}
+                        <div className="strategy__card" data-strategy-id="rise-fall">
+                            <div className="strategy__card-header">
+                                <div className="strategy__card-name">⚙️ Rise|Fall 🐘</div>
+                                <button
+                                    className="strategy__trade-btn"
+                                    data-active="false"
+                                    onClick={handleToggleClick}
+                                >
+                                    Start
+                                </button>
+                            </div>
+
+                            <div className="strategy__form-group">
+                                <label>Market</label>
+                                <select className="strategy__market-select">
+                                    <option value="R_10">Volatility 10 Index</option>
+                                    <option value="1HZ10V">Volatility 10 (1s)</option>
+                                    <option value="R_25">Volatility 25 Index</option>
+                                    <option value="1HZ25V">Volatility 25 (1s)</option>
+                                </select>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Stake Amount</label>
+                                    <input type="number" className="strategy__stake-input" min="1" defaultValue="10" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Martingale</label>
+                                    <input type="number" className="strategy__martingale-input" min="1" defaultValue="2" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Duration (ticks)</label>
+                                    <input type="number" className="strategy__duration-input" min="1" defaultValue="1" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Consecutive Count</label>
+                                    <input type="number" className="strategy__Consecutive-input" min="1" defaultValue="3" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__trade-status" id="tradeStatus-rise-fall"></div>
+                            <div className="strategy__card-header" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div className="strategy__card-name"><small>(Consecutive) Rise → Buys Fall</small></div>
+                                <div className="strategy__card-name"><small>(Consecutive) Fall → Buys Rise</small></div>
+                            </div>
+                        </div>
+
+                        {/* Even/Odd Strategy */}
+                        <div className="strategy__card" data-strategy-id="even-odd">
+                            <div className="strategy__card-header">
+                                <div className="strategy__card-name">⚙️ Even|Odd 🐆</div>
+                                <button
+                                    className="strategy__trade-btn"
+                                    data-active="false"
+                                    onClick={handleToggleClick}
+                                >
+                                    Start
+                                </button>
+                            </div>
+
+                            <div className="strategy__form-group">
+                                <label>Market</label>
+                                <select className="strategy__market-select">
+                                    <option value="R_10">Volatility 10 Index</option>
+                                    <option value="1HZ10V">Volatility 10 (1s)</option>
+                                    <option value="R_25">Volatility 25 Index</option>
+                                    <option value="1HZ25V">Volatility 25 (1s)</option>
+                                </select>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Stake Amount</label>
+                                    <input type="number" className="strategy__stake-input" min="1" defaultValue="10" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Martingale</label>
+                                    <input type="number" className="strategy__martingale-input" min="1" defaultValue="2" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Duration (ticks)</label>
+                                    <input type="number" className="strategy__duration-input" min="1" defaultValue="1" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Consecutive Count</label>
+                                    <input type="number" className="strategy__Consecutive-input" min="1" defaultValue="3" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__trade-status" id="tradeStatus-even-odd"></div>
+                            <div className="strategy__card-header" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div className="strategy__card-name"><small>(Consecutive) Even → Buys Odd</small></div>
+                                <div className="strategy__card-name"><small>(Consecutive) Odd → Buys Even</small></div>
+                            </div>
+                        </div>
+
+                        {/* Differs Strategy */}
+                        <div className="strategy__card" data-strategy-id="differs">
+                            <div className="strategy__card-header">
+                                <div className="strategy__card-name">⚙️ Differs 🦏</div>
+                                <button
+                                    className="strategy__trade-btn"
+                                    data-active="false"
+                                    onClick={handleToggleClick}
+                                >
+                                    Start
+                                </button>
+                            </div>
+
+                            <div className="strategy__form-group">
+                                <label>Market</label>
+                                <select className="strategy__market-select">
+                                    <option value="R_10">Volatility 10 Index</option>
+                                    <option value="1HZ10V">Volatility 10 (1s)</option>
+                                    <option value="R_25">Volatility 25 Index</option>
+                                    <option value="1HZ25V">Volatility 25 (1s)</option>
+                                </select>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Stake Amount</label>
+                                    <input type="number" className="strategy__stake-input" min="1" defaultValue="10" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Martingale</label>
+                                    <input type="number" className="strategy__martingale-input" min="1" defaultValue="2" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Duration (ticks)</label>
+                                    <input type="number" className="strategy__duration-input" min="1" defaultValue="1" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Consecutive Count</label>
+                                    <input type="number" className="strategy__Consecutive-input" min="1" defaultValue="1" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__prediction-controls">
+                                <div className="strategy__form-row">
+                                    <div className="strategy__form-group">
+                                        <label>Prediction 1</label>
+                                        <input type="number" className="strategy__prediction-input" defaultValue="1" min="1" max="9" />
+                                    </div>
+                                    <div className="strategy__form-group">
+                                        <label>Prediction 2</label>
+                                        <input type="number" className="strategy__prediction-input" defaultValue="5" min="1" max="9" />
+                                    </div>
+                                    <div className="strategy__form-group">
+                                        <label>Prediction 3</label>
+                                        <input type="number" className="strategy__prediction-input" defaultValue="9" min="1" max="9" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="strategy__trade-status" id="tradeStatus-differs"></div>
+                            <div className="strategy__card-header" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div className="strategy__card-name"><small>Prediction appearance triggers a buy</small></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* History Section */}
+                    <div className="strategy__history-section">
+                        <h3>Transactions</h3>
+                        <div className="strategy__profit-loss-display">
+                            <small>💰</small>{' '}
+                            <span id="profitLossValue">
+                                {(totalPL ?? 0) >= 0 ? '+' : ''}
+                                {(totalPL ?? 0).toFixed(2)} USD
+                            </span>
+                        </div>
+                        <div id="historyList">
+                            {traderRef.current?.trades.slice(0, 10).map((t) => (
+                                <div key={t.id} className="strategy__trade-item">
+                                    {t.strategy} – {t.profit !== null ? 
+                                        <span className={t.profit >= 0 ? 'strategy__profit' : 'strategy__loss'}>
+                                            {t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}
+                                        </span> : 
+                                        '…'}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+});
+
+export default Strategy;

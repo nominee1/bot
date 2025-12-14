@@ -1,0 +1,499 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import './Deposit.scss';
+
+const API_BASE = 'https://dtraderhub.com/api';
+
+/** ================= Types (match backend) ================= */
+type TraderRow = {
+  id: number;
+  username: string;
+  min_balance: number | string;
+  price_usd: number | string | null;
+  created_at: string;
+  active_copiers: number | string | null;
+};
+
+type Trader = {
+  id: string;
+  username: string;
+  min_balance: number;
+  price_usd: number | null;
+  active_copiers: number;
+  created_at: number;
+};
+
+type StatementTx = {
+  transaction_id?: number | string;
+  action_type?: string;
+  amount?: number;
+  balance?: number;
+  balance_after?: number;
+  transaction_time?: number;
+  time?: number;
+  contract_id?: string | number;
+  reference_id?: string | number;
+  app_id?: number | null;
+  reference_type?: string;
+  transaction_type?: string;
+  category?: string;
+  type?: string;
+  contract_type?: string;
+};
+
+/** ================= Helpers & formatters ================= */
+const currencyFmt = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 2,
+});
+
+const norm = (s?: string) => (s ? String(s).replace(/_/g, ' ').toLowerCase() : '');
+
+const txEpochMs = (t: StatementTx) =>
+  typeof t.transaction_time === 'number'
+    ? t.transaction_time * 1000
+    : typeof t.time === 'number'
+    ? t.time * 1000
+    : 0;
+
+const txKey = (t: StatementTx) =>
+  `${String(t.transaction_id ?? t.contract_id ?? '')}::${txEpochMs(t)}`;
+
+/** Nairobi "today from 3:00 AM" window (epoch sec): today 03:00 EAT → now */
+function getNairobiTodayFrom3amWindow(): [number, number] {
+  const EAT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC+3
+  const nowUtcMs = Date.now();
+  const nowEatMs = nowUtcMs + EAT_OFFSET_MS;
+  const startOfDayEatMs = Math.floor(nowEatMs / 86_400_000) * 86_400_000;
+  const start3amEatMs = startOfDayEatMs + 3 * 60 * 60 * 1000;
+  const start3amUtcMs = start3amEatMs - EAT_OFFSET_MS;
+  const fromSec = Math.floor(start3amUtcMs / 1000);
+  const toSec = Math.floor(nowUtcMs / 1000);
+  return [fromSec, toSec];
+}
+
+/** ================= Main (cards + statements only) ================= */
+const TraderCards: React.FC = () => {
+  const [traders, setTraders] = useState<Trader[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // statements modal state
+  const [statementModalFor, setStatementModalFor] = useState<Trader | null>(null);
+  const [stmItems, setStmItems] = useState<StatementTx[]>([]);
+  const [stmOffset, setStmOffset] = useState(0);
+  const [stmHasMore, setStmHasMore] = useState(true);
+  const [stmLoading, setStmLoading] = useState(false);
+  const [stmErr, setStmErr] = useState<string | null>(null);
+
+  const [fromSec, toSec] = getNairobiTodayFrom3amWindow();
+
+  const loadTraders = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch(`${API_BASE}/traders`, { credentials: 'omit' });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 150)}`);
+      }
+      const data: TraderRow[] = await res.json();
+      const mapped: Trader[] = data.map((r) => ({
+        id: String(r.id),
+        username: r.username,
+        min_balance: Number(r.min_balance ?? 0),
+        price_usd: r.price_usd === null ? null : Number(r.price_usd),
+        active_copiers: Number(r.active_copiers ?? 0),
+        created_at: Date.parse(r.created_at || new Date().toISOString()),
+      }));
+      setTraders(mapped);
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to load traders.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTraders();
+  }, []);
+
+  /** Statements modal */
+  const openStatements = async (trader: Trader) => {
+    setStatementModalFor(trader);
+    setStmItems([]);
+    setStmOffset(0);
+    setStmHasMore(true);
+    setStmErr(null);
+    await loadMoreStatements(trader, 0);
+  };
+
+  const loadMoreStatements = async (trader: Trader, offset: number) => {
+    if (!trader) return;
+    setStmLoading(true);
+    setStmErr(null);
+    try {
+      const url = new URL(`${API_BASE}/traders/${trader.id}/statements`);
+      const [from, to] = getNairobiTodayFrom3amWindow();
+      url.searchParams.set('from', String(from));
+      url.searchParams.set('to', String(to));
+      url.searchParams.set('limit', '100');
+      url.searchParams.set('offset', String(offset));
+
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 160)}`);
+      }
+      const data = await res.json();
+      const page: StatementTx[] = data?.statement?.transactions ?? [];
+      setStmItems((prev) => [...prev, ...page]);
+      setStmOffset(offset + (Array.isArray(page) ? page.length : 0));
+      setStmHasMore(Array.isArray(page) && page.length === 100);
+    } catch (e: any) {
+      setStmErr(e?.message || 'Failed to load statements');
+      setStmHasMore(false);
+    } finally {
+      setStmLoading(false);
+    }
+  };
+
+  /** ====== Visible summary for current stmItems ====== */
+  type VisibleSummary = {
+    start_balance?: number | null;
+    end_balance?: number | null;
+    net_pl?: number | null;
+    trades?: number;
+    wins?: number;
+    win_rate?: number | null;
+    growth_pct?: number | null;
+    visible_start_time?: number | null; // ms
+    visible_end_time?: number | null;   // ms
+  };
+
+  const visibleSummary: VisibleSummary = useMemo(() => {
+    const empty: VisibleSummary = {
+      start_balance: null,
+      end_balance: null,
+      net_pl: null,
+      trades: 0,
+      wins: 0,
+      win_rate: null,
+      growth_pct: null,
+      visible_start_time: null,
+      visible_end_time: null,
+    };
+    if (!stmItems.length) return empty;
+
+    const ordered = [...stmItems].sort((a, b) => txEpochMs(a) - txEpochMs(b));
+
+    const isCashFlow = (raw?: string) => {
+      const a = norm(raw);
+      return a === 'deposit' || a === 'withdrawal' || a === 'transfer';
+    };
+
+    const balAfter = (t: StatementTx) =>
+      typeof t.balance_after === 'number'
+        ? t.balance_after
+        : typeof t.balance === 'number'
+        ? t.balance
+        : undefined;
+
+    const amt = (t: StatementTx) => (typeof t.amount === 'number' ? t.amount : 0);
+
+    // Find latest cash-flow in visible window → baseline
+    let baselineTimeMs: number | null = null;
+    let baselineBalance: number | null = null;
+    for (let i = 0; i < ordered.length; i++) {
+      const t = ordered[i];
+      if (isCashFlow(t.action_type)) {
+        const tms = txEpochMs(t);
+        baselineTimeMs = tms || null;
+        const b = balAfter(t);
+        baselineBalance = typeof b === 'number' ? Number(b.toFixed(2)) : null;
+      }
+    }
+
+    // If none, baseline = balance BEFORE first visible row
+    if (baselineTimeMs === null) {
+      const first = ordered[0];
+      const b = balAfter(first);
+      if (typeof b === 'number' && typeof first.amount === 'number') {
+        baselineBalance = Number((b - first.amount).toFixed(2));
+      } else if (typeof b === 'number') {
+        baselineBalance = Number(b.toFixed(2));
+      } else {
+        baselineBalance = null;
+      }
+      baselineTimeMs = txEpochMs(first) || null;
+    }
+
+    // End balance = newest visible row
+    const last = ordered[ordered.length - 1];
+    const endB = balAfter(last);
+    const endBalance = typeof endB === 'number' ? Number(endB.toFixed(2)) : null;
+
+    // Net P/L
+    let netPL: number | null = null;
+    if (typeof baselineBalance === 'number' && typeof endBalance === 'number') {
+      netPL = Number((endBalance - baselineBalance).toFixed(2));
+    } else {
+      const sum = ordered
+        .filter((t) => (txEpochMs(t) || 0) > (baselineTimeMs || -Infinity))
+        .reduce((s, t) => s + amt(t), 0);
+      netPL = Number(sum.toFixed(2));
+    }
+
+    // Trades / wins AFTER baseline
+    let trades = 0;
+    let wins = 0;
+    for (const t of ordered) {
+      const tms = txEpochMs(t) || 0;
+      if (baselineTimeMs !== null && tms <= baselineTimeMs) continue;
+      if (norm(t.action_type) === 'sell' && typeof t.amount === 'number') {
+        trades += 1;
+        if (t.amount > 0) wins += 1;
+      }
+    }
+    const winRate = trades > 0 ? (wins / trades) * 100 : null;
+
+    const growth =
+      typeof baselineBalance === 'number' && baselineBalance > 0 && typeof netPL === 'number'
+        ? (netPL / baselineBalance) * 100
+        : null;
+
+    return {
+      start_balance: baselineBalance,
+      end_balance: endBalance,
+      net_pl: netPL,
+      trades,
+      wins,
+      win_rate: winRate,
+      growth_pct: growth,
+      visible_start_time: txEpochMs(ordered[0]) || null,
+      visible_end_time: txEpochMs(ordered[ordered.length - 1]) || null,
+    };
+  }, [stmItems]);
+
+  return (
+    <div className="cth-root" data-theme="light">
+      <div className="ct-hub__grid">
+        <section className="card card--list glass" style={{ width: '100%' }}>
+          <div className="list-head">
+            <h2>Traders</h2>
+            <button className="btn" onClick={() => loadTraders()} disabled={loading}>
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="skeleton-list">
+              <div className="skeleton-card">
+                <div className="sk-row" />
+                <div className="sk-kpis" />
+              </div>
+            </div>
+          ) : err ? (
+            <div className="empty err">{err}</div>
+          ) : traders.length === 0 ? (
+            <div className="empty">No traders yet.</div>
+          ) : (
+            <ul className="trader-list">
+              {traders.map((card) => (
+                <li key={card.id} className="trader-card">
+                  <div className="trader-card__main">
+                    <div className="badge-row">
+                      <span className="badge">{card.username}</span>
+                      {card.price_usd == null ? (
+                        <span className="chip chip--free">Free</span>
+                      ) : (
+                        <span className="chip">
+                          <small>Fee</small>
+                          {currencyFmt.format(card.price_usd)}
+                        </span>
+                      )}
+                      <span className="chip chip--ghost">Copiers: {card.active_copiers}</span>
+                    </div>
+
+                    <div className="meta-grid">
+                      <div>
+                        <strong>Min Copy Balance:</strong> ${card.min_balance.toFixed(2)}
+                      </div>
+                      <div className="muted small">ID: {card.id}</div>
+                      <div className="muted small">Joined: {new Date(card.created_at).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+
+                  <div className="trader-card__actions">
+                    <button className="btn ghost" onClick={() => openStatements(card)}>
+                      View Statements
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {/* Statements Modal */}
+      {statementModalFor && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Trader statements">
+          <div className="modal">
+            <div className="modal__head">
+              <h3>{statementModalFor.username} — Statements (Today from 03:00 EAT)</h3>
+              <button className="icon-btn" onClick={() => setStatementModalFor(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+
+            <div className="modal__body">
+              {stmErr && <div className="statements__status error">{stmErr}</div>}
+
+              {!stmErr && (
+                <div className="visible-summary glass">
+                  <div className="vs__row">
+                    <div className="vs__item">
+                      <div className="vs__label">Starting Balance (visible)</div>
+                      <div className="vs__value">
+                        {typeof visibleSummary.start_balance === 'number'
+                          ? currencyFmt.format(visibleSummary.start_balance)
+                          : '—'}
+                      </div>
+                    </div>
+                    <div className="vs__item">
+                      <div className="vs__label">Current Balance (visible)</div>
+                      <div className="vs__value">
+                        {typeof visibleSummary.end_balance === 'number'
+                          ? currencyFmt.format(visibleSummary.end_balance)
+                          : '—'}
+                      </div>
+                    </div>
+                    <div className="vs__item">
+                      <div className="vs__label">Net P/L</div>
+                      <div
+                        className={`vs__value ${
+                          typeof visibleSummary.net_pl === 'number' && visibleSummary.net_pl >= 0 ? 'pos' : 'neg'
+                        }`}
+                      >
+                        {typeof visibleSummary.net_pl === 'number'
+                          ? currencyFmt.format(visibleSummary.net_pl)
+                          : '—'}
+                      </div>
+                    </div>
+                    <div className="vs__item">
+                      <div className="vs__label">Growth</div>
+                      <div
+                        className={`vs__value ${
+                          typeof visibleSummary.growth_pct === 'number' && visibleSummary.growth_pct >= 0 ? 'pos' : 'neg'
+                        }`}
+                      >
+                        {typeof visibleSummary.growth_pct === 'number'
+                          ? `${visibleSummary.growth_pct.toFixed(2)}%`
+                          : '—'}
+                      </div>
+                    </div>
+                    <div className="vs__item">
+                      <div className="vs__label">Win rate</div>
+                      <div className="vs__value">
+                        {typeof visibleSummary.win_rate === 'number'
+                          ? `${visibleSummary.win_rate.toFixed(2)}%`
+                          : '—'}
+                      </div>
+                    </div>
+                    <div className="vs__item">
+                      <div className="vs__label">Trades</div>
+                      <div className="vs__value">{visibleSummary.trades ?? 0}</div>
+                    </div>
+                  </div>
+
+                  <div className="vs__range muted xsmall">
+                    Visible range:{' '}
+                    {visibleSummary.visible_start_time
+                      ? new Date(visibleSummary.visible_start_time).toLocaleString()
+                      : '—'}{' '}
+                    →{' '}
+                    {visibleSummary.visible_end_time
+                      ? new Date(visibleSummary.visible_end_time).toLocaleString()
+                      : '—'}
+                  </div>
+                </div>
+              )}
+
+              {!stmErr && (
+                <>
+                  <div className="statements__head">
+                    <div className="col col--time">Time</div>
+                    <div className="col col--action">Action</div>
+                    <div className="col col--refid">Reference ID</div>
+                    <div className="col col--app">App ID</div>
+                    <div className="col col--reftype">Type</div>
+                    <div className="col col--amt">Amount</div>
+                    <div className="col col--bal">Balance</div>
+                  </div>
+
+                  <ul className="statements__list">
+                    {stmItems.map((t) => {
+                      const tms = txEpochMs(t);
+                      const action = norm(t.action_type);
+                      const amt = typeof t.amount === 'number' ? t.amount : undefined;
+                      const bal =
+                        typeof t.balance_after === 'number'
+                          ? t.balance_after
+                          : typeof t.balance === 'number'
+                          ? t.balance
+                          : undefined;
+
+                      return (
+                        <li key={txKey(t)} className="statements__row">
+                          <div className="col col--time">{tms ? new Date(tms).toLocaleString() : '—'}</div>
+                          <div className={`col col--action ${action || ''}`}>{action || '—'}</div>
+                          <div className="col col--refid">{t.reference_id ?? '—'}</div>
+                          <div className="col col--app">{t.app_id ?? '—'}</div>
+                          <div className="col col--reftype">
+                            {norm(t.reference_type) ||
+                              norm(t.transaction_type) ||
+                              norm(t.category) ||
+                              norm(t.type) ||
+                              norm(t.contract_type) ||
+                              '—'}
+                          </div>
+                          <div className={`col col--amt ${(amt ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                            {typeof amt === 'number' ? `${amt >= 0 ? '+' : ''}${amt.toFixed(2)} USD` : '—'}
+                          </div>
+                          <div className="col col--bal">
+                            {typeof bal === 'number' ? `${bal.toFixed(2)} USD` : '—'}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <div className="modal__foot modal__foot--spread">
+                    <div className="muted small">
+                      Window: {new Date(fromSec * 1000).toLocaleString()} → {new Date(toSec * 1000).toLocaleString()}
+                    </div>
+                    <div className="actions">
+                      <button
+                        className="btn"
+                        disabled={stmLoading || !stmHasMore}
+                        onClick={() => loadMoreStatements(statementModalFor!, stmOffset)}
+                      >
+                        {stmLoading ? 'Loading…' : stmHasMore ? 'Load more' : 'End'}
+                      </button>
+                      <button className="btn ghost" onClick={() => setStatementModalFor(null)}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TraderCards;

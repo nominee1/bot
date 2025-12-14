@@ -34,7 +34,7 @@ const Toolbar = observer(() => {
                             button_id='db-toolbar__get-started-button'
                             button_classname='toolbar__btn toolbar__btn--icon toolbar__btn--start'
                             buttonOnClick={handleQuickStrategyOpen}
-                            button_text={localize('Denara Bots & $trategies')}
+                            button_text={localize('Go to Dtrader')}
                             
                         />
                     )}

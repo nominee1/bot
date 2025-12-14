@@ -1,5 +1,7 @@
 import { DerivLogo, useDevice } from '@deriv-com/ui';
 import './app-logo.scss';
+import { BrandDerivWordmarkSlateIcon, CurrencyDashIcon, LegacyGoogleIcon } from '@deriv/quill-icons';
+import IconRadio from '@/pages/dashboard/bot-list/save-modal/icon-radio';
 
 export const AppLogo = () => {
     const { isDesktop } = useDevice();
@@ -14,8 +16,8 @@ export const AppLogo = () => {
                 window.location.reload();
             }}
         >
-            <DerivLogo variant='wallets' />
-            <span className='app-header__logo-text'>DENARA</span>
+            <IconRadio variant='wallets' />
+            <span className='app-header__logo-text'>DENARA PRO</span>
         </a>
     );
 };

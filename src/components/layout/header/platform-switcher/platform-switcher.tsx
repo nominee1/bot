@@ -9,7 +9,7 @@ const PlatformSwitcher = () => {
 
     return (
         <UIPlatformSwitcher
-            bottomLinkLabel={localize('Dont have an account? Sign Up, then continue trading on dtraderhub')}
+            bottomLinkLabel={localize('Dont have an account? Sign Up, then continue trading on Denara_Pro')}
             buttonProps={{
                 icon: platformsConfig[1].buttonIcon,
             }}

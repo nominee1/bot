@@ -606,7 +606,7 @@ export const getTourDialogAction = (is_mobile: boolean) => {
         return (
             <Localize
                 key='tour-dialog-action-mobile'
-                i18n_default_text='You can import a bot from your mobile device or from Google drive, see a preview in the bot builder, and start trading by running the bot.'
+                i18n_default_text='Welcome to Denara Pro,'
             />
         );
     }
@@ -620,7 +620,7 @@ export const getTourDialogAction = (is_mobile: boolean) => {
 };
 
 export const onboarding_tour_header = (
-    <Localize key='onboarding-tour-header' i18n_default_text='Get started on Dtraderhub' />
+    <Localize key='onboarding-tour-header' i18n_default_text='Get started on DenaraPro' />
 );
 
 export const getBotBuilderTourHeader = (is_mobile: boolean) => {

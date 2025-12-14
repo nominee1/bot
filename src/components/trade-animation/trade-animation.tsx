@@ -88,7 +88,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     }, [is_stop_button_visible]);
     const show_overlay = should_show_overlay && is_contract_completed;
 
-    const TAB_NAMES = ['dashboard', 'bot_builder', 'charts', 'tutorials'] as const;
+    const TAB_NAMES = ['dashboard', 'bot_builder', 'charts', 'dtrader'] as const;
     const getTabName = (index: number) => TAB_NAMES[index];
 
     return (

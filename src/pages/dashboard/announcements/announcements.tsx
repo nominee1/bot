@@ -155,7 +155,7 @@ const Announcements = observer(({ is_mobile, is_tablet, handleTabChange }: TAnno
 
     return (
         <div className='announcements'>
-            <button
+            {/* <button
                 className='announcements__button'
                 onClick={() => {
                     setIsOpenAnnounceList(prevState => !prevState);
@@ -179,7 +179,7 @@ const Announcements = observer(({ is_mobile, is_tablet, handleTabChange }: TAnno
                         <p data-testid='announcements__amount'>{amount_active_announce}</p>
                     </div>
                 )}
-            </button>
+            </button> */}
             <div className='notifications__wrapper'>
                 <Announcement
                     className={classNames('', {

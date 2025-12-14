@@ -1,0 +1,680 @@
+@use 'components/shared/styles/mixins' as *;
+
+.even-oddt {
+  /* container + base styles kept consistent with your stripped file */
+  background-color: #ede3ed !important;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  width: 71vw;
+  margin: 0 auto;
+  padding: 15px;
+  color: var(--text-general);
+  line-height: 1.6;
+  padding-bottom: 20rem;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+  display: flex;
+  flex-direction: column;
+  @media screen and (max-width: 768px) {
+    width: 100vw;
+    padding: 2px;
+    
+  }
+
+  /* Smart Trade Panel */
+.smart-trade-panel {
+  background: var(--general-section-1);
+  border: 5px solid #064e72;
+  padding: 14px;
+  height: fit-content;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin: 12px 0 18px;
+
+  .panel-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .strat-btn{
+    justify-content: center;
+    background-color: rgb(222, 222, 222);
+  }
+
+  .panel-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    label {
+      font-size: 13px;
+      color: black;
+    }
+
+    .trade-input {
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border-normal);
+      background: #064e72;
+      color: #fff;
+      min-width: 140px;
+
+      &::placeholder { color: rgba(255,255,255,.7); }
+    }
+  }
+
+  .panel-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+
+    .trade-btn {
+      padding: 12px 14px;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &.even-btn { background: linear-gradient(135deg, #4bb4b3 0%, #3a8d8c 100%); }
+      &.odd-btn  { background: linear-gradient(135deg, #001f7a 0%, #000d33 100%); }
+      &.stop-btn { background: red; }
+
+      &:hover { opacity: 0.9; }
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+  }
+
+  .panel-status {
+
+    margin-top: 25px;
+    padding: 4px 8px;
+    height: fit-content;
+    max-height: 100px;
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    font-size: 12px;
+
+    @media screen and (max-width: 768px) {
+      height: 8rem;
+      
+    }
+
+    .panel-status-msg {
+      color: var(--text-prominent);
+      font-weight: 600;
+    }
+  }
+}
+
+/* Keep your existing button / inputs styling from .trading-container so the look matches */
+
+
+  /* Small header for EO mode */
+  .eo-header {
+    display: flex;
+    align-items: center;
+    margin: 6px 0 10px;
+    .eo-title {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text-prominent);
+      background: var(--general-section-1);
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+  }
+
+  /* Market Selection (unchanged from stripped file) */
+  .market-selector {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    background: var(--general-section-1);
+    border-radius: 4px;
+    padding: 8px 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    width: fit-content;
+
+    .market-icon { margin-right: 10px; color: var(--brand-red); font-size: 18px; }
+
+    .marketSelection {
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-general);
+      padding: 5px 8px;
+      border-radius: 4px;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 5px center;
+      background-size: 15px;
+      padding-right: 25px;
+      cursor: pointer;
+      min-width: 220px;
+
+      &:focus { outline: none; background-color: var(--general-hover); }
+      option { padding: 8px; }
+    }
+  }
+
+  /* Quick Row (filter, current tick, threshold) */
+  .analysis-quick-row {
+    background-color: white;
+    display: flex;
+    padding: 3px;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 8px 0 14px;
+
+    .digits-filter,
+    .current-tick,
+    .threshold {
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  }
+  .no-positions{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* Keep the input look used by filter + threshold */
+  .trade-input {
+    padding: 8px 12px;
+    width: auto;
+    border-radius: 4px;
+    border: 1px solid var(--border-normal);
+    background: var(--general-section-2);
+    color: var(--text-general);
+  }
+
+  /* Digits Progress (same as stripped file) */
+  .digits-container {
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 2px;
+    background: var(--digit-bg, #f9fbff);
+    border-radius: var(--digit-border-radius, 12px);
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+
+  .digits {
+    position: relative;
+    display: flex;
+    padding: 1rem 1rem 2.25rem;
+    background: var(--digit-bg, #f9fbff);
+    border-radius: 16px;
+    overflow: visible;
+    font-family: var(--font-family, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', Arial, sans-serif);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .digits--trade { display: flex; justify-content: space-evenly; }
+
+  .digits__digit {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    background-color: #E9E1DD;
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    width: var(--digit-size, 60px);
+    height: var(--digit-size, 60px);
+  }
+  .digits__digit--latest { background-color: #72c34f; border-radius: 50%; border: 1px solid var(--general-section-1); }
+  .digits__pie-container { position: relative; width: 100%; height: 100%; }
+  .digits__pie-progress { display: block; width: 100%; height: 100%; transform: rotate(45deg);
+    circle { stroke-width: 6; }
+    .progress__bg, .progress__value { stroke-width: 6; }
+  }
+  .progress__bg { fill: none; stroke: var(--progress-track, #E8EEFC); stroke-width: 12; stroke-linecap: round; }
+  .progress__value {
+    fill: none; stroke: var(--progress-color, #fb2323); stroke-width: 12; stroke-linecap: round;
+    transition: stroke-dasharray var(--transition, .35s cubic-bezier(.4,.0,.2,1)), stroke-dashoffset var(--transition, .35s cubic-bezier(.4,.0,.2,1)), stroke var(--transition, .35s cubic-bezier(.4,.0,.2,1)), stroke-opacity var(--transition, .35s cubic-bezier(.4,.0,.2,1));
+    stroke-opacity: .55;
+  }
+  .progress__value--is-max { stroke: var(--progress-color-max, #03b237); stroke-opacity: 1; filter: drop-shadow(0 0 4px rgba(0,134,38,.45)); }
+  .progress__value--is-min { stroke: var(--progress-color-min, #ff4444); stroke-opacity: 1; filter: drop-shadow(0 0 4px rgba(255,68,68,.45)); }
+
+  .digits__digit-value {
+    pointer-events: none; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: normal; font-weight: 600; letter-spacing: .5px;
+  }
+  .digits__digit-value--latest { text-shadow: 0 0 6px rgba(0,255,234,.4); }
+  .digits__digit-display-value { font-size: 1.85rem; color: var(--text-primary, #ab0693); line-height: 1; }
+  .digits__digit-display-percentage { margin-top: .25rem; font-size: .85rem; font-weight: 500; color: var(--text-secondary, #5b6475); }
+
+  .title {
+    display: flex;
+    font-size: 1.2rem;
+    font-weight: 600;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+
+}
+
+
+  .performance-stats {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+    margin:7px 0;
+   
+    
+    /* From 769px to 991px (larger tablets) */
+   
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 80px;
+
+      .stat-title {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+      }
+
+      .stat-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+
+        &.profit {
+          color: #28a745;
+        }
+
+        &.loss {
+          color: #dc3545;
+        }
+      }
+    }
+  }
+
+  .open-positions {
+    display: flex;
+    flex-direction: column;
+    overscroll-behavior: contain;
+    background: linear-gradient(0deg, var(--general-main-1) 0%, rgba(242, 243, 244, 0) 80%);
+
+    min-height: 300px;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+
+    overflow-anchor: none;
+    overscroll-behavior: contain;  /* avoid pulling the whole page */
+    scroll-behavior: smooth;  
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* Edge / IE */
+    
+
+  
+
+    .position-item {
+      background: white;
+      padding: 7px;
+      border-radius: 2px;
+      margin-bottom: 1px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      &.position-win .position-result {
+        color: green;
+        font-weight: bold;
+      }
+
+      &.position-loss .position-result {
+        color: red;
+        font-weight: bold;
+      }
+    }
+  }
+  .active-strat{
+
+    @media screen and (max-width: 768px) {
+      
+      gap: 2px;
+    }
+  }
+
+  .straty-stake {
+    background-color: #05344c;
+    color: white;
+    padding: 2px;
+    max-width: 100px;
+
+    
+  }
+
+  
+  .whuee {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  
+  
+  }
+  .see{
+    display: flex;
+    flex-direction: row;
+    min-width: 70px;
+    max-width: 70px;
+  }
+  .strategy-buttons{
+    @media screen and (max-width: 768px) {
+      justify-content: center;
+      align-items: center;
+    }
+  }
+
+  .position-market-contract {
+    display: flex;
+    flex-direction: row;
+    gap: 1.2rem;
+  }
+
+  .position-spots {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  .spot-entry,
+  .spot-exit {
+    display: flex;
+    align-items: center;
+    line-height: 1;
+  }
+
+  .spot-entry svg,
+  .spot-exit svg {
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+
+
+
+  @media (max-width: 1100px) {
+    :root { --digit-size: 90px; }
+    .digits__digit-display-value { font-size: 1.4rem; }
+    .digits__digit-display-percentage { font-size: .7rem; }
+  }
+  @media (max-width: 992px) {
+    :root { --digit-size: 90px; }
+    .digits__digit-display-value { font-size: .7rem; }
+  }
+  @media (max-width: 768px) {
+    :root { --digit-size: 70px; --digit-gap: .5rem; }
+    .digits__digit-display-value { font-size: .5rem; }
+    padding: 3px;
+  }
+  @media (max-width: 576px) {
+    :root { --digit-size: 60px; }
+    .digits { padding: .5rem .5rem 1.5rem; justify-content: center; }
+    .digits__digit-display-value { font-size: 1.1rem; }
+    .digits__digit-display-percentage { font-size: .7rem; }
+  }
+
+  /* Signals Row */
+  .signals-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+
+    .signals-box {
+      background: var(--general-section-1);
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+
+      &.active { border-color: #4a90e2; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
+      .signals-title { font-weight: 600; margin-bottom: 8px; color: var(--text-prominent); }
+
+      .signals-badges {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        .badge {
+          padding: 4px 10px; border-radius: 999px; background: var(--general-hover); color: var(--text-general); font-weight: 600; font-size: .85rem;
+          &.badge-green { background: #2ecc71; color: white; }
+        }
+      }
+
+      .signals-note {
+        margin-top: 6px;
+        font-size: .85rem;
+        color: var(--text-less-prominent);
+      }
+    }
+  }
+  @media (max-width: 768px) { .signals-row { grid-template-columns: 1fr; } }
+
+  /* History Section (same look as before) */
+  .history-container {
+    display: flex; flex-direction: column; height: fit-content; background-color: white; padding-bottom: 30rem; color: white;
+    padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.05);
+    @media screen and (max-width: 768px) {
+      margin-bottom: 20rem;
+      
+    }
+
+    .history-title {
+      font-size: 18px; font-weight: 600; color: var(--text-prominent);
+      margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;
+
+      .refresh-btn {
+        background: var(--brand-blue); color: white; border: none; border-radius: 4px; padding: 4px 8px;
+        font-size: .8rem; cursor: pointer; display: flex; align-items: center; gap: 4px;
+      }
+    }
+
+    .history-items {
+      display: flex; flex-wrap: wrap; gap: 10px;
+
+      .history-item {
+        padding: 8px 12px; border-radius: 20px; font-weight: 600; min-width: 30px; text-align: center;
+      }
+    }
+  }
+}
+/* Added styles for Smart Trade + Analysis features (attach to your existing container) */
+.flipaaaa {
+  /* Smart Trade Panel */
+  .smart-trade-panel {
+    background: var(--general-section-1);
+    border: 1px solid #066d72;
+    padding: 14px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.05);
+    margin: 12px 0 18px;
+
+    .panel-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .strat-btn {                      /* reverse / locked toggles */
+      justify-content: center;
+      background: rgb(222,222,222);
+      min-height: 36px;
+    }
+
+    .panel-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+
+      label { font-size: 13px; color: black; }
+
+      .trade-input {
+        padding: 8px 12px;
+        border-radius: 4px;
+        border: 1px solid var(--border-normal);
+        background: #064e72;
+        color: #fff;
+        min-width: 140px;
+        &::placeholder { color: rgba(255,255,255,.7); }
+      }
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+
+      .trade-btn {
+        padding: 12px 14px;
+        border: none;
+        border-radius: 6px;
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        transition: opacity .2s;
+
+        &.even-btn { background: linear-gradient(135deg,#4bb4b3 0%,#3a8d8c 100%); }
+        &.odd-btn  { background: linear-gradient(135deg,#001f7a 0%,#000d33 100%); }
+        &.stop-btn { background: red; }
+
+        &:hover { opacity: .9; }
+        &:disabled { opacity: .5; cursor: not-allowed; }
+      }
+    }
+
+    .panel-status {
+      margin-top: 25px;
+      padding: 4px 8px;
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      font-size: 12px;
+
+      .panel-status-msg { color: var(--text-prominent); font-weight: 600; }
+    }
+  }
+
+  /* Quick analysis row: filter / current tick / threshold */
+  .analysis-quick-row {
+    background: #fff;
+    display: flex;
+    padding: 3px;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 8px 0 14px;
+
+    .digits-filter,
+    .current-tick,
+    .threshold {
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  }
+
+  /* Signals (Even/Odd) */
+  .signals-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+
+    .signals-box {
+      background: var(--general-section-1);
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+
+      &.active { border-color: #4a90e2; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
+      .signals-title { font-weight: 600; margin-bottom: 8px; color: var(--text-prominent); }
+
+      .signals-badges {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        .badge {
+          padding: 4px 10px;
+          border-radius: 999px;
+          background: var(--general-hover);
+          color: var(--text-general);
+          font-weight: 600;
+          font-size: .85rem;
+
+          &.badge-green { background: #2ecc71; color: #fff; }
+        }
+      }
+
+      .signals-note { margin-top: 6px; font-size: .85rem; color: var(--text-less-prominent); }
+    }
+  }
+  @media (max-width: 768px) { .signals-row { grid-template-columns: 1fr; } }
+
+  /* Analysis Chamber additions */
+  .history-container {
+    .history-title {
+      display: flex; justify-content: space-between; align-items: center;
+
+      .refresh-btn {
+        background: var(--brand-blue);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: .8rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+    }
+
+    .history-items {
+      display: flex; flex-wrap: wrap; gap: 10px;
+
+      .history-item {
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        min-width: 30px;
+        text-align: center;
+      }
+    }
+  }
+}

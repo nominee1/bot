@@ -1,0 +1,416 @@
+ok, add the panel but with the stake and duration and martingale only. the market we get from the market selection.  add a trade the signal toggle , when on, the signal is purchased. when the signal goes off the trade halts immeadiately . when on again the trading continues for the active signal even or odd. when halted, say on a loss, the martingale stake continues onto the next signal. also have a stop smart trades button that completely stops the trade. the issue is how long does the signal have to last for the trading to trigger. so add a signal time in seconds input after which the trade commenses. the panel goes above the analysis chamber. we only trade even and odd on this version, make sure all the inputs can be totally cleared no snaping to default. heres the code so far. (// IframeEvenOdd.tsx — Analysis-only (Even/Odd), editable signal threshold
+import { useEffect, useRef, useState } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useStore } from '@/hooks/useStore';
+import './IframeEvenOdd.scss';
+
+type TAnalysisItem = {
+  digit: number;
+  price: number;
+  timestamp: Date;
+};
+
+// Markets with special decimal formatting
+const FIXED3 = ['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'];
+const FIXED4 = ['R_50', 'R_75'];
+
+const digitColors = [
+  '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+  '#FF9F40', '#8AC249', '#EA5F89', '#00BFFF', '#A0522D'
+];
+
+const IframeEvenOdd = observer(() => {
+  const { ui } = useStore();
+
+  // ───────────────────────── State ─────────────────────────
+  const [filterCount, setFilterCount] = useState<number>(100); // 1..1000
+  const [currentSymbol, setCurrentSymbol] = useState<string>('1HZ10V');
+  const [threshold, setThreshold] = useState<number>(65); // editable signal threshold %
+
+  const [analysisData, setAnalysisData] = useState<{
+    lastResults: TAnalysisItem[];
+    lastDigit: number | null;
+    lastPrice: number | null;
+    digitCounts: number[];
+    currentMarket: string;
+  }>({
+    lastResults: [],
+    lastDigit: null,
+    lastPrice: null,
+    digitCounts: Array(10).fill(0),
+    currentMarket: '1HZ10V',
+  });
+
+  // ───────────────────────── Refs ─────────────────────────
+  const marketSelectionRef = useRef<HTMLSelectElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const debounceTimer = useRef<NodeJS.Timeout>();
+  const latestDigitRef = useRef<HTMLDivElement>(null);
+
+  // ───────────────────────── Helpers ─────────────────────────
+  const formatTickToLastDigit = (val: number, market: string) => {
+    let tickString: string;
+    if (FIXED3.includes(market)) tickString = val.toFixed(3);
+    else if (FIXED4.includes(market)) tickString = val.toFixed(4);
+    else tickString = val.toFixed(2);
+    return parseInt(tickString.slice(-1));
+  };
+
+  const calculateDigitStats = () => {
+    const windowed = analysisData.lastResults.slice(0, Math.min(1000, filterCount));
+    const total = windowed.length;
+    const digitCounts = Array(10).fill(0);
+    windowed.forEach(r => { digitCounts[r.digit]++; });
+
+    const maxCount = Math.max(...digitCounts);
+    const minCount = Math.min(...digitCounts);
+
+    return {
+      digitCounts,
+      total,
+      digitsData: digitCounts.map((count: number, digit: number) => {
+        const percentage = total > 0 ? (count / total) * 100 : 0;
+        return {
+          digit,
+          count,
+          percentage,
+          isMax: count === maxCount && maxCount > 0,
+          isMin: count === minCount && minCount > 0 && minCount !== maxCount,
+        };
+      }),
+    };
+  };
+
+  const { digitCounts, total, digitsData } = calculateDigitStats();
+
+  // Even/Odd aggregates within the current window
+  const evenCount = digitCounts[0] + digitCounts[2] + digitCounts[4] + digitCounts[6] + digitCounts[8];
+  const oddCount  = digitCounts[1] + digitCounts[3] + digitCounts[5] + digitCounts[7] + digitCounts[9];
+  const evenPct   = total > 0 ? (evenCount / total) * 100 : 0;
+  const oddPct    = total > 0 ? (oddCount  / total) * 100 : 0;
+
+  const evenHit = evenPct >= threshold;
+  const oddHit  = oddPct  >= threshold;
+
+  const calculateStrokeValues = () => {
+    const circumference = 2 * Math.PI * 27;
+    const dashValue = circumference / 2;
+    const dashArray = `${dashValue} ${circumference}`;
+    const dashOffset = circumference / 4;
+    return { dashArray, dashOffset };
+  };
+
+  const pushTick = (price: number, market: string) => {
+    const lastDigit = formatTickToLastDigit(price, market);
+
+    setAnalysisData(prev => {
+      const digitCounts = [...prev.digitCounts];
+      digitCounts[lastDigit]++;
+
+      const newLastResults: TAnalysisItem[] = [
+        { digit: lastDigit, price, timestamp: new Date() },
+        ...prev.lastResults,
+      ].slice(0, 1000);
+
+      return {
+        ...prev,
+        lastResults: newLastResults,
+        lastDigit,
+        lastPrice: price,
+        digitCounts,
+        currentMarket: market,
+      };
+    });
+  };
+
+  const handleTick = (val: number) => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    const market = marketSelectionRef.current?.value || currentSymbol;
+
+    debounceTimer.current = setTimeout(() => {
+      pushTick(val, market);
+    }, 50);
+  };
+
+  const refreshData = () => {
+    if (!wsRef.current || !marketSelectionRef.current) return;
+    const newMarket = marketSelectionRef.current.value;
+
+    setCurrentSymbol(newMarket);
+    setAnalysisData({
+      lastResults: [],
+      lastDigit: null,
+      lastPrice: null,
+      digitCounts: Array(10).fill(0),
+      currentMarket: newMarket,
+    });
+
+    wsRef.current.send(
+      JSON.stringify({
+        ticks_history: newMarket,
+        style: 'ticks',
+        count: 5000,
+        end: 'latest',
+        subscribe: 1,
+      })
+    );
+  };
+
+  // ───────────────────────── WebSocket ─────────────────────────
+  useEffect(() => {
+    if (marketSelectionRef.current) {
+      marketSelectionRef.current.value = currentSymbol;
+    }
+
+    const app_id = 1089;
+    const url = `wss://ws.binaryws.com/websockets/v3?app_id=${app_id}`;
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(
+        JSON.stringify({
+          ticks_history: currentSymbol,
+          style: 'ticks',
+          count: 5000,
+          end: 'latest',
+          subscribe: 1,
+        })
+      );
+      setAnalysisData({
+        lastResults: [],
+        lastDigit: null,
+        lastPrice: null,
+        digitCounts: Array(10).fill(0),
+        currentMarket: currentSymbol,
+      });
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data?.error) {
+        console.error('WebSocket error:', data.error.message);
+        return;
+      }
+
+      if (data?.msg_type === 'history' && Array.isArray(data.history?.prices)) {
+        const prices: number[] = data.history.prices.map(Number);
+        if (!prices.length) return;
+        const market = marketSelectionRef.current?.value || currentSymbol;
+        prices.forEach((p) => pushTick(p, market));
+      }
+
+      if (data?.tick?.quote) {
+        handleTick(Number(data.tick.quote));
+      }
+    };
+
+    ws.onerror = (err) => console.error('WebSocket error:', err);
+    ws.onclose = () => {};
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [currentSymbol]);
+
+  // ───────────────────────── Render ─────────────────────────
+  return (
+    <div
+      className="bot-appp"
+      style={{ background: ui.is_dark_mode_on ? 'var(--general-main-1)' : 'transparent' }}
+    >
+      {/* Header: we’re just in Even/Odd mode now */}
+      <div className="eo-header">
+        <div className="eo-title">Even / Odd Analysis</div>
+      </div>
+
+      {/* Market Selection */}
+      <div className="market-selector">
+        <i className="fas fa-chart-line market-icon"></i>
+        <select
+          className="marketSelection"
+          id="marketSelection"
+          ref={marketSelectionRef}
+          onChange={(e) => {
+            const newMarket = e.target.value;
+            setCurrentSymbol(newMarket);
+            setAnalysisData({
+              lastResults: [],
+              lastDigit: null,
+              lastPrice: null,
+              digitCounts: Array(10).fill(0),
+              currentMarket: newMarket,
+            });
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(
+                JSON.stringify({
+                  ticks_history: newMarket,
+                  style: 'ticks',
+                  count: 5000,
+                  end: 'latest',
+                  subscribe: 1,
+                })
+              );
+            }
+          }}
+          value={currentSymbol}
+        >
+          <option className="Volatility10" value="R_10">Volatility 10 index</option>
+          <option className="Volatility10s" value="1HZ10V">Volatility 10(1s) index</option>
+          <option className="Volatility10s" value="1HZ15V">Volatility 15(1s) index</option>
+          <option className="Volatility25" value="R_25">Volatility 25 index</option>
+          <option className="Volatility25s" value="1HZ25V">Volatility 25(1s) index</option>
+          <option className="Volatility25s" value="1HZ30V">Volatility 30(1s) index</option>
+          <option className="Volatility50" value="R_50">Volatility 50 index</option>
+          <option className="Volatility50s" value="1HZ50V">Volatility 50(1s) index</option>
+          <option className="Volatility75" value="R_75">Volatility 75 index</option>
+          <option className="Volatility75s" value="1HZ75V">Volatility 75(1s) index</option>
+          <option className="Volatility75s" value="1HZ90V">Volatility 90(1s) index</option>
+          <option className="Volatility100" value="R_100">Volatility 100 index</option>
+          <option className="Volatility100s" value="1HZ100V">Volatility 100(1s) index</option>
+        </select>
+      </div>
+
+      {/* Quick row: filter, current tick, threshold */}
+      <div className="analysis-quick-row">
+        <div className="digits-filter">
+          <label>Analyze last:</label>
+          <input
+            type="number"
+            className="trade-input"
+            value={filterCount}
+            onChange={(e) => {
+              const n = e.target.value === '' ? 1 : Number(e.target.value);
+              const value = Math.max(1, Math.min(1000, n));
+              setFilterCount(value);
+            }}
+            min={1}
+            max={1000}
+            step={1}
+          />
+          <span>ticks</span>
+        </div>
+
+        <div className="current-tick">
+          <div><strong>Current Tick:</strong> {analysisData.lastPrice !== null ? analysisData.lastPrice : '—'}</div>
+          <div><strong>Last Digit:</strong> {analysisData.lastDigit !== null ? analysisData.lastDigit : '—'}</div>
+        </div>
+
+        <div className="threshold">
+          <label>Signal Threshold (%)</label>
+          <input
+            type="number"
+            className="trade-input"
+            value={threshold}
+            onChange={(e) => {
+              const v = e.target.value === '' ? 0 : Number(e.target.value);
+              const clamped = Math.max(1, Math.min(99, isNaN(v) ? 65 : v));
+              setThreshold(clamped);
+            }}
+            min={1}
+            max={99}
+            step={1}
+          />
+        </div>
+      </div>
+
+      {/* Digits Progress Visualization (kept; helpful context) */}
+      <div className="digits-container">
+        <div className="digits digits--trade">
+          {digitsData.map((digitData) => {
+            const { dashArray, dashOffset } = calculateStrokeValues();
+            const isLatest = analysisData.lastDigit === digitData.digit;
+
+            return (
+              <div
+                key={digitData.digit}
+                className={`digits__digit ${isLatest ? 'digits__digit--latest' : ''}`}
+                data-digit={digitData.digit}
+                ref={isLatest ? latestDigitRef : null}
+              >
+                <div className="digits__pie-container">
+                  <svg className="digits__pie-progress" width="60" height="60" viewBox="0 0 60 60">
+                    <circle className="progress__bg" cx="30" cy="30" r="27"></circle>
+                    <circle
+                      className={`progress__value ${digitData.isMax ? 'progress__value--is-max' : digitData.isMin ? 'progress__value--is-min' : ''}`}
+                      cx="30"
+                      cy="30"
+                      r="27"
+                      strokeDasharray={dashArray}
+                      strokeDashoffset={dashOffset}
+                    />
+                  </svg>
+                </div>
+                <span className={`digits__digit-value ${isLatest ? 'digits__digit-value--latest' : ''}`}>
+                  <i className="digits__digit-display-value">{digitData.digit}</i>
+                  <i className="digits__digit-display-percentage">
+                    {digitData.percentage.toFixed(1)}%
+                  </i>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Signals Row: Even / Odd */}
+      <div className="signals-row eo-signals">
+        <div className={`signals-box ${evenHit ? 'active' : ''}`}>
+          <div className="signals-title">Even Signal</div>
+          <div className="signals-badges">
+            <span className={`badge ${evenHit ? 'badge-green' : ''}`}>
+              {evenPct.toFixed(1)}% (≥ {threshold}%)
+            </span>
+          </div>
+          <div className="signals-note">
+            <strong>Even Count:</strong> {evenCount}/{total}
+          </div>
+        </div>
+
+        <div className={`signals-box ${oddHit ? 'active' : ''}`}>
+          <div className="signals-title">Odd Signal</div>
+          <div className="signals-badges">
+            <span className={`badge ${oddHit ? 'badge-green' : ''}`}>
+              {oddPct.toFixed(1)}% (≥ {threshold}%)
+            </span>
+          </div>
+          <div className="signals-note">
+            <strong>Odd Count:</strong> {oddCount}/{total}
+          </div>
+        </div>
+      </div>
+
+      {/* Analysis Chamber (History) */}
+      <div className="history-container">
+        <div className="history-title">
+          Analysis Chamber
+          <button className="refresh-btn" id="refreshBtn" onClick={refreshData}>
+            <i className="fas fa-sync-alt"></i> Refresh
+          </button>
+        </div>
+        <div className="history-items">
+          {analysisData.lastResults.slice(0, Math.min(1000, filterCount)).map((result, index) => {
+            // Color hint: even = teal, odd = blue, otherwise default
+            let style: React.CSSProperties = { backgroundColor: 'transparent', color: 'black' };
+            style = {
+              backgroundColor: result.digit % 2 === 0 ? '#2ecc71' : '#e74c3c',
+              color: 'white',
+            };
+
+            return (
+              <div key={index} className="history-item" style={style} title={`Price: ${result.price}`}>
+                {result.digit}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export default IframeEvenOdd;
+)

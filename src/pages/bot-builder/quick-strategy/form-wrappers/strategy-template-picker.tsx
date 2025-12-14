@@ -7,6 +7,7 @@ import { Chip, SearchField } from '@deriv-com/quill-ui';
 import { localize } from '@deriv-com/translations';
 import StrategyList from './strategy-list';
 import { QsSteps, TRADE_TYPES } from './trade-constants';
+import bots from '@/pages/aaabots/bots';
 import './strategy-template-picker.scss';
 
 type TStrategyTemplatePicker = {

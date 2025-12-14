@@ -1,0 +1,46 @@
+What went wrong
+
+Stale socket after a switch
+
+When you switched accounts, the underlying WS often sat in CLOSING/CLOSED (readyState 2/3) for a moment.
+
+The component’s buy() fired without checking the socket was OPEN (1) and without ensuring re-authorization had finished.
+
+Result: the first post-switch buy could fail or half-succeed, and your internal “in-flight”/round locks got stuck.
+
+Subscriptions pinned to the old connection
+
+Your onMessage() subscription was attached to the previous WS instance. After a new DerivApi instance/authorization, your UI was still listening to the old stream.
+
+That’s why you saw no live POC/transaction updates (no exit ticks/status) until a refresh.
+
+Streams not cleanly re-subscribed
+
+On switch, the server-side streams were re-created, but the component didn’t forget→re-subscribe or re-bind its UI handlers to the new socket.
+
+That’s also why a Turbo with multiple rounds would only place one round: buy threw/locked once, and the round scheduler never fully recovered.
+
+Balance mismatch
+
+UI kept showing the old balance (stale listener/state), while the server correctly deducted from the new account—classic symptom of a listener that’s still attached to the previous connection/account.
+
+How the replacement fixes it
+
+ensureApiReady() in buy()
+Checks connection.readyState === 1 and calls api_base.init(true) if not. This guarantees a fresh socket + re-authorization before any trade is sent.
+
+apiEpoch + re-binding onMessage
+We bump an apiEpoch every time the socket opens/closes, and we re-create the onMessage().subscribe(...) handler whenever apiEpoch changes.
+That forces the UI to listen to the current socket after a switch.
+
+Lock & round safety
+We release inFlight* locks on errors/settlements and re-check TP/SL/halts so the scheduler can continue after a switch instead of getting stuck.
+
+State resets on start
+Maps like stakesByIdRef, settledContractsRef, and contractToStratRef are cleared at session start so they can’t point to stale contract IDs from the prior account.
+
+TL;DR
+
+Before: buys could go out on a closed/non-authorized socket, and your UI kept listening to the old socket → no statuses/exits, wrong balance display, only one round firing.
+
+After: you wait for an OPEN + authorized connection, rebind listeners after each reconnection, and reset per-session state → statuses/transactions flow correctly on the new account, Turbo keeps running, and balance/POC/exit points stay in sync.

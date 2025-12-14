@@ -1,0 +1,308 @@
+.bot-app {
+    background: var(--general-main-1, #141414);
+    color: #d9d9d9;
+    font-family: Arial, sans-serif;
+    height: 100vh;
+    width: 100vw;
+
+    // padding-bottom: 13rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* Smooth scrolling on iOS */
+    scroll-behavior: smooth;
+    /* Smooth scrolling animation */
+  
+    /* Hide scrollbar for cleaner look (optional) */
+    scrollbar-width: none;
+  
+    /* Firefox */
+    &::-webkit-scrollbar {
+      display: none;
+      /* Chrome/Safari */
+    }
+  
+    .app-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+  
+      h1, h2 {
+        color: #ffffff;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+  
+      h2 {
+        margin-bottom: 10px;
+      }
+    }
+  
+    #chart-container {
+      width: 100%;
+      height: 50vh;
+      margin-bottom: 20px;
+    }
+  
+    .control-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 20px;
+      align-items: center;
+      justify-content: center;
+  
+      .market-selector,
+      .candle-config,
+      .tick-range-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+  
+      select, input, button {
+        padding: 8px 12px;
+        background: #2a2a2a;
+        color: white;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+  
+      button {
+        cursor: pointer;
+        transition: background-color 0.3s;
+  
+        &:hover {
+          background: #3a3a3a;
+        }
+  
+        i {
+          margin-right: 5px;
+        }
+      }
+  
+      .tick-range-input {
+        width: 60px;
+        text-align: center;
+      }
+  
+      .refresh-btn {
+        background: #26a69a;
+  
+        &:hover {
+          background: #2bbbad;
+        }
+      }
+  
+      #status {
+        padding: 10px;
+        color: #26a69a;
+        margin-left: auto;
+      }
+    }
+  
+    .websocket-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+  
+      .connect-btn {
+        background: #2ecc71;
+      }
+  
+      .disconnect-btn {
+        background: #e74c3c;
+      }
+    }
+  
+    .stats-container {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+  
+      .stat-box {
+        flex: 1;
+        min-width: 200px;
+        background: #2a2a2a;
+        padding: 15px;
+        border-radius: 6px;
+        text-align: center;
+  
+        .stat-title {
+          font-size: 14px;
+          color: #bdc3c7;
+          margin-bottom: 5px;
+        }
+  
+        .stat-value {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 5px;
+  
+          &.rise-stat {
+            color: #2ecc71;
+          }
+  
+          &.fall-stat {
+            color: #e74c3c;
+          }
+        }
+  
+        .stat-label {
+          font-size: 12px;
+          color: #bdc3c7;
+        }
+      }
+    }
+  
+    .range-stats {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+  
+    .prediction-panel {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+  
+      .prediction-header {
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #bdc3c7;
+      }
+  
+      .method-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 10px;
+  
+        .method-tab {
+          padding: 5px 10px;
+          background: #333;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+  
+          &.active {
+            background: #26a69a;
+          }
+        }
+      }
+  
+      .prediction-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+      }
+  
+      .prediction-item {
+        display: inline-block;
+        margin: 5px;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-weight: bold;
+        min-width: 60px;
+        text-align: center;
+  
+        &.prediction-rise {
+          background: rgba(46, 204, 113, 0.2);
+          color: #2ecc71;
+          border: 1px solid rgba(46, 204, 113, 0.5);
+        }
+  
+        &.prediction-fall {
+          background: rgba(231, 76, 60, 0.2);
+          color: #e74c3c;
+          border: 1px solid rgba(231, 76, 60, 0.5);
+        }
+  
+        .prediction-confidence {
+          font-size: 12px;
+          color: #bdc3c7;
+          display: block;
+          margin-top: 3px;
+        }
+      }
+  
+      .prediction-method {
+        font-size: 12px;
+        color: #bdc3c7;
+        margin-top: 5px;
+      }
+    }
+  
+    .history-container {
+      .history-header {
+        .history-title {
+          font-weight: bold;
+          margin-bottom: 10px;
+          color: #bdc3c7;
+        }
+      }
+  
+      .history-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+  
+        .tick-item {
+          width: 20px;
+          height: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 3px;
+          font-size: 12px;
+          font-weight: bold;
+  
+          &.tick-rise {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+          }
+  
+          &.tick-fall {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+          }
+  
+          &.tick-neutral {
+            background: rgba(189, 195, 199, 0.2);
+            color: #bdc3c7;
+          }
+        }
+      }
+    }
+  }
+  
+  // Dark mode specific styles
+  .bot-app.dark-mode {
+    background: #141414;
+    color: #d9d9d9;
+  
+    .app-container {
+      h1, h2 {
+        color: #ffffff;
+      }
+  
+      .control-panel {
+        select, input, button {
+          background: #2a2a2a;
+          color: white;
+          border-color: #404040;
+        }
+      }
+  
+      .stat-box,
+      .range-stats,
+      .prediction-panel {
+        background: #2a2a2a;
+      }
+    }
+  }

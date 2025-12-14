@@ -18,6 +18,9 @@ import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
 import PlatformSwitcher from './platform-switcher';
 import './header.scss';
+import { LegacyTelegramIcon, LegacyWhatsappIcon } from '@deriv/quill-icons/Legacy';
+
+const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029VbBERaw1yT2HchhJRd1d';
 
 const AppHeader = observer(() => {
     const { isDesktop } = useDevice();
@@ -64,11 +67,11 @@ const AppHeader = observer(() => {
                             <Button
                                 primary
                                 onClick={() => {
-                                    window.location.assign(standalone_routes.telegram);
+                                    window.location.assign(standalone_routes.withdraw);
                                 }}
                                 className='deposit-button'
                             >
-                                {localize('Telegram')}
+                                {localize('Withdraw')}
                             </Button>
                         ))}
                 </>
@@ -112,6 +115,35 @@ const AppHeader = observer(() => {
         >
             <Wrapper variant='left'>
                 <AppLogo />
+
+                {/* Telegram icon */}
+                <Tooltip
+                    as='button'
+                    onClick={() => window.location.assign(standalone_routes.yoo)}
+                    tooltipContent={localize('Telegram')}
+                    tooltipPosition='bottom'
+                    className={clsx('app-header__telegram-icon', {
+                        'app-header__telegram-icon--desktop': isDesktop,
+                        'app-header__telegram-icon--mobile': !isDesktop,
+                    })}
+                >
+                    <LegacyTelegramIcon iconSize='sm' />
+                </Tooltip>
+
+                {/* WhatsApp icon (added) */}
+                <Tooltip
+                    as='button'
+                    onClick={() => window.open(WHATSAPP_CHANNEL_URL, '_blank')}
+                    tooltipContent={localize('WhatsApp')}
+                    tooltipPosition='bottom'
+                    className={clsx('app-header__whatsapp-icon', {
+                        'app-header__whatsapp-icon--desktop': isDesktop,
+                        'app-header__whatsapp-icon--mobile': !isDesktop,
+                    })}
+                >
+                    <LegacyWhatsappIcon iconSize='sm' />
+                </Tooltip>
+
                 <MobileMenu />
                 {isDesktop && <PlatformSwitcher />}
                 {isDesktop && <MenuItems />}

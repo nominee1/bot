@@ -15,8 +15,8 @@ const AccountSwitcherFooter = ({ oAuthLogout, loginid, is_logging_out }: TAccoun
 
     return (
         <div className=''>
-            <UIAccountSwitcher.TradersHubLink href={standalone_routes.signup}>
-                {localize(`Dont have an account on deriv? Create account then continue trading on dtraderhub`)}
+            <UIAccountSwitcher.TradersHubLink href={standalone_routes.site}>
+                {localize(`Go to site.denaratool.com`)}
             </UIAccountSwitcher.TradersHubLink>
             <AccountSwitcherDivider />
             <div

@@ -8,35 +8,35 @@ export type TSidebarItem = {
 
 export const SIDEBAR_INTRO = (): TSidebarItem[] => [
     {
-        label: localize('Welcome to Dtraderhub'),
+        label: localize('Welcome to DenaraPro'),
         content: [
             {
                 data: localize(
-                    '🔴 Denara’s fire, profits higher!, trade like a star! 🔴'
+                    '🔴 Powered by deriv🔴'
                 ),
             },
-            { data: localize('Analyze. Execute. Profit') },
+            { data: localize('Market analysis tools') },
         ],
         link: false,
     },
     {
         label: localize('Guide'),
-        content: [{ data: localize('Denara flows, balance grows!') }],
+        content: [{ data: localize('Learn how to use denara!') }],
         link: true,
     },
     {
         label: localize('FAQs'),
         content: [
             {
-                data: localize('What is Deriv Bot?'),
+                data: localize('What is Bot?'),
                 faq_id: 'faq-0',
             },
             {
-                data: localize('Where do I find the blocks I need?'),
+                data: localize('How do i analyze the market?'),
                 faq_id: 'faq-1',
             },
             {
-                data: localize('How do I remove blocks from the workspace?'),
+                data: localize('How do i use the bot?'),
                 faq_id: 'faq-2',
             },
         ],
