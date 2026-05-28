@@ -14,13 +14,26 @@ import { api_base } from '@/external/bot-skeleton';
 const getLoginId = (): string =>
   api_base?.account_info?.loginid ? String(api_base.account_info.loginid) : '';
 
+const ensureApiReady = async () => {
+  const OPEN = 1 as const;
+  if (!api_base.api || api_base.api.connection.readyState !== OPEN) {
+    await api_base.init(true);
+  }
+  const liveApi = api_base.api;
+  if (!liveApi || liveApi.connection.readyState !== OPEN) {
+    return null;
+  }
+  return liveApi;
+};
+
 const forgetAllStreams = async () => {
   try {
-    if (!api_base?.api) return;
+    const liveApi = await ensureApiReady();
+    if (!liveApi) return;
     // Be lenient: any of these may fail if not subscribed; that's fine.
-    await api_base.api.send({ forget_all: 'proposal_open_contract' });
-    await api_base.api.send({ forget_all: 'transactions' });
-    await api_base.api.send({ forget_all: 'ticks' });
+    await liveApi.send({ forget_all: 'proposal_open_contract' });
+    await liveApi.send({ forget_all: 'transactions' });
+    await liveApi.send({ forget_all: 'ticks' });
   } catch {
     // swallow
   }
@@ -58,27 +71,36 @@ const AviatorR = observer(() => {
 
   // WS-based hints: authorize echo + socket open/close -> re-check loginid
   useEffect(() => {
-    const sub = api_base?.api?.onMessage().subscribe(({ data }: any) => {
-      if (data?.msg_type === 'authorize' && data?.authorize?.loginid) {
-        const live = String(data.authorize.loginid);
-        if (live !== lastLoginRef.current) {
-          void remountFor(live);
-        }
-      }
-    });
+    let sub: { unsubscribe: () => void } | null = null;
+    let conn: WebSocket | undefined;
+    let cancelled = false;
 
-    const conn = api_base?.api?.connection as WebSocket | undefined;
+    const start = async () => {
+      const liveApi = await ensureApiReady();
+      if (!liveApi || cancelled) return;
+      sub = liveApi.onMessage().subscribe(({ data }: any) => {
+        if (data?.msg_type === 'authorize' && data?.authorize?.loginid) {
+          const live = String(data.authorize.loginid);
+          if (live !== lastLoginRef.current) {
+            void remountFor(live);
+          }
+        }
+      });
+      conn = liveApi.connection as WebSocket | undefined;
+      try { conn?.addEventListener('open', recheck); } catch {}
+      try { conn?.addEventListener('close', recheck); } catch {}
+    };
+
     const recheck = () => {
       const live = getLoginId();
       if (live && live !== lastLoginRef.current) {
         void remountFor(live);
       }
     };
-
-    try { conn?.addEventListener('open', recheck); } catch {}
-    try { conn?.addEventListener('close', recheck); } catch {}
+    void start();
 
     return () => {
+      cancelled = true;
       sub?.unsubscribe?.();
       try { conn?.removeEventListener('open', recheck); } catch {}
       try { conn?.removeEventListener('close', recheck); } catch {}

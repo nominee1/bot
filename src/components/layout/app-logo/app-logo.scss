@@ -11,30 +11,8 @@
     &__logo-text {
         font-weight: bold;
         font-size: 14px;
-        margin-left: 0.5rem; /* Spacing between logo and text */
-        animation: text-color-switch 3s infinite linear; /* Updated to kebab-case */
-    }
-
-    @keyframes text-color-switch {
-        /* Updated to kebab-case */
-        0% {
-            color: #ff7e5f;
-        }
-
-        25% {
-            color: #6a11cb;
-        }
-
-        50% {
-            color: #43cea2;
-        }
-
-        75% {
-            color: #ff512f;
-        }
-
-        100% {
-            color: #ff7e5f;
-        }
+        margin-left: 0.5rem;
+        color: #ffffff;
+        letter-spacing: 0.02em;
     }
 }

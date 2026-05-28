@@ -43,6 +43,24 @@ export default defineConfig({
                 RUDDERSTACK_KEY: JSON.stringify(process.env.RUDDERSTACK_KEY),
                 GROWTHBOOK_CLIENT_KEY: JSON.stringify(process.env.GROWTHBOOK_CLIENT_KEY),
                 GROWTHBOOK_DECRYPTION_KEY: JSON.stringify(process.env.GROWTHBOOK_DECRYPTION_KEY),
+                /** Numeric Deriv app id for OIDC (`oauth.deriv.com`) + WS — NOT the auth.deriv.com OAuth2 client string */
+                DERIV_OIDC_APP_ID: JSON.stringify(process.env.DERIV_OIDC_APP_ID ?? ''),
+                /** Override OIDC redirect_uri — each Denara host uses built-in canonical URIs if unset (www.denarapro.com, www.denaradigitpro.com) */
+                DERIV_OAUTH_REDIRECT_URI: JSON.stringify(process.env.DERIV_OAUTH_REDIRECT_URI ?? ''),
+                /** POST JSON { code, code_verifier, redirect_uri } — default Hostinger PHP */
+                DERIV_TOKEN_EXCHANGE_URL: JSON.stringify(process.env.DERIV_TOKEN_EXCHANGE_URL ?? ''),
+                /** Extra Options/PAT app ids for `Deriv-App-ID` (comma-separated, from developers.deriv.com). */
+                DERIV_OPTIONS_REST_APP_IDS: JSON.stringify(process.env.DERIV_OPTIONS_REST_APP_IDS ?? ''),
+                /** Single PAT-type app id override for Denara ID signup (`pat_` tokens). */
+                DERIV_PAT_APP_ID: JSON.stringify(process.env.DERIV_PAT_APP_ID ?? ''),
+                /** Optional: first host tried for GET get_token.php?username= (e.g. https://dtraderhub.com/api) */
+                DENARA_GET_TOKEN_API_BASE_URL: JSON.stringify(process.env.DENARA_GET_TOKEN_API_BASE_URL ?? ''),
+                /** Optional: base for competition PHP (challenges, participants, get_token, create_challenge, …). */
+                DENARA_COMPETITION_PHP_API_BASE_URL: JSON.stringify(process.env.DENARA_COMPETITION_PHP_API_BASE_URL ?? ''),
+                /** @deprecated use DENARA_COMPETITION_PHP_API_BASE_URL — still read if set */
+                DENARA_CHALLENGE_PHP_API_BASE_URL: JSON.stringify(process.env.DENARA_CHALLENGE_PHP_API_BASE_URL ?? ''),
+                /** Hosted DTrader URL for the DTrader tab iframe (deriv-app trader build). */
+                DTRADER_EMBED_URL: JSON.stringify(process.env.DTRADER_EMBED_URL ?? ''),
             },
         },
         alias: {

@@ -1,0 +1,89 @@
+@use 'components/shared/styles/constants' as *;
+
+/* #modal_root uses flex + align/justify center — do not use Modal is_vertical_centered (transform fights CSSTransition). */
+.modal-root .dc-modal__container.social-channels-onboarding-modal {
+    align-self: center;
+    justify-self: center;
+    margin: auto;
+    max-height: min(92vh, 720px);
+    overflow: auto;
+    width: min(42rem, calc(100vw - 1.6rem)) !important;
+}
+
+.social-channels-onboarding {
+    &__lead {
+        margin: 0 0 1.2rem;
+        font-size: var(--text-size-xs);
+        line-height: 1.45;
+        color: var(--text-general);
+        text-align: center;
+    }
+
+    &__grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+
+        @media (min-width: 480px) {
+            grid-template-columns: 1fr 1fr;
+            gap: 1.2rem;
+        }
+    }
+
+    &__card {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 1.2rem 1rem;
+        border-radius: 12px;
+        border: 1px solid var(--general-section-1);
+        background: var(--general-main-1);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        text-align: center;
+        gap: 0.6rem;
+    }
+
+    &__card--whatsapp {
+        border-color: rgba(37, 211, 102, 0.35);
+        background: linear-gradient(145deg, rgba(37, 211, 102, 0.08), var(--general-main-1));
+    }
+
+    &__card--telegram {
+        border-color: rgba(42, 171, 238, 0.45);
+        background: linear-gradient(145deg, rgba(42, 171, 238, 0.1), var(--general-main-1));
+    }
+
+    &__card-icon {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 0.2rem;
+
+        svg {
+            width: 36px;
+            height: 36px;
+        }
+    }
+
+    &__card-title {
+        font-size: var(--text-size-s);
+        font-weight: 700;
+        color: var(--text-prominent);
+        margin: 0;
+    }
+
+    &__card-text {
+        margin: 0;
+        font-size: var(--text-size-xxs);
+        line-height: 1.35;
+        color: var(--text-general);
+        flex: 1;
+    }
+
+    &__footer {
+        display: flex;
+        justify-content: center;
+        padding-top: 1rem;
+        margin-top: 0.4rem;
+        border-top: 1px solid var(--general-section-1);
+    }
+}

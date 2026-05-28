@@ -416,6 +416,98 @@
     }
 }
 
+.market-ticker {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 1.2rem;
+    border: 1px solid rgba(94, 2, 87, 0.22);
+    background: linear-gradient(180deg, rgba(94, 2, 87, 0.08), rgba(94, 2, 87, 0.02));
+    padding: 0.9rem 0;
+    margin: 0.4rem 0 1rem;
+
+    &__track {
+        display: inline-flex;
+        align-items: center;
+        gap: 1rem;
+        min-width: max-content;
+        padding: 0 1.2rem;
+        animation: market-ticker-scroll 52s linear infinite;
+    }
+
+    &__item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        border-radius: 999px;
+        border: 1px solid rgba(94, 2, 87, 0.2);
+        background: #ffffff;
+        padding: 0.45rem 0.8rem;
+        white-space: nowrap;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    &__code {
+        font-weight: 800;
+        font-size: 1.1rem;
+        color: #5e0257;
+        min-width: 3.6rem;
+    }
+
+    &__name {
+        font-size: 1rem;
+        color: #4b5563;
+    }
+
+    &__price {
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: #111827;
+    }
+
+    &__change {
+        font-weight: 700;
+        font-size: 0.98rem;
+
+        &--up {
+            color: #059669;
+        }
+
+        &--down {
+            color: #dc2626;
+        }
+    }
+}
+
+@media (min-width: 769px) {
+    .market-ticker {
+        max-width: 72rem;
+        margin: 0 auto 1rem;
+        overflow-x: hidden;
+        overflow-y: hidden;
+        padding-inline: 1.2rem;
+
+        &__track {
+            animation: market-ticker-scroll 60s linear infinite;
+            padding: 0;
+        }
+    }
+}
+
+@keyframes market-ticker-scroll {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .market-ticker__track {
+        animation: none;
+    }
+}
+
 .user-guide {
     position: absolute;
     inset-inline-end: 2.4rem;
@@ -474,9 +566,240 @@
     padding: 1.6rem;
   
     @media (min-width: 768px) {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      display: flex;
+      flex-wrap: nowrap;
       gap: 16px;
-      padding: 2.4rem;
+      padding: 2.4rem 2.4rem 2.4rem 6.7rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-snap-type: x proximity;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+  }
+
+  @media (min-width: 768px) {
+    .tab__dashboard__table .tab__dashboard__table__block {
+      /* Keep current desktop fit for six tiles; additional tiles overflow horizontally */
+      flex: 0 0 calc((100% - (16px * 5)) / 6);
+      min-width: calc((100% - (16px * 5)) / 6);
+      scroll-snap-align: start;
+    }
+  }
+
+  /* Outer frame: edge markers stay fixed; inner `.tab__dashboard__commodity-strip` scrolls pills only */
+  .tab__dashboard__table .tab__dashboard__commodity-strip-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 72rem;
+    margin: 0 auto 0.85rem;
+    z-index: 0;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0.3rem;
+      bottom: 0.3rem;
+      width: 2px;
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: 2;
+      background: linear-gradient(180deg, rgba(94, 2, 87, 0.18), rgba(94, 2, 87, 0.4), rgba(94, 2, 87, 0.18));
+    }
+
+    &::before {
+      left: 0.2rem;
+    }
+
+    &::after {
+      right: 0.2rem;
+    }
+
+    @media (min-width: 768px) {
+      margin: 0 auto 1rem;
+    }
+
+    @media (max-width: 767px) {
+      width: calc(100% - 3.2rem);
+      max-width: none;
+      margin: 0 auto 0.75rem;
+    }
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-strip {
+    display: flex;
+    align-items: stretch;
+    gap: 0.7rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-behavior: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 1rem;
+    touch-action: pan-x;
+    width: 100%;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    border-radius: 0.95rem;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    @media (min-width: 768px) {
+      padding: 0.55rem 1.1rem;
+      gap: 0.75rem;
+    }
+
+    @media (max-width: 767px) {
+      padding-inline: 0.85rem;
+    }
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-item {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: stretch;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    min-height: 2.5rem;
+    min-width: 10.25rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(94, 2, 87, 0.2);
+    background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      0 3px 12px rgba(94, 2, 87, 0.08);
+    transition:
+      transform 0.14s ease,
+      box-shadow 0.18s ease,
+      border-color 0.18s ease,
+      filter 0.18s ease;
+
+    &:focus-visible {
+      outline: 2px solid rgba(94, 2, 87, 0.5);
+      outline-offset: 2px;
+    }
+
+    &:hover {
+      transform: translateY(-1px);
+      border-color: rgba(94, 2, 87, 0.38);
+      box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.08),
+        0 6px 18px rgba(94, 2, 87, 0.16);
+      filter: brightness(1.02);
+    }
+
+    &:active {
+      transform: translateY(0) scale(0.99);
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.1),
+        0 2px 10px rgba(94, 2, 87, 0.12);
+    }
+
+    &.tab__dashboard__commodity-button--rich {
+      justify-content: flex-start;
+      align-items: center;
+      column-gap: 0.55rem;
+      min-width: 15.5rem;
+    }
+
+    @include mobile-or-tablet-screen {
+      min-width: 13.75rem;
+      min-height: 2.65rem;
+      padding: 0.45rem 0.7rem;
+      column-gap: 0.45rem;
+
+      &.tab__dashboard__commodity-button--rich {
+        min-width: 12.5rem;
+      }
+    }
+  }
+
+  /* Same idea as `.market-ticker__code` — ticker-style abbreviation */
+  .tab__dashboard__table .tab__dashboard__commodity-abbr {
+    flex: 0 0 auto;
+    font-weight: 800;
+    font-size: 0.95rem;
+    letter-spacing: 0.03em;
+    color: #5e0257;
+    line-height: 1.2;
+    min-width: 2.25rem;
+  }
+
+  /* Same idea as `.market-ticker__name` — full component label */
+  .tab__dashboard__table .tab__dashboard__commodity-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #4b5563;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: start;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-meta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    margin-inline-start: auto;
+    min-width: 0;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-code {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #5e0257;
+    line-height: 1.25;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-price {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-prominent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-change {
+    font-weight: 700;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-change--up {
+    color: #059669;
+  }
+
+  .tab__dashboard__table .tab__dashboard__commodity-change--down {
+    color: #dc2626;
+  }
+
+  @media (hover: none) {
+    .tab__dashboard__table .tab__dashboard__commodity-button:active {
+      transform: scale(0.97);
     }
   }
   
@@ -514,11 +837,6 @@
     transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease;
     box-shadow: 0 8px 22px rgba(249, 2, 2, 0.18);
 
-  }
-  
-  /* keep your existing minimized sizing intact */
-  .tab__dashboard__table .tab__dashboard__table__images--minimized {
-    /* no change — preserves your current mobile sizing */
   }
   
   /* polish: hover lift on non-minimized only (desktop-ish) */

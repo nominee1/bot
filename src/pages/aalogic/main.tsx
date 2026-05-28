@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
@@ -146,6 +146,18 @@ const SpeedBot = observer(() => {
   const debounceTimer = useRef<NodeJS.Timeout>();
   const autoTradeActiveRef = useRef(false);
 
+  const ensureApiReady = useCallback(async () => {
+    const OPEN = 1 as const;
+    if (!api_base.api || api_base.api.connection.readyState !== OPEN) {
+      await api_base.init(true);
+    }
+    const liveApi = api_base.api;
+    if (!liveApi || liveApi.connection.readyState !== OPEN) {
+      throw new Error('Trading connection is still initializing. Please try again.');
+    }
+    return liveApi;
+  }, []);
+
   const getBalanceError = (error: any): { isBalanceError: boolean; message: string } => {
     if (!error) return { isBalanceError: false, message: 'Unknown error' };
 
@@ -256,7 +268,8 @@ const SpeedBot = observer(() => {
     const tmpID = createTempTrade(ct, stake, market, dur, barrier ? +barrier : undefined, isAuto, consecutiveLosses);
 
     try {
-      const resp = await api_base.api.send({
+      const liveApi = await ensureApiReady();
+      const resp = await liveApi.send({
         buy: 1, price: stake,
         parameters: {
           amount: stake, basis: 'stake', currency: 'USD',
@@ -629,9 +642,23 @@ const toggleAutoTrading = () => {
   };
 
   useEffect(() => {
-    const sub = api_base.api.onMessage().subscribe(({ data }: any) => handleWS(data));
-    return () => sub.unsubscribe();
-  }, [trades]);
+    let sub: { unsubscribe: () => void } | null = null;
+    let cancelled = false;
+    const start = async () => {
+      try {
+        const liveApi = await ensureApiReady();
+        if (cancelled) return;
+        sub = liveApi.onMessage().subscribe(({ data }: any) => handleWS(data));
+      } catch {
+        /* ignore transient init failures */
+      }
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      sub?.unsubscribe();
+    };
+  }, [trades, ensureApiReady]);
 
   useEffect(() => {
     const initializeWebSocket = (symbol: string) => {

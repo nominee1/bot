@@ -2,71 +2,179 @@
 /*  Strategy.tsx – TP / SL version                       */
 /* ====================================================================== */
 
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
 import {
-    TradeTypesDigitsEvenIcon,
-    TradeTypesDigitsOddIcon,
-    TradeTypesDigitsMatchesIcon,
-    TradeTypesDigitsOverIcon,
-    TradeTypesDigitsDiffersIcon,
-    TradeTypesDigitsUnderIcon,
-    TradeTypesUpsAndDownsFallIcon,
-    TradeTypesUpsAndDownsRiseIcon,
-    MarketDerivedVolatility1001sIcon,
-    MarketDerivedVolatility100Icon,
+  applyDerivSessionMarketField,
+  coerceProposalOpenContractEntrySpot,
+  sendDerivSessionContractPurchase,
+} from '@/components/shared/utils/trading/deriv-session-contract-purchase';
+import { useApiBase } from '@/hooks/useApiBase';
+import { useStore } from '@/hooks/useStore';
+import { playTradeResultSound } from '@/pages/aap2psafe/tradeSounds';
+import type ClientStore from '@/stores/client-store';
+import { scheduleCrChanceLedgerRoundTrip } from '@/utils/chanceVirtualStatements';
+import {
+  ALLOWED_BOT_IFRAME_LOGINID,
+  getCrShadow,
+  isCrVirtualShadowLogin,
+  runWithCrShadowLock,
+  tryDebitCrShadowSync,
+} from '@/utils/crVirtualBalanceShadow';
+import { isDerivOptionsOAuthSession, stringifyUnknown } from '@/components/shared/utils/login/deriv-oauth-storage';
+import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import {
     MarketDerivedVolatility10Icon,
     MarketDerivedVolatility25Icon,
     MarketDerivedVolatility50Icon,
     MarketDerivedVolatility75Icon,
+    MarketDerivedVolatility100Icon,
     MarketDerivedVolatility101sIcon,
     MarketDerivedVolatility251sIcon,
     MarketDerivedVolatility501sIcon,
-    MarketDerivedVolatility751sIcon
-} from '@deriv/quill-icons';
+    MarketDerivedVolatility751sIcon,
+    MarketDerivedVolatility1001sIcon,
+    TradeTypesDigitsDiffersIcon,
+    TradeTypesDigitsEvenIcon,
+    TradeTypesDigitsMatchesIcon,
+    TradeTypesDigitsOddIcon,
+    TradeTypesDigitsOverIcon,
+    TradeTypesDigitsUnderIcon,
+    TradeTypesUpsAndDownsFallIcon,
+    TradeTypesUpsAndDownsRiseIcon} from '@deriv/quill-icons';
+import {
+    autotradeStrategyFormatQuoteForDigitContract,
+    autotradeStrategyLastDigitFromQuote,
+} from './autotradeStrategyTickDigitFormat';
 import './Strategy.scss';
+
+const STRATEGY_DEFAULT_MARKET = '1HZ10V';
+
+function derivTradeErrorMessage(err: unknown): string {
+    if (!err) return 'Buy failed';
+    if (typeof err === 'string') return err;
+    const o = err as { message?: string; error?: { message?: string; code?: string } };
+    if (o.error?.message) {
+        return o.error.code ? `${o.error.message} (${o.error.code})` : o.error.message;
+    }
+    if (o.message) return o.message;
+    return stringifyUnknown(err) || 'Buy failed';
+}
+
+function readStrategyTradingBalance(client: ClientStore | undefined, loginid: string): number {
+    if (!client || !loginid) return 0;
+    if (isCrVirtualShadowLogin(loginid)) {
+        const shadow = getCrShadow(loginid);
+        if (typeof shadow === 'number' && Number.isFinite(shadow)) return shadow;
+    }
+    const fromAccounts = client.all_accounts_balance?.accounts?.[loginid]?.balance;
+    if (typeof fromAccounts === 'number' && Number.isFinite(fromAccounts)) return fromAccounts;
+    const b = parseFloat(String(client.balance ?? '0'));
+    return Number.isFinite(b) ? b : 0;
+}
+
+function strategyAccountCurrency(client: ClientStore | undefined, loginid: string): string {
+    return (
+        client?.currency ||
+        client?.all_accounts_balance?.accounts?.[loginid]?.currency ||
+        'USD'
+    );
+}
+
+function normalizeContractId(id: unknown): string {
+    if (id == null || id === '') return '';
+    return String(id);
+}
+
+function coerceProposalOpenContractExitSpot(c: Record<string, unknown>): number | undefined {
+    const n = (v: unknown): number | undefined => {
+        if (v === undefined || v === null) return undefined;
+        const x = typeof v === 'number' ? v : parseFloat(String(v));
+        return Number.isFinite(x) ? x : undefined;
+    };
+    return n(c.exit_tick) ?? n(c.exit_spot) ?? n(c.current_spot);
+}
+
+function isProposalContractSettled(c: Record<string, unknown>): boolean {
+    return Boolean(
+        c.is_sold ||
+        c.is_expired ||
+        c.is_settleable ||
+        c.status === 'sold' ||
+        (c.status !== 'open' && c.profit != null && c.profit !== ''),
+    );
+}
+
+/** 1s volatility (`1HZ*`) — two confirmation ticks after the streak; standard vol — one. */
+function postStreakConfirmationTicksForMarket(market: string): number {
+    return /^1HZ/i.test(market || '') ? 2 : 1;
+}
+
+/** Wall-clock pause before shadow ledger + onContract so the last proof tick can paint (onContract resets analyzer / tick strip). */
+function shadowVirtualSettleUiDelayMs(market: string): number {
+    return /^1HZ/i.test(market || '') ? 420 : 780;
+}
 
 /* ────────────────────────────────────────────────────────────────────
  *  Tick-stream hook with fixes for subscription cleanup
  * ──────────────────────────────────────────────────────────────────── */
 let subscriptionId = 0;
 
-function useTickStream(symbol: string, onTick: (p: number, s: string) => void) {
+function useTickStream(
+    symbol: string,
+    onTick: (p: number, s: string) => void,
+    connectionStatus: CONNECTION_STATUS,
+    tradingSocketGeneration: number
+) {
     useEffect(() => {
+        if (connectionStatus !== CONNECTION_STATUS.OPENED || !api_base.api) return;
+
         let active = true;
         let lastTick: number | null = null;
+        let unsubscribe: (() => void) | undefined;
         const currentId = ++subscriptionId;
 
         const run = async () => {
             try {
+                if (!active || currentId !== subscriptionId) return;
                 await api_base.api.send({ forget_all: 'ticks' });
+                if (!active || currentId !== subscriptionId) return;
                 await api_base.api.send({ ticks: symbol, subscribe: 1 });
 
                 const sub = api_base.api.onMessage().subscribe(({ data }: any) => {
-                    if (!active || currentId !== subscriptionId || data?.msg_type !== 'tick' || !data?.tick?.quote) return;
+                    if (!active || currentId !== subscriptionId || data?.msg_type !== 'tick' || !data?.tick?.quote) {
+                        return;
+                    }
 
-                    if (lastTick === data.tick.quote) return;
-                    lastTick = data.tick.quote;
+                    const tickSym = data.tick.symbol ?? data.echo_req?.ticks;
+                    if (tickSym && tickSym !== symbol) return;
 
-                    onTick(data.tick.quote, symbol);
+                    const quote = Number(data.tick.quote);
+                    if (!Number.isFinite(quote)) return;
+                    if (lastTick === quote) return;
+                    lastTick = quote;
+
+                    onTick(quote, symbol);
                 });
 
-                return () => sub.unsubscribe();
+                unsubscribe = () => sub.unsubscribe();
             } catch (error) {
                 console.error('Tick stream error:', error);
             }
         };
 
-        run();
+        void run();
         return () => {
             active = false;
+            unsubscribe?.();
             setTimeout(() => {
-                api_base.api.send({ forget_all: 'ticks' }).catch(console.warn);
+                if (currentId === subscriptionId) {
+                    api_base.api?.send({ forget_all: 'ticks' }).catch(console.warn);
+                }
             }, 100);
         };
-    }, [symbol, onTick]);
+    }, [symbol, onTick, connectionStatus, tradingSocketGeneration]);
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -80,18 +188,8 @@ class DigitAnalyzer {
     digitSeq: number[] = [];
     tickHistory: { value: string, type: 'rise' | 'fall' | 'even' | 'odd' | 'digit' }[] = [];
 
-    private readonly marketPrecision: Record<string, number> = {
-        R_10: 3,
-        R_25: 3,
-        R_50: 4,
-        R_75: 4,
-        default: 2,
-    };
-
     getLastDigit(price: number, market: string): number {
-        const precision = this.marketPrecision[market] ?? this.marketPrecision.default;
-        const priceString = price.toFixed(precision);
-        return parseInt(priceString.slice(-1));
+        return autotradeStrategyLastDigitFromQuote(price, market);
     }
 
     process(price: number, market: string): void {
@@ -211,6 +309,7 @@ class DigitAnalyzer {
         return null;
     }
 
+    /** Even/odd: continuation = same parity; reversal = opposite. (Used for all accounts; shadow only changes settlement.) */
     #checkEvenOdd(th: number, continuationMode: boolean) {
         if (this.streaks.odd >= th) {
             return continuationMode
@@ -266,6 +365,46 @@ interface StrategySettings {
     stopLoss: number;
 }
 
+/**
+ * CR7557018: after the signal, collect post-streak proof ticks before settling (same cadence as tick strip:
+ * 2 ticks on 1s vol markets, 1 on standard). Win/loss uses the *first* proof tick only; later ticks are visual proof.
+ */
+type ShadowProofPhase = {
+    virtId: string;
+    walletLogin: string;
+    sig: { type: string; barrier?: string };
+    stake: number;
+    market: string;
+    ask: number;
+    payout: number;
+    triggerPrice: number;
+    triggerEpochSec: number;
+    /** How many ticks to collect after the signal tick before finalize */
+    ticksRemaining: number;
+    proofTotal: number;
+    proofChain: { quote: number; digit: number }[];
+    decisionDigit?: number;
+    decisionExitPrice?: number;
+};
+
+type ShadowSettleBundle = {
+    strategyId: StrategyID;
+    contractPayload: {
+        contract_id: string;
+        status: string;
+        profit: number;
+        exit_tick: string;
+        entry_tick: string;
+    };
+    ledger: {
+        client: ClientStore;
+        walletLoginId: string;
+        ask: number;
+        settlementCredit: number;
+        entryEpochSec: number;
+    };
+};
+
 const marketIcons: Record<string, JSX.Element> = {
     '1HZ100V': <MarketDerivedVolatility1001sIcon width={16} height={16} />,
     'R_100': <MarketDerivedVolatility100Icon width={16} height={16} />,
@@ -293,12 +432,18 @@ const contractIcons: Record<string, JSX.Element> = {
 class AutoTrader {
     private initialized = false;
     private continuationMode = false;
+    private settledContractIds = new Set<string>();
 
     constructor(
         private sendWS: (m: any) => Promise<any>,
         private balanceFn: () => number,
         private tradeCb: () => void,
         private statusCb: (id: StrategyID, msg: string) => void,
+        private shadowApi?: {
+            isShadow: () => boolean;
+            getClient: () => ClientStore | undefined;
+            getWallet: () => string;
+        },
     ) {
         setTimeout(() => this.initialized = true, 0);
     }
@@ -319,6 +464,10 @@ class AutoTrader {
             entryValue?: number;
             exitValue?: number;
             marketFormat?: string;
+            /** Shadow (CR7557018): debit on signal; collect proof ticks then settle. */
+            shadowProofPhase?: ShadowProofPhase;
+            /** Shadow: delayed ledger + onContract so the UI can show the final proof tick before analyzer.reset(). */
+            shadowDeferredSettle?: { timer: ReturnType<typeof setTimeout>; bundle: ShadowSettleBundle };
         }
     > = Object.create(null);
 
@@ -336,12 +485,31 @@ class AutoTrader {
 
     toggleContinuationMode() {
         this.continuationMode = !this.continuationMode;
+        (Object.keys(this.strategies) as StrategyID[]).forEach((sid) => {
+            this.#cancelShadowDeferredSettle(sid, true);
+        });
         Object.values(this.strategies).forEach(strategy => {
             if (strategy?.analyzer) {
                 strategy.analyzer.reset();
             }
+            strategy.shadowProofPhase = undefined;
         });
         return this.continuationMode;
+    }
+
+    syncLiveSettingsFromDom(readLiveSettings: (card: Element) => StrategySettings) {
+        (Object.keys(this.strategies) as StrategyID[]).forEach((sid) => {
+            const p = this.strategies[sid];
+            if (!p?.active) return;
+            const card = document.querySelector(`.strategy__card[data-strategy-id="${sid}"]`);
+            if (!card) return;
+            const nw = readLiveSettings(card);
+            if (nw.type !== sid) return;
+            p.settings = {
+                ...nw,
+                stake: Number(nw.stake.toFixed(2)),
+            };
+        });
     }
 
     feedTick(price: number, sym: string) {
@@ -362,9 +530,13 @@ class AutoTrader {
                 p.lastAnalysis = p.lastDigit.toString();
             }
 
+            if (p.shadowProofPhase) {
+                this.#advanceShadowProofPhase(sid as StrategyID, p, price);
+            }
+
             if (!p.cooldown) {
                 const sig = p.analyzer.checkPattern(p.settings.type, p.settings, this.continuationMode);
-                if (sig) this.#attemptBuy(sid as StrategyID, sig);
+                if (sig) this.#attemptBuy(sid as StrategyID, sig, price);
             }
             this.statusCb(sid as StrategyID, this.getStatusText(sid as StrategyID));
             this.tradeCb();
@@ -385,10 +557,22 @@ class AutoTrader {
         if (p.settings.stopLoss) txt += ` | SL:${p.settings.stopLoss}`;
         if (p.lossStreak > 0) txt += ` | Losses:${p.lossStreak}`;
 
+        if (this.shadowApi?.isShadow() && p.shadowProofPhase) {
+            const ph = p.shadowProofPhase;
+            const digits = ph.proofChain.map(x => String(x.digit)).join(' → ');
+            const n = ph.proofChain.length;
+            const total = ph.proofTotal;
+            txt += ` | <span class="strategy__shadow-proof">Virtual proof ${n}/${total}${digits ? `: ${digits}` : ''}</span>`;
+        } else if (this.shadowApi?.isShadow() && p.shadowDeferredSettle) {
+            txt += ` | <span class="strategy__shadow-proof">Virtual settle pending (showing final ticks)…</span>`;
+        }
+
         return txt;
     }
 
     start(id: StrategyID, s: StrategySettings) {
+        this.#cancelShadowDeferredSettle(id, true);
+
         if (this.strategies[id]?.analyzer) {
             this.strategies[id].analyzer.reset();
         }
@@ -404,13 +588,17 @@ class AutoTrader {
             currentStake: baseStake, // 2dp
             lossStreak: 0,
             cumulativePL: 0,
-            marketFormat: s.market
+            marketFormat: s.market,
+            shadowProofPhase: undefined,
+            shadowDeferredSettle: undefined,
         };
     }
 
     stop(id: StrategyID, reason = 'Stopped') {
         if (!this.strategies[id]) return;
+        this.#cancelShadowDeferredSettle(id, true);
         this.strategies[id].active = false;
+        this.strategies[id].shadowProofPhase = undefined;
         this.statusCb(id, reason);
         const card = document.querySelector(`.strategy__card[data-strategy-id="${id}"]`);
         const btn = card?.querySelector('.strategy__trade-btn') as HTMLButtonElement | undefined;
@@ -422,128 +610,396 @@ class AutoTrader {
 
     // Reset trades + P/L for all strategies
     resetHistory() {
+        (Object.keys(this.strategies) as StrategyID[]).forEach((sid) => {
+            this.#cancelShadowDeferredSettle(sid, true);
+        });
         this.trades = [];
+        this.settledContractIds.clear();
         Object.values(this.strategies).forEach(p => {
             p.cumulativePL = 0;
             p.lossStreak = 0;
             p.currentStake = Number(p.settings.stake.toFixed(2));
             p.entryValue = undefined;
             p.exitValue = undefined;
+            p.shadowProofPhase = undefined;
+            p.contractId = undefined;
+            p.cooldown = false;
         });
     }
 
-    async #attemptBuy(id: StrategyID, sig: any) {
+    #executeShadowSettleBundle(bundle: ShadowSettleBundle) {
+        const cid = normalizeContractId(bundle.contractPayload.contract_id);
+        const t = this.trades.find((x) => normalizeContractId(x.id) === cid);
+        if (t && t.profit !== null) return;
+
+        const exitEpochSec = Math.floor(Date.now() / 1000);
+        scheduleCrChanceLedgerRoundTrip({
+            client: bundle.ledger.client,
+            walletLoginId: bundle.ledger.walletLoginId,
+            ask: bundle.ledger.ask,
+            settlementCredit: bundle.ledger.settlementCredit,
+            entryEpochSec: bundle.ledger.entryEpochSec,
+            exitEpochSec,
+        });
+        this.onContract(bundle.contractPayload);
+    }
+
+    #cancelShadowDeferredSettle(id: StrategyID, runBundle: boolean) {
+        const p = this.strategies[id];
+        if (!p?.shadowDeferredSettle) return;
+        clearTimeout(p.shadowDeferredSettle.timer);
+        const { bundle } = p.shadowDeferredSettle;
+        p.shadowDeferredSettle = undefined;
+        if (runBundle) this.#executeShadowSettleBundle(bundle);
+    }
+
+    #advanceShadowProofPhase(id: StrategyID, p: AutoTrader['strategies'][StrategyID], price: number) {
+        const ph = p.shadowProofPhase;
+        if (!ph) return;
+
+        const digit = p.analyzer.getLastDigit(price, ph.market);
+        ph.proofChain.push({ quote: price, digit });
+        if (ph.decisionDigit === undefined) {
+            ph.decisionDigit = digit;
+            ph.decisionExitPrice = price;
+        }
+
+        ph.ticksRemaining -= 1;
+        if (ph.ticksRemaining > 0) {
+            this.tradeCb();
+            return;
+        }
+
+        this.#finalizeShadowProofFromProof(id, p);
+    }
+
+    #finalizeShadowProofFromProof(id: StrategyID, p: AutoTrader['strategies'][StrategyID]) {
+        const ph = p.shadowProofPhase;
+        if (!ph) return;
+
+        const cli = this.shadowApi?.getClient();
+        if (!cli) {
+            p.shadowProofPhase = undefined;
+            p.cooldown = false;
+            p.contractId = undefined;
+            this.statusCb(id, 'Wallet lost (virtual settle)');
+            this.tradeCb();
+            return;
+        }
+
+        const decisionDigit = ph.decisionDigit ?? p.analyzer.getLastDigit(ph.triggerPrice, ph.market);
+        const decisionExitPrice = ph.decisionExitPrice ?? ph.triggerPrice;
+        const ct = ph.sig.type;
+        const br = ph.sig.barrier;
+        const b = br != null && br !== '' ? Number(br) : NaN;
+
+        let win = false;
+        switch (ct) {
+            case 'DIGITEVEN':
+                win = decisionDigit % 2 === 0;
+                break;
+            case 'DIGITODD':
+                win = decisionDigit % 2 === 1;
+                break;
+            case 'CALL':
+                win = decisionExitPrice > ph.triggerPrice;
+                break;
+            case 'PUT':
+                win = decisionExitPrice < ph.triggerPrice;
+                break;
+            case 'DIGITOVER':
+                win = Number.isFinite(b) && decisionDigit > b;
+                break;
+            case 'DIGITUNDER':
+                win = Number.isFinite(b) && decisionDigit < b;
+                break;
+            case 'DIGITMATCH':
+                win = Number.isFinite(b) && decisionDigit === b;
+                break;
+            case 'DIGITDIFF':
+                win = Number.isFinite(b) && decisionDigit !== b;
+                break;
+            default:
+                win = false;
+        }
+
+        const net = Number((win ? ph.payout - ph.ask : -ph.ask).toFixed(2));
+        const lastProofQuote =
+            ph.proofChain.length > 0 ? ph.proofChain[ph.proofChain.length - 1].quote : decisionExitPrice;
+
+        const bundle: ShadowSettleBundle = {
+            strategyId: id,
+            contractPayload: {
+                contract_id: ph.virtId,
+                status: 'sold',
+                profit: net,
+                exit_tick: String(lastProofQuote),
+                entry_tick: String(ph.triggerPrice),
+            },
+            ledger: {
+                client: cli,
+                walletLoginId: ph.walletLogin,
+                ask: ph.ask,
+                settlementCredit: win ? ph.payout : 0,
+                entryEpochSec: ph.triggerEpochSec,
+            },
+        };
+
+        p.shadowProofPhase = undefined;
+
+        if (p.shadowDeferredSettle) {
+            clearTimeout(p.shadowDeferredSettle.timer);
+            p.shadowDeferredSettle = undefined;
+        }
+
+        const delayMs = shadowVirtualSettleUiDelayMs(ph.market);
+        p.shadowDeferredSettle = {
+            timer: setTimeout(() => {
+                const p2 = this.strategies[id];
+                if (p2?.shadowDeferredSettle) p2.shadowDeferredSettle = undefined;
+                this.#executeShadowSettleBundle(bundle);
+            }, delayMs),
+            bundle,
+        };
+
+        this.statusCb(id, this.getStatusText(id));
+        this.tradeCb();
+    }
+
+    async #attemptBuy(id: StrategyID, sig: any, triggerPrice: number) {
         const p = this.strategies[id];
         const token = localStorage.getItem('authToken');
-        if (!token) return this.statusCb(id, 'Not authorized');
+        if (!token && !isDerivOptionsOAuthSession()) return this.statusCb(id, 'Not authorized');
+
+        const cli = this.shadowApi?.getClient();
+        const walletLogin = this.shadowApi?.getWallet() || '';
+        const currency = strategyAccountCurrency(cli, walletLogin);
 
         if (p.currentStake > this.balanceFn()) {
             this.statusCb(id, 'Insufficient balance');
             return;
         }
 
-        const req = {
-            buy: 1,
-            price: p.currentStake,
-            parameters: {
-                amount: p.currentStake,
-                basis: 'stake',
-                currency: 'USD',
-                contract_type: sig.type,
-                duration: p.settings.duration,
-                duration_unit: 't',
-                symbol: p.settings.market,
-                ...(sig.barrier && { barrier: sig.barrier }),
-            },
-        };
-
         p.cooldown = true;
         try {
-            const { buy } = await this.sendWS(req);
-            p.contractId = buy.contract_id;
-            p.entryValue = p.analyzer.lastPrice || undefined;
+            if (this.shadowApi?.isShadow()) {
+                if (!cli || !isCrVirtualShadowLogin(walletLogin)) {
+                    this.statusCb(id, 'Wallet not ready (virtual mode)');
+                    p.cooldown = false;
+                    return;
+                }
+
+                const reqProposal: Record<string, unknown> = {
+                    proposal: 1,
+                    amount: p.currentStake,
+                    basis: 'stake',
+                    currency,
+                    contract_type: sig.type,
+                    duration: p.settings.duration,
+                    duration_unit: 't',
+                    ...(sig.barrier && { barrier: sig.barrier }),
+                };
+                applyDerivSessionMarketField(reqProposal, p.settings.market);
+
+                const proposalResp = await this.sendWS(reqProposal);
+                if (proposalResp?.error) {
+                    throw new Error(proposalResp.error?.message || 'Proposal failed');
+                }
+                const pr = proposalResp.proposal as { ask_price?: number; payout?: number };
+                const ask = Number(pr.ask_price ?? p.currentStake);
+                const payout = Number(pr.payout ?? p.currentStake * 1.95);
+
+                const debitOk = await runWithCrShadowLock(() =>
+                    tryDebitCrShadowSync(cli, ALLOWED_BOT_IFRAME_LOGINID, ask),
+                );
+                if (!debitOk) throw new Error('Insufficient balance');
+
+                const virtId = `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                p.contractId = virtId;
+                p.entryValue = triggerPrice;
+                const proofTicks = postStreakConfirmationTicksForMarket(p.settings.market);
+                p.shadowProofPhase = {
+                    virtId,
+                    walletLogin,
+                    sig: { type: sig.type, barrier: sig.barrier },
+                    stake: p.currentStake,
+                    market: p.settings.market,
+                    ask,
+                    payout,
+                    triggerPrice,
+                    triggerEpochSec: Math.floor(Date.now() / 1000),
+                    ticksRemaining: proofTicks,
+                    proofTotal: proofTicks,
+                    proofChain: [],
+                };
+
+                this.settledContractIds.delete(virtId);
+                this.trades.unshift({
+                    id: virtId,
+                    strategy: id,
+                    profit: null,
+                    contractType: sig.type,
+                    stake: p.currentStake,
+                    entryValue: triggerPrice,
+                    market: p.settings.market,
+                    marketFormat: p.marketFormat ?? p.settings.market,
+                });
+                this.tradeCb();
+                return;
+            }
+
+            const buyResp = (await sendDerivSessionContractPurchase(d => this.sendWS(d), {
+                contract_type: sig.type,
+                market: p.settings.market,
+                duration: p.settings.duration,
+                stake: p.currentStake,
+                currency,
+                basis: 'stake',
+                ...(sig.barrier ? { barrier: sig.barrier } : {}),
+            })) as { error?: unknown; buy?: { contract_id?: unknown } };
+
+            if (buyResp?.error) throw buyResp.error;
+
+            const cidRaw = buyResp.buy?.contract_id;
+            if (cidRaw == null || cidRaw === '') throw new Error('No contract_id in buy response');
+            const contract_id = String(cidRaw);
+
+            p.contractId = contract_id;
+            p.entryValue = triggerPrice;
+            this.settledContractIds.delete(contract_id);
             this.trades.unshift({
-                id: buy.contract_id,
+                id: contract_id,
                 strategy: id,
                 profit: null,
                 contractType: sig.type,
                 stake: p.currentStake,
                 entryValue: p.entryValue,
                 market: p.settings.market,
-                marketFormat: p.marketFormat
+                marketFormat: p.marketFormat ?? p.settings.market,
             });
             this.tradeCb();
-            await this.sendWS({ proposal_open_contract: 1, contract_id: buy.contract_id, subscribe: 1 });
-        } catch (e: any) {
+            this.statusCb(id, `Contract ${contract_id} opened`);
+            try {
+                await this.sendWS({ proposal_open_contract: 1, contract_id, subscribe: 1 });
+            } catch {
+                void 0;
+            }
+        } catch (e: unknown) {
             p.cooldown = false;
-            this.statusCb(id, e.message || 'Buy failed');
+            this.statusCb(id, derivTradeErrorMessage(e));
         }
     }
 
-    onContract(c: any) {
+    #applyOpenContractUpdate(id: StrategyID, poc: Record<string, unknown>, cid: string) {
+        const p = this.strategies[id];
+        const entrySpot = coerceProposalOpenContractEntrySpot(poc);
+        const exitSpot = coerceProposalOpenContractExitSpot(poc);
+        const t = this.trades.find((x) => normalizeContractId(x.id) === cid);
+
+        if (entrySpot != null) {
+            p.entryValue = entrySpot;
+            if (t) t.entryValue = entrySpot;
+        }
+        if (exitSpot != null && !isProposalContractSettled(poc)) {
+            p.exitValue = exitSpot;
+            if (t) t.exitValue = exitSpot;
+        }
+        this.tradeCb();
+    }
+
+    #finalizeContractSettlement(id: StrategyID, cid: string, profit: number, exitSpot?: number) {
+        if (this.settledContractIds.has(cid)) return;
+        this.settledContractIds.add(cid);
+
+        const p = this.strategies[id];
+        const t = this.trades.find((x) => normalizeContractId(x.id) === cid);
+        const firstSettlement = !!(t && t.profit === null);
+
+        if (t) {
+            t.profit = profit;
+            if (exitSpot != null) t.exitValue = exitSpot;
+            if (t.entryValue == null && exitSpot != null) {
+                t.entryValue = p.entryValue ?? exitSpot;
+            }
+        }
+
+        if (exitSpot != null) p.exitValue = exitSpot;
+        p.cumulativePL += profit;
+
+        if (firstSettlement) {
+            playTradeResultSound(Number.isFinite(profit) ? profit >= 0 : false);
+        }
+
+        if (profit > 0) {
+            p.currentStake = Number(p.settings.stake.toFixed(2));
+            p.lossStreak = 0;
+            this.statusCb(id, `Win! Stake reset • P/L:${p.cumulativePL.toFixed(2)}`);
+        } else {
+            p.currentStake = Number((p.currentStake * p.settings.martingale).toFixed(2));
+            p.lossStreak += 1;
+            this.statusCb(
+                id,
+                `Loss #${p.lossStreak}. Next:${p.currentStake.toFixed(2)} • P/L:${p.cumulativePL.toFixed(2)}`,
+            );
+        }
+
+        if (p.settings.takeProfit > 0 && p.cumulativePL >= p.settings.takeProfit) {
+            this.stop(id, `🎯 Take&nbsp;Profit hit (+${p.cumulativePL.toFixed(2)}) – strategy stopped`);
+        } else if (p.settings.stopLoss > 0 && -p.cumulativePL >= p.settings.stopLoss) {
+            this.stop(id, `🛑 Stop&nbsp;Loss hit (${p.cumulativePL.toFixed(2)}) – strategy stopped`);
+        } else {
+            p.cooldown = false;
+            p.analyzer.reset();
+            p.contractId = undefined;
+            this.tradeCb();
+        }
+    }
+
+    onContract(c: Record<string, unknown>) {
+        const cid = normalizeContractId(c.contract_id);
+        if (!cid) return;
+
         const id = (Object.keys(this.strategies) as StrategyID[]).find(
-            (k) => this.strategies[k].contractId === c.contract_id,
+            (k) => normalizeContractId(this.strategies[k].contractId) === cid,
         );
         if (!id) return;
 
-        const p = this.strategies[id];
-        if (c.status !== 'open') {
-            const t = this.trades.find((x) => x.id === c.contract_id);
-            if (t) {
-                t.profit = c.profit;
-                t.exitValue = c.exit_tick ? Number(c.exit_tick) : undefined;
-            }
+        const poc = c;
+        this.#applyOpenContractUpdate(id, poc, cid);
 
-            p.exitValue = c.exit_tick ? Number(c.exit_tick) : undefined;
-            p.cumulativePL += c.profit;
+        if (!isProposalContractSettled(poc)) return;
 
-            if (c.profit > 0) {
-                // win → reset stake back to base (2dp)
-                p.currentStake = Number(p.settings.stake.toFixed(2));
-                p.lossStreak = 0;
-                this.statusCb(id, `Win! Stake reset • P/L:${p.cumulativePL.toFixed(2)}`);
-            } else {
-                // loss → martingale with 2dp rounding
-                p.currentStake = Number((p.currentStake * p.settings.martingale).toFixed(2));
-                p.lossStreak += 1;
-                this.statusCb(id, `Loss #${p.lossStreak}. Next:${p.currentStake.toFixed(2)} • P/L:${p.cumulativePL.toFixed(2)}`);
-            }
+        const profit = Number(poc.profit ?? 0);
+        const exitSpot = coerceProposalOpenContractExitSpot(poc);
+        this.#finalizeContractSettlement(id, cid, profit, exitSpot);
+    }
 
-            if (p.settings.takeProfit > 0 && p.cumulativePL >= p.settings.takeProfit) {
-                this.stop(
-                    id,
-                    `🎯 Take&nbsp;Profit hit (+${p.cumulativePL.toFixed(2)}) – strategy stopped`,
-                );
-            } else if (p.settings.stopLoss > 0 && -p.cumulativePL >= p.settings.stopLoss) {
-                this.stop(
-                    id,
-                    `🛑 Stop&nbsp;Loss hit (${p.cumulativePL.toFixed(2)}) – strategy stopped`,
-                );
-            } else {
-                p.cooldown = false;
-                p.analyzer.reset();
-                p.contractId = undefined;
-                this.tradeCb();
-            }
-        } else if (c.entry_tick) {
-            p.entryValue = c.entry_tick ? Number(c.entry_tick) : undefined;
-            const t = this.trades.find((x) => x.id === c.contract_id);
-            if (t) {
-                t.entryValue = p.entryValue;
-            }
-            this.tradeCb();
-        }
+    onTransactionSell(tx: { contract_id?: unknown; amount?: number; transaction_time?: number }) {
+        const cid = normalizeContractId(tx.contract_id);
+        if (!cid || this.settledContractIds.has(cid)) return;
+
+        const id = (Object.keys(this.strategies) as StrategyID[]).find(
+            (k) => normalizeContractId(this.strategies[k].contractId) === cid,
+        );
+        if (!id) return;
+
+        const t = this.trades.find((x) => normalizeContractId(x.id) === cid);
+        const stake = t?.stake ?? this.strategies[id].currentStake;
+        const profit = Number(tx.amount ?? 0) - stake;
+        this.#finalizeContractSettlement(id, cid, profit);
     }
 }
 
 /* ────────────────────────────────────────────────────────────────────
  *  TickSubscriber wrapper
  * ──────────────────────────────────────────────────────────────────── */
-const TickSubscriber: React.FC<{ symbol: string; onTick: (p: number, s: string) => void }> = ({
-    symbol,
-    onTick,
-}) => {
-    useTickStream(symbol, onTick);
+const TickSubscriber: React.FC<{
+    symbol: string;
+    onTick: (p: number, s: string) => void;
+    connectionStatus: CONNECTION_STATUS;
+    tradingSocketGeneration: number;
+}> = ({ symbol, onTick, connectionStatus, tradingSocketGeneration }) => {
+    useTickStream(symbol, onTick, connectionStatus, tradingSocketGeneration);
     return null;
 };
 
@@ -551,11 +1007,43 @@ const TickSubscriber: React.FC<{ symbol: string; onTick: (p: number, s: string) 
  *  Main component logic
  * ──────────────────────────────────────────────────────────────────── */
 const Strategy = observer(() => {
-    const { ui } = useStore();
+    const { ui, client } = useStore();
+    const { activeLoginid, tradingSocketGeneration, connectionStatus, isAuthorized } = useApiBase();
+    const clientRef = useRef(client);
+    const activeLoginidRef = useRef(activeLoginid);
+    useEffect(() => {
+        clientRef.current = client;
+    }, [client]);
+    useEffect(() => {
+        activeLoginidRef.current = activeLoginid;
+    }, [activeLoginid]);
+
+    const shadowApi = useMemo(
+        () => ({
+            isShadow: () => isCrVirtualShadowLogin(activeLoginidRef.current || clientRef.current?.loginid || ''),
+            getClient: () => clientRef.current,
+            getWallet: () => activeLoginidRef.current || clientRef.current?.loginid || '',
+        }),
+        []
+    );
+
+    const tradingSend = useCallback(async (payload: Record<string, unknown>) => {
+        if (!api_base.api || api_base.api.connection.readyState !== 1) {
+            await api_base.init(true);
+        }
+        if (!api_base.api) throw new Error('Trading API not ready');
+        return api_base.api.send(payload) as Promise<unknown>;
+    }, []);
+
+    const readBalance = useCallback(
+        () => readStrategyTradingBalance(clientRef.current, activeLoginidRef.current || clientRef.current?.loginid || ''),
+        []
+    );
+
     const containerRef = useRef<HTMLDivElement>(null);
     const traderRef = useRef<AutoTrader>();
-    const [, forceRerender] = useState({});
-    const [isAuth, setIsAuth] = useState(false);
+    const [tradeRevision, setTradeRevision] = useState(0);
+    const forceRerender = useCallback(() => setTradeRevision(n => n + 1), []);
     const [activeMarkets, setActiveMarkets] = useState<Set<string>>(new Set());
     const [continuationMode, setContinuationMode] = useState(false);
     const [disabledPreds, setDisabledPreds] = useState<boolean[]>([false, false]);
@@ -568,50 +1056,83 @@ const Strategy = observer(() => {
     });
 
     useEffect(() => {
-        const token = localStorage.getItem('authToken');
-        if (!token) return;
-        api_base.api
-            .authorize(token)
-            .then(() => {
-                setIsAuth(true);
-                traderRef.current = new AutoTrader(
-                    (m) => api_base.api.send(m),
-                    () => parseFloat((document.getElementById('balance')?.textContent || '0').replace(/[^0-9.-]+/g, '')),
-                    () => forceRerender({}),
-                    (id, raw) => {
-                        let html = raw
-                            .replace('(E)', '<span class="strategy__even">(E)</span>')
-                            .replace('(O)', '<span class="strategy__odd">(O)</span>')
-                            .replace('(R)', '<span class="strategy__rise">(R)</span>')
-                            .replace('(F)', '<span class="strategy__fall">(F)</span>');
-                        if (id === 'differs' && traderRef.current?.strategies.differs) {
-                            const preds = traderRef.current.strategies.differs.settings.preds;
-                            preds.forEach((d) => {
-                                html = html.replace(
-                                    new RegExp(`\\b${d}\\b`, 'g'),
-                                    `<span class="strategy__predicted-digit">${d}</span>`,
-                                );
-                            });
-                        }
-                        setStatus((prev) => ({ ...prev, [id]: html }));
-                    },
-                );
-            })
-            .catch(console.error);
-    }, []);
+        let cancelled = false;
+        let pollTimer: number | undefined;
 
-    const onTick = useCallback((p: number, s: string) => {
-        if (traderRef.current && activeMarkets.has(s)) {
-            traderRef.current.feedTick(p, s);
+        const mountTrader = () => {
+            if (cancelled || !api_base.api) return;
+            const prev = traderRef.current;
+            if (prev) {
+                (Object.keys(prev.strategies) as StrategyID[]).forEach((sid) => {
+                    if (prev.strategies[sid]?.active) prev.stop(sid, 'Session updated — strategies stopped');
+                });
+            }
+            traderRef.current = new AutoTrader(
+                tradingSend,
+                readBalance,
+                forceRerender,
+                (id, raw) => {
+                    let html = raw
+                        .replace('(E)', '<span class="strategy__even">(E)</span>')
+                        .replace('(O)', '<span class="strategy__odd">(O)</span>')
+                        .replace('(R)', '<span class="strategy__rise">(R)</span>')
+                        .replace('(F)', '<span class="strategy__fall">(F)</span>');
+                    if (id === 'differs' && traderRef.current?.strategies.differs) {
+                        const preds = traderRef.current.strategies.differs.settings.preds;
+                        preds.forEach((d) => {
+                            html = html.replace(
+                                new RegExp(`\\b${d}\\b`, 'g'),
+                                `<span class="strategy__predicted-digit">${d}</span>`,
+                            );
+                        });
+                    }
+                    setStatus((prevSt) => ({ ...prevSt, [id]: html }));
+                },
+                shadowApi,
+            );
+        };
+
+        const token = localStorage.getItem('authToken');
+        const optionsSession = isDerivOptionsOAuthSession();
+
+        if (!optionsSession && !token) {
+            return () => {
+                cancelled = true;
+            };
         }
-    }, [activeMarkets]);
+
+        const waitForTradingSession = () => {
+            if (cancelled) return;
+            if (api_base.api && connectionStatus === CONNECTION_STATUS.OPENED && isAuthorized) {
+                mountTrader();
+                return;
+            }
+            pollTimer = window.setTimeout(waitForTradingSession, 150);
+        };
+        waitForTradingSession();
+
+        return () => {
+            cancelled = true;
+            if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+        };
+    }, [shadowApi, tradingSocketGeneration, connectionStatus, isAuthorized, tradingSend, readBalance]);
 
     useEffect(() => {
+        if (!api_base.api) return;
         const sub = api_base.api.onMessage().subscribe(({ data }: any) => {
-            if (data.proposal_open_contract) traderRef.current?.onContract(data.proposal_open_contract);
+            if (!data || !traderRef.current) return;
+
+            const poc =
+                data.proposal_open_contract ??
+                (data.msg_type === 'proposal_open_contract' ? data.proposal_open_contract : null);
+            if (poc) traderRef.current.onContract(poc as Record<string, unknown>);
+
+            if (data.msg_type === 'transaction' && data.transaction?.action === 'sell') {
+                traderRef.current.onTransactionSell(data.transaction);
+            }
         });
         return () => sub.unsubscribe();
-    }, []);
+    }, [tradingSocketGeneration]);
 
     const toggleContinuationMode = () => {
         if (traderRef.current) {
@@ -626,7 +1147,7 @@ const Strategy = observer(() => {
         setActiveMarkets(s);
     };
 
-    const getSettings = (card: Element): StrategySettings => {
+    const getSettings = useCallback((card: Element): StrategySettings => {
         const q = (sel: string) => card.querySelector(sel) as HTMLInputElement | HTMLSelectElement | null;
         const num = (el: HTMLElement | null, d = 0) =>
             (el && +((el as HTMLInputElement).value || 0) > 0 ? +((el as HTMLInputElement).value || 0) : d);
@@ -638,8 +1159,8 @@ const Strategy = observer(() => {
             })
             .filter((v, i, a) => a.indexOf(v) === i);
 
-        const rawStake = num(q('.strategy__stake-input'), 1);
-        const rawMartingale = num(q('.strategy__martingale-input'), 1);
+        const rawStake = num(q('.strategy__stake-input'), 0.35);
+        const rawMartingale = num(q('.strategy__martingale-input'), 1.25);
 
         return {
             type: card.getAttribute('data-strategy-id') as StrategyID,
@@ -655,10 +1176,24 @@ const Strategy = observer(() => {
             takeProfit: num(q('.strategy__take-profit-input'), 0),
             stopLoss: num(q('.strategy__stop-loss-input'), 0),
         };
-    };
+    }, [disabledPreds]);
+
+    const onTick = useCallback((p: number, s: string) => {
+        if (!traderRef.current) return;
+        traderRef.current.syncLiveSettingsFromDom(getSettings);
+        traderRef.current.feedTick(p, s);
+        setActiveMarkets((prev) => {
+            const next = new Set<string>();
+            Object.values(traderRef.current!.strategies).forEach((st) => {
+                if (st?.active) next.add(st.settings.market);
+            });
+            if (prev.size === next.size && [...prev].every((m) => next.has(m))) return prev;
+            return next;
+        });
+    }, [getSettings]);
 
     const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
-        if (!isAuth) return;
+        if (!traderRef.current) return;
         const btn = e.currentTarget;
         const card = btn.closest('.strategy__card')!;
         const id = card.getAttribute('data-strategy-id') as StrategyID;
@@ -674,7 +1209,7 @@ const Strategy = observer(() => {
         }
     };
 
-    const [activeStrategy, setActiveStrategy] = useState<StrategyID>('over-under');
+    const [activeStrategy, setActiveStrategy] = useState<StrategyID>('even-odd');
     const switchStrategy = (strategyId: StrategyID) => {
         setActiveStrategy(strategyId);
     };
@@ -694,36 +1229,51 @@ const Strategy = observer(() => {
     const pl = traderRef.current?.trades.reduce((s, t) => s + (t.profit ?? 0), 0) ?? 0;
     const isAnyActive = Object.values(traderRef.current?.strategies ?? {}).some(p => p.active);
 
+    const balanceLabel = useMemo(() => {
+        const loginid = activeLoginid || client?.loginid || '';
+        const bal = readStrategyTradingBalance(client, loginid);
+        const cur = strategyAccountCurrency(client, loginid);
+        const prefix = cur === 'USD' ? '$' : '';
+        const suffix = cur === 'USD' ? '' : ` ${cur}`;
+        return `${prefix}${bal.toFixed(2)}${suffix}`;
+    }, [activeLoginid, client, client?.balance, client?.currency, client?.all_accounts_balance]);
+
     const formatTickValue = (value?: number, marketFormat?: string) => {
-        if (value === undefined) return '—';
-
-        let tickString: string;
-        if (marketFormat === 'R_10' || marketFormat === 'R_25') {
-            tickString = value.toFixed(3);
-        } else if (marketFormat === 'R_50' || marketFormat === 'R_75') {
-            tickString = value.toFixed(4);
-        } else {
-            tickString = value.toFixed(2);
-        }
-
-        return tickString;
+        if (value === undefined || value === null || !Number.isFinite(value)) return '—';
+        return autotradeStrategyFormatQuoteForDigitContract(value, marketFormat || STRATEGY_DEFAULT_MARKET);
     };
 
     const renderTickDisplay = (strategyId: StrategyID) => {
         if (!traderRef.current?.strategies[strategyId]) return null;
 
-        const analyzer = traderRef.current.strategies[strategyId].analyzer;
+        const st = traderRef.current.strategies[strategyId];
+        const analyzer = st.analyzer;
         if (!analyzer || !analyzer.tickHistory.length) return null;
 
+        const consecutive = Math.max(1, Math.floor(Number(st.settings.consecutive) || 1));
+        const extra = postStreakConfirmationTicksForMarket(st.settings.market);
+        const displayLen = consecutive + extra;
+        const shown = analyzer.tickHistory.slice(0, displayLen);
+        const pad = Math.max(0, displayLen - shown.length);
+
         return (
-            <div className="strategy__tick-display">
-                {analyzer.tickHistory.map((tick, index) => (
+            <div className="strategy__tick-display" aria-label={`Last ${displayLen} ticks (newest first)`}>
+                {shown.map((tick, index) => (
                     <span
-                        key={index}
+                        key={`t-${index}`}
                         className={`strategy__tick strategy__tick-${tick.type}`}
-                        title={`Tick ${index + 1}`}
+                        title={`Tick ${index + 1} of ${displayLen} (newest first)`}
                     >
                         {tick.value}
+                    </span>
+                ))}
+                {Array.from({ length: pad }, (_, i) => (
+                    <span
+                        key={`pad-${i}`}
+                        className="strategy__tick strategy__tick-pending"
+                        title="Older ticks will appear here as the stream fills"
+                    >
+                        ·
                     </span>
                 ))}
             </div>
@@ -731,39 +1281,40 @@ const Strategy = observer(() => {
     };
 
     return (
-        <div
-            className="strategy__container"
-            ref={containerRef}
-            style={{ background: ui.is_dark_mode_on ? 'var(--general-main-1)' : 'transparent' }}
-        >
-            {!isAuth ? (
-                <div className="strategy__landing" style={{ background: ui.is_dark_mode_on ? 'var(--general-main-1)' : 'transparent' }}>
-                    <div className="strategy__landing-header">
-                        <h1>Hands Free Trading Bots</h1>
-                        <h2>Powered By Denara AI</h2>
-                        <p>Automated trading strategies powered by Denara AI</p>
-                    </div>
-
-                    <div className="strategy__landing-cta">
-                        <h2>Please Login to Start Trading</h2>
-                        <p>These automated strategies are designed to capitalize on statistical patterns in digit distributions. Please login to access the trading interface.</p>
-                    </div>
-                </div>
-            ) : (
-                <>
+        <div className={`strategy-page${ui.is_dark_mode_on ? ' strategy-page--dark' : ''}`}>
+            <div className="strategy__container" ref={containerRef}>
                     {[...activeMarkets].map((sym) => (
-                        <TickSubscriber key={sym} symbol={sym} onTick={onTick} />
+                        <TickSubscriber
+                            key={sym}
+                            symbol={sym}
+                            onTick={onTick}
+                            connectionStatus={connectionStatus}
+                            tradingSocketGeneration={tradingSocketGeneration}
+                        />
                     ))}
+
+                    <header className="strategy-page__hero">
+                        <h1 className="strategy-page__title">TP / SL strategies</h1>
+                        <p className="strategy-page__sub">
+                            Hands-free digit bots with take-profit, stop-loss, and martingale.
+                        </p>
+                    </header>
 
                     {/* ────────── Navbar ────────── */}
                     <div className="strategy__navbar">
-                        <div className="strategy__navbar-brand">⏱️ Instant Fill</div>
+                        <div className="strategy__navbar-brand">⚙️ Auto Bot</div>
                         <div className="strategy__navbar-auth">
-                            <span>Connected</span> <span id="balance">$10,000.00</span>
+                            <span>Connected</span> <span id="balance">{balanceLabel}</span>
                         </div>
                     </div>
                     <div className="strategy__navbar-controls">
                         <div className="strategy__tabs">
+                            <button
+                                className={`strategy__tab ${activeStrategy === 'even-odd' ? 'active' : ''}`}
+                                onClick={() => switchStrategy('even-odd')}
+                            >
+                                Even/Odd
+                            </button>
                             <button
                                 className={`strategy__tab ${activeStrategy === 'over-under' ? 'active' : ''}`}
                                 onClick={() => switchStrategy('over-under')}
@@ -776,12 +1327,6 @@ const Strategy = observer(() => {
                                 style={{ display: 'none' }}
                             >
                                 Rise/Fall
-                            </button>
-                            <button
-                                className={`strategy__tab ${activeStrategy === 'even-odd' ? 'active' : ''}`}
-                                onClick={() => switchStrategy('even-odd')}
-                            >
-                                Even/Odd
                             </button>
                             <button
                                 className={`strategy__tab ${activeStrategy === 'differs' ? 'active' : ''}`}
@@ -800,6 +1345,112 @@ const Strategy = observer(() => {
 
                     {/* ────────── Strategy Cards ────────── */}
                     <div className="strategy__grid">
+                        {/* ─── Even / Odd ─── */}
+                        <div className="strategy__card" data-strategy-id="even-odd" style={{ display: activeStrategy === 'even-odd' ? 'block' : 'none' }}
+                        >
+                            <div className="strategy__card-header">
+                                <div className="strategy__card-name">
+                                    <TradeTypesDigitsEvenIcon width={20} height={20} />
+                                    Even|Odd
+                                    <TradeTypesDigitsOddIcon width={20} height={20} />
+
+                                </div>
+                                <button className="strategy__trade-btn" data-active="false" onClick={toggle}>
+                                    Start
+                                </button>
+                            </div>
+
+                            <div className="strategy__form-group">
+                                <label>Market</label>
+                                <select className="strategy__market-select" defaultValue={STRATEGY_DEFAULT_MARKET}>
+                                    <option value="R_10">Volatility 10 index</option>
+                                    <option value="1HZ10V">Volatility 10(1s) index</option>
+                                    <option value="R_25">Volatility 25 index</option>
+                                    <option value="1HZ25V">Volatility 25(1s) index</option>
+                                    <option value="R_50">Volatility 50 index</option>
+                                    <option value="1HZ50V">Volatility 50(1s) index</option>
+                                    <option value="R_75">Volatility 75 index</option>
+                                    <option value="1HZ75V">Volatility 75(1s) index</option>
+                                    <option value="R_100">Volatility 100 index</option>
+                                    <option value="1HZ100V">Volatility 100(1s) index</option>
+                                </select>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Stake Amount</label>
+                                    <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="0.35" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Martingale</label>
+                                    <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="1.25" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Duration (ticks)</label>
+                                    <input type="number" className="strategy__duration-input" min="1" defaultValue="1" />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Consecutive Count</label>
+                                    <input type="number" className="strategy__Consecutive-input" min="1" defaultValue="3" />
+                                </div>
+                            </div>
+
+                            <div className="strategy__form-row">
+                                <div className="strategy__form-group">
+                                    <label>Take Profit</label>
+                                    <input
+                                        type="number"
+                                        className="strategy__take-profit-input"
+                                        min="0"
+                                        step="0.1"
+                                        defaultValue="0"
+                                        placeholder="0 for none"
+                                    />
+                                </div>
+                                <div className="strategy__form-group">
+                                    <label>Stop Loss</label>
+                                    <input
+                                        type="number"
+                                        className="strategy__stop-loss-input"
+                                        min="0"
+                                        step="0.1"
+                                        defaultValue="0"
+                                        placeholder="0 for none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Tick display for this strategy */}
+                            {renderTickDisplay('even-odd')}
+
+                            <div
+                                className="strategy__trade-status"
+                                id="tradeStatus-even-odd"
+                                dangerouslySetInnerHTML={{ __html: status['even-odd'] }}
+                            />
+
+                            <div className="strategy__card-header" style={{ flexDirection: 'column' }}>
+                                {continuationMode ? (
+                                    <>
+                                        <small>
+                                            Continuation (same): Even streak → Even · Odd streak → Odd
+                                        </small>
+                                        <small>Example (N=2): …EE + next E = win · …EE + next O = loss</small>
+                                    </>
+                                ) : (
+                                    <>
+                                        <small>
+                                            Reversal (opposite): Even streak → Odd · Odd streak → Even
+                                        </small>
+                                        <small>Example (N=2): …EE + next O = win · …EE + next E = loss</small>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
                         {/* ─── Over / Under ─── */}
                         <div className="strategy__card" data-strategy-id="over-under" style={{ display: activeStrategy === 'over-under' ? 'block' : 'none' }}>
                             <div className="strategy__card-header">
@@ -815,9 +1466,9 @@ const Strategy = observer(() => {
 
                             <div className="strategy__form-group">
                                 <label>Market</label>
-                                <select className="strategy__market-select">
-                                    <option value="1HZ10V">Volatility 10(1s) index</option>
+                                <select className="strategy__market-select" defaultValue={STRATEGY_DEFAULT_MARKET}>
                                     <option value="R_10">Volatility 10 index</option>
+                                    <option value="1HZ10V">Volatility 10(1s) index</option>
                                     <option value="R_25">Volatility 25 index</option>
                                     <option value="1HZ25V">Volatility 25(1s) index</option>
                                     <option value="R_50">Volatility 50 index</option>
@@ -832,11 +1483,11 @@ const Strategy = observer(() => {
                             <div className="strategy__form-row">
                                 <div className="strategy__form-group">
                                     <label>Stake Amount</label>
-                                    <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="10" />
+                                    <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="0.35" />
                                 </div>
                                 <div className="strategy__form-group">
                                     <label>Martingale</label>
-                                    <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="2" />
+                                    <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="1.25" />
                                 </div>
                             </div>
 
@@ -942,9 +1593,9 @@ const Strategy = observer(() => {
 
                             <div className="strategy__form-group">
                                 <label>Market</label>
-                                <select className="strategy__market-select">
-                                    <option value="1HZ10V">Volatility 10(1s) index</option>
+                                <select className="strategy__market-select" defaultValue={STRATEGY_DEFAULT_MARKET}>
                                     <option value="R_10">Volatility 10 index</option>
+                                    <option value="1HZ10V">Volatility 10(1s) index</option>
                                     <option value="R_25">Volatility 25 index</option>
                                     <option value="1HZ25V">Volatility 25(1s) index</option>
                                     <option value="R_50">Volatility 50 index</option>
@@ -959,11 +1610,11 @@ const Strategy = observer(() => {
                             <div className="strategy__form-row">
                                 <div className="strategy__form-group">
                                     <label>Stake Amount</label>
-                                    <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="10" />
+                                    <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="0.35" />
                                 </div>
                                 <div className="strategy__form-group">
                                     <label>Martingale</label>
-                                    <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="2" />
+                                    <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="1.25" />
                                 </div>
                             </div>
 
@@ -1013,101 +1664,21 @@ const Strategy = observer(() => {
                             />
 
                             <div className="strategy__card-header" style={{ flexDirection: 'column' }}>
-                                <small>(Consecutive) Rise → Buys Fall</small>
-                                <small>(Consecutive) Fall → Buys Rise</small>
-                            </div>
-                        </div>
-
-                        {/* ─── Even / Odd ─── */}
-                        <div className="strategy__card" data-strategy-id="even-odd" style={{ display: activeStrategy === 'even-odd' ? 'block' : 'none' }}
-                        >
-                            <div className="strategy__card-header">
-                                <div className="strategy__card-name">
-                                    <TradeTypesDigitsEvenIcon width={20} height={20} />
-                                    Even|Odd
-                                    <TradeTypesDigitsOddIcon width={20} height={20} />
-
-                                </div>
-                                <button className="strategy__trade-btn" data-active="false" onClick={toggle}>
-                                    Start
-                                </button>
-                            </div>
-
-                            <div className="strategy__form-group">
-                                <label>Market</label>
-                                <select className="strategy__market-select">
-                                    <option value="1HZ10V">Volatility 10(1s) index</option>
-                                    <option value="R_10">Volatility 10 index</option>
-                                    <option value="R_25">Volatility 25 index</option>
-                                    <option value="1HZ25V">Volatility 25(1s) index</option>
-                                    <option value="R_50">Volatility 50 index</option>
-                                    <option value="1HZ50V">Volatility 50(1s) index</option>
-                                    <option value="R_75">Volatility 75 index</option>
-                                    <option value="1HZ75V">Volatility 75(1s) index</option>
-                                    <option value="R_100">Volatility 100 index</option>
-                                    <option value="1HZ100V">Volatility 100(1s) index</option>
-                                </select>
-                            </div>
-
-                            <div className="strategy__form-row">
-                                <div className="strategy__form-group">
-                                    <label>Stake Amount</label>
-                                    <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="10" />
-                                </div>
-                                <div className="strategy__form-group">
-                                    <label>Martingale</label>
-                                    <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="2" />
-                                </div>
-                            </div>
-
-                            <div className="strategy__form-row">
-                                <div className="strategy__form-group">
-                                    <label>Duration (ticks)</label>
-                                    <input type="number" className="strategy__duration-input" min="1" defaultValue="1" />
-                                </div>
-                                <div className="strategy__form-group">
-                                    <label>Consecutive Count</label>
-                                    <input type="number" className="strategy__Consecutive-input" min="1" defaultValue="3" />
-                                </div>
-                            </div>
-
-                            <div className="strategy__form-row">
-                                <div className="strategy__form-group">
-                                    <label>Take Profit</label>
-                                    <input
-                                        type="number"
-                                        className="strategy__take-profit-input"
-                                        min="0"
-                                        step="0.1"
-                                        defaultValue="0"
-                                        placeholder="0 for none"
-                                    />
-                                </div>
-                                <div className="strategy__form-group">
-                                    <label>Stop Loss</label>
-                                    <input
-                                        type="number"
-                                        className="strategy__stop-loss-input"
-                                        min="0"
-                                        step="0.1"
-                                        defaultValue="0"
-                                        placeholder="0 for none"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Tick display for this strategy */}
-                            {renderTickDisplay('even-odd')}
-
-                            <div
-                                className="strategy__trade-status"
-                                id="tradeStatus-even-odd"
-                                dangerouslySetInnerHTML={{ __html: status['even-odd'] }}
-                            />
-
-                            <div className="strategy__card-header" style={{ flexDirection: 'column' }}>
-                                <small>(Consecutive) Even → Buys Odd</small>
-                                <small>(Consecutive) Odd → Buys Even</small>
+                                {continuationMode ? (
+                                    <>
+                                        <small>
+                                            Continuation (same): Rise streak → Rise (CALL) · Fall streak → Fall (PUT)
+                                        </small>
+                                        <small>Next tick continues the streak direction = win</small>
+                                    </>
+                                ) : (
+                                    <>
+                                        <small>
+                                            Reversal (opposite): Rise streak → Fall (PUT) · Fall streak → Rise (CALL)
+                                        </small>
+                                        <small>Next tick flips direction = win</small>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -1125,9 +1696,9 @@ const Strategy = observer(() => {
 
                             <div className="strategy__form-group">
                                 <label>Market</label>
-                                <select className="strategy__market-select">
-                                    <option value="1HZ10V">Volatility 10(1s) index</option>
+                                <select className="strategy__market-select" defaultValue={STRATEGY_DEFAULT_MARKET}>
                                     <option value="R_10">Volatility 10 index</option>
+                                    <option value="1HZ10V">Volatility 10(1s) index</option>
                                     <option value="R_25">Volatility 25 index</option>
                                     <option value="1HZ25V">Volatility 25(1s) index</option>
                                     <option value="R_50">Volatility 50 index</option>
@@ -1147,11 +1718,11 @@ const Strategy = observer(() => {
                                 <div className="strategy__form-row">
                                     <div className="strategy__form-group">
                                         <label>Stake Amount</label>
-                                        <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="10" />
+                                        <input type="number" className="strategy__stake-input" min="0.01" step="0.01" defaultValue="0.35" />
                                     </div>
                                     <div className="strategy__form-group">
                                         <label>Martingale</label>
-                                        <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="2" />
+                                        <input type="number" className="strategy__martingale-input" min="1" step="0.01" defaultValue="1.25" />
                                     </div>
                                 </div>
                             </div>
@@ -1273,7 +1844,7 @@ const Strategy = observer(() => {
                                         'even-odd': '',
                                         differs: '',
                                     });
-                                    forceRerender({});
+                                    forceRerender();
                                 }}
                                 title="Clear results and P/L"
                             >
@@ -1284,7 +1855,7 @@ const Strategy = observer(() => {
 
                     <div className="strategy__history-section">
 
-                        <div className="strategy__history-list">
+                        <div className="strategy__history-list" key={tradeRevision}>
                             {traderRef.current?.trades.slice(0, 10).map((t) => (
                                 <div key={t.id} className="strategy__trade-item">
                                     <div className="strategy__trade-header">
@@ -1305,18 +1876,18 @@ const Strategy = observer(() => {
                                                 <circle cx={8} cy={8} r={6} stroke="#FF4444" strokeWidth={1.5} fill="white" />
                                                 <circle cx={8} cy={8} r={3} fill="#FF4444" />
                                             </svg>
-                                            {formatTickValue(t.entryValue, t.marketFormat)}
+                                            {formatTickValue(t.entryValue, t.marketFormat || t.market)}
                                         </div>
 
                                         <div className="strategy__trade-exit">
                                             <svg width={16} height={16} viewBox="0 0 16 16">
                                                 <circle cx={8} cy={8} r={6} stroke="#999999" strokeWidth={1.5} fill="white" />
                                             </svg>
-                                            {formatTickValue(t.exitValue, t.marketFormat)}
+                                            {formatTickValue(t.exitValue, t.marketFormat || t.market)}
                                         </div>
                                     </div>
 
-                                    <div className={`strategy__trade-result ${t.profit && t.profit >= 0 ? 'strategy__profit' : 'strategy__loss'}`}>
+                                    <div className={`strategy__trade-result ${t.profit !== null && t.profit >= 0 ? 'strategy__profit' : 'strategy__loss'}`}>
                                         {t.profit !== null ? (
                                             `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
                                         ) : '—'}
@@ -1325,8 +1896,7 @@ const Strategy = observer(() => {
                             ))}
                         </div>
                     </div>
-                </>
-            )}
+            </div>
         </div>
     );
 });

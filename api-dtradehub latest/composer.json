@@ -1,0 +1,9 @@
+{
+  "require": {
+    "textalk/websocket": "^1.5"
+  },
+  "config": {
+    "platform-check": false,
+    "sort-packages": true
+  }
+}

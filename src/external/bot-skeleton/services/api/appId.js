@@ -8,6 +8,11 @@ export const generateDerivApiInstance = () => {
     const cleanedServer = getSocketURL().replace(/[^a-zA-Z0-9.]/g, '');
     const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
     const socket_url = `wss://${cleanedServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
+    return generateDerivApiInstanceFromUrl(socket_url);
+};
+
+/** Options API OTP URL — authenticated `proposal` / `buy` / `sell` per Deriv docs. */
+export const generateDerivApiInstanceFromUrl = socket_url => {
     const deriv_socket = new WebSocket(socket_url);
     const deriv_api = new DerivAPIBasic({
         connection: deriv_socket,
@@ -32,12 +37,22 @@ export const V2GetActiveClientId = () => {
     const token = V2GetActiveToken();
 
     if (!token) return null;
-    const account_list = JSON.parse(localStorage.getItem('accountsList'));
-    if (account_list && account_list !== 'null') {
-        const active_clientId = Object.keys(account_list).find(key => account_list[key] === token);
-        return active_clientId;
+    try {
+        const raw = localStorage.getItem('accountsList');
+        if (!raw || raw === 'null') return null;
+        const account_list = JSON.parse(raw);
+        if (!account_list || typeof account_list !== 'object') return null;
+
+        const preferred = getLoginId();
+        if (preferred && account_list[preferred] === token) {
+            return preferred;
+        }
+
+        const first_match = Object.keys(account_list).find(key => account_list[key] === token);
+        return first_match ?? null;
+    } catch {
+        return null;
     }
-    return null;
 };
 
 export const getToken = () => {

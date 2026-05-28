@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton';
+import { sendDerivSessionContractPurchase } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import {
   TradeTypesDigitsOverIcon,
   TradeTypesDigitsUnderIcon,
@@ -110,6 +112,7 @@ const toNum = (s: string, fallback = 0) => {
 };
 
 export default function OverUnderSwitcher() {
+  const { tradingSocketGeneration } = useApiBase();
   /* ===== Inputs (string-based so they can be cleared) ===== */
   const [isRunning, setIsRunning] = useState(false);
   const [market, setMarket] = useState('JD50');
@@ -241,18 +244,19 @@ export default function OverUnderSwitcher() {
 
     const tmpID = createTempTrade(ct, stake, mkt, dur);
     try {
-      const resp = await api_base.api.send({
-        buy: 1, price: stake,
-        parameters: {
-          amount: stake, basis: 'stake', currency: 'USD',
-          contract_type: ct, duration: dur, duration_unit: 't', symbol: mkt,
-          barrier
-        }
-      });
+      const resp = (await sendDerivSessionContractPurchase(d => api_base.api!.send(d) as Promise<unknown>, {
+        contract_type: ct,
+        market: mkt,
+        duration: dur,
+        stake,
+        barrier,
+      })) as { error?: unknown; buy?: { contract_id?: unknown } };
       if (resp?.error) throw resp;
       if (stopRequestedRef.current) return;
 
-      const realID = resp.buy.contract_id;
+      const cidRaw = resp.buy?.contract_id;
+      if (cidRaw == null || cidRaw === '') throw new Error('No contract_id in buy response');
+      const realID = String(cidRaw);
       setTrades(ts => ts.map(t => t.id === tmpID ? ({ ...t, id: realID, temp: false, status: 'open' }) : t));
       setStatus('✅ Trade placed', 'success');
       return realID;
@@ -314,7 +318,7 @@ export default function OverUnderSwitcher() {
       }
     });
     return () => sub.unsubscribe();
-  }, [applyPnLAndMaybeStop]);
+  }, [applyPnLAndMaybeStop, tradingSocketGeneration]);
 
   /* ===== Aggregate P/L for visible list ===== */
   useEffect(() => {

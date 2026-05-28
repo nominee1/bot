@@ -289,7 +289,7 @@ export default class DashboardStore implements IDashboardStore {
     };
 
     initInfoPanel() {
-        if (!localStorage.getItem('dbot_should_show_info')) this.is_info_panel_visible = true;
+        this.is_info_panel_visible = false;
     }
 
     setTourActiveStep = (active_tour_step_number: number) => {

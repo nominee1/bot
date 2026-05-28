@@ -1,0 +1,33 @@
+# Denarabot (root SPA) + DTrader under /dtrader/ (Deriv core SPA)
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Core build uses /js and /css at site root; files live under /dtrader/
+  RewriteRule ^js/(.*)$ /dtrader/js/$1 [L]
+  RewriteRule ^css/(.*)$ /dtrader/css/$1 [L]
+  RewriteRule ^public/(.*)$ /dtrader/public/$1 [L]
+  RewriteRule ^manifest\.json$ /dtrader/manifest.json [L]
+  RewriteRule ^favicon\.ico$ /dtrader/favicon.ico [L]
+
+  # Serve real files (bot static/, dtrader/js/, etc.)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # DTrader SPA routes only (not /dtrader/js|css|public assets)
+  RewriteCond %{REQUEST_URI} !^/dtrader/(js|css|public)/
+  RewriteRule ^dtrader/?(.*)$ /dtrader/index.html [L]
+
+  # Bot SPA
+  RewriteRule ^ /index.html [L]
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>

@@ -8,7 +8,7 @@
 
     &__container {
         height: var(--bot-content-height) !important;
-        top: 10.4rem !important;
+        top: calc(10.4rem + 5rem) !important;
         width: 36.6rem !important;
         right: 0;
 
@@ -80,15 +80,29 @@
             grid-template: 64px 64px / 1fr 1fr 1fr;
         }
 
-        &-amount {
-            @include typeface(--small-center-normal-black, none);
+        .run-panel__tile-title {
+            color: var(--text-colored-background);
+        }
 
-            &--positive {
+        .run-panel__tile-content {
+            color: var(--text-colored-background);
+        }
+
+        &-amount,
+        &-value {
+            @include typeface(--small-center-normal-black, none);
+        }
+
+        .run-panel__tile-content.run-panel__stat-amount,
+        .run-panel__tile-content.run-panel__stat-value {
+            &--positive,
+            &--won {
                 font-weight: bold;
                 color: var(--text-profit-success);
             }
 
-            &--negative {
+            &--negative,
+            &--lost {
                 font-weight: bold;
                 color: var(--text-loss-danger);
             }
@@ -118,7 +132,9 @@
         display: flex;
         justify-content: space-between;
         flex-direction: column;
-        overflow: hidden !important;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
 
         .dc-tabs {
             &__item {
@@ -140,7 +156,12 @@
     &-tab {
         &__content {
             height: calc(100vh - 42rem);
-            overflow: hidden;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
 
             &--no-stat {
                 height: var(--drawer-content-height-no-stat);

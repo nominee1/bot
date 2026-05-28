@@ -328,7 +328,7 @@ useEffect(() => {
    return (
      <div className="accu-panel">
        <div className="accu-header">
-         <h3>Pro Aviator Ai</h3>
+         <h3>Accumulator Ai</h3>
 
          <span className="counter-badge" style={{ color: getCounterColor(counter) }}>
            {counter}

@@ -11,6 +11,7 @@ import GoogleDriveStore from './google-drive-store';
 import JournalStore from './journal-store';
 import LoadModalStore from './load-modal-store';
 import QuickStrategyStore from './quick-strategy-store';
+import ReadyStrategyPanelStore from './ready-strategy-panel-store';
 import RunPanelStore from './run-panel-store';
 import SaveModalStore from './save-modal-store';
 import SelfExclusionStore from './self-exclusion-store';
@@ -36,6 +37,7 @@ export default class RootStore {
     public toolbar: ToolbarStore;
     public toolbox: ToolboxStore;
     public quick_strategy: QuickStrategyStore;
+    public ready_strategy_panel: ReadyStrategyPanelStore;
     public self_exclusion: SelfExclusionStore;
     public dashboard: DashboardStore;
 
@@ -77,6 +79,7 @@ export default class RootStore {
         this.toolbar = new ToolbarStore(this);
         this.toolbox = new ToolboxStore(this, this.core);
         this.quick_strategy = new QuickStrategyStore(this);
+        this.ready_strategy_panel = new ReadyStrategyPanelStore(this);
         this.self_exclusion = new SelfExclusionStore(this, this.core);
         this.dashboard = new DashboardStore(this, this.core);
 

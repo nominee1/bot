@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
+import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton';
+import { sendDerivSessionContractPurchase } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import {
   LegacyExitSpotIcon,
   LegacyEntrySpotIcon,
@@ -92,6 +94,7 @@ const digitColors = [
 ];
 
 const Iframe = observer(() => {
+  const { tradingSocketGeneration } = useApiBase();
   const { ui } = useStore();
 
   const [trades, setTrades] = useState<TTrade[]>([]);
@@ -304,14 +307,13 @@ const Iframe = observer(() => {
     setTrades(t => [newTrade, ...t]);
 
     try {
-      const resp = await api_base.api.send({
-        buy: 1, price: stake,
-        parameters: {
-          amount: stake, basis: 'stake', currency: 'USD',
-          contract_type: ct, duration: dur, duration_unit: 't', symbol: market,
-          ...(barrier ? { barrier } : {})
-        }
-      });
+      const resp = (await sendDerivSessionContractPurchase(d => api_base.api.send(d) as Promise<unknown>, {
+        contract_type: ct,
+        market,
+        duration: dur,
+        stake,
+        ...(barrier ? { barrier } : {}),
+      })) as { error?: { message: string }; buy: { contract_id: string | number } };
 
       if (resp.error) {
         logTradeEvent('CreationError', {
@@ -321,7 +323,11 @@ const Iframe = observer(() => {
         throw new Error(resp.error.message);
       }
 
-      const realID = resp.buy.contract_id.toString();
+      const contractIdRaw = (resp as { buy?: { contract_id?: unknown } }).buy?.contract_id;
+      if (contractIdRaw == null || contractIdRaw === '') {
+        throw new Error('No contract_id in buy response');
+      }
+      const realID = String(contractIdRaw);
       tempToRealRef.current.set(tmpID, realID);
       realToTempRef.current.set(realID, tmpID);
 
@@ -930,7 +936,7 @@ const Iframe = observer(() => {
   useEffect(() => {
     const sub = api_base.api.onMessage().subscribe(({ data }: any) => handleWS(data));
     return () => sub.unsubscribe();
-  }, []);
+  }, [tradingSocketGeneration]);
 
   useEffect(() => {
     const initializeWebSocket = (symbol: string) => {

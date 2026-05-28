@@ -109,12 +109,21 @@
             position: relative;
 
             &:after {
-                border-bottom: 2px solid var(--brand-red-coral);
                 content: '';
                 position: absolute;
-                left: 0;
+                inset-inline: 0;
+                bottom: -2px;
                 display: block;
-                width: 100%;
+                height: 2px;
+                background: var(--brand-red-coral);
+                pointer-events: none;
+            }
+        }
+
+        &--bottom.dc-tabs__item--is-scrollable-and-active {
+            &::after {
+                bottom: auto;
+                top: -2px;
             }
         }
 

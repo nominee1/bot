@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    COMPETITION_TRADERS_REGISTER_URL,
+    getCompetitionPhpApiBaseUrl,
+} from '@/components/shared/utils/competition/denara-competition-profile';
 import { api_base } from '@/external/bot-skeleton';
+import DENARATORNA from '../../../public/assets/images/TOURNAMENTtt.png';
+import Deposit from '../aadeposit/Deposit';
 import './ParticipantsLeaderboard.scss';
 
 // ===== Types =====
 type StatementTx = {
+  id?: number | string;
   transaction_id?: number | string;
   action_type?: string;
   amount?: number;
@@ -19,6 +26,9 @@ type StatementTx = {
   category?: string;
   type?: string;
   contract_type?: string;
+  username?: string;
+  loginid?: string | null;
+  created_at?: string;
 };
 
 type Participant = {
@@ -29,10 +39,8 @@ type Participant = {
 };
 
 type Props = {
-  apiBaseUrl?: string;          // e.g. 'https://ttt.binaryke.com/api'
-  appId?: number;               // Deriv app_id if your ws layer needs it
-  defaultWindowMs?: number;     // unused now, but kept for API compatibility
-  usersPageSize?: number;       // no longer used (we fetch all)
+  apiBaseUrl?: string;
+  appId?: number;
 };
 
 type UserStat = {
@@ -43,14 +51,54 @@ type UserStat = {
   trades?: number;
   startBal?: number | null;
   endBal?: number | null;
-  baselineTime?: number; // epoch ms
+  baselineTime?: number;
+  turnover?: number;
+  isRankEligible?: boolean;
 };
 
-// ===== Tournament window (fixed) =====
-// Saturday 22 Nov 2025 09:00 EAT (UTC+3) → 06:00 UTC
-// Tuesday 25 Nov 2025 09:00 EAT (UTC+3) → 06:00 UTC
-const TOURNAMENT_START_UTC_MS = Date.UTC(2025, 10, 22, 6, 0, 0); // month is 0-based (10 = Nov)
-const TOURNAMENT_END_UTC_MS   = Date.UTC(2025, 10, 25, 6, 0, 0);
+type DetailSummary = {
+  startBal: number | null;
+  endBal: number | null;
+  netPL: number;
+  trades: number;
+  returnPct: number | null;
+  baselineTime: number;
+  turnover: number;
+};
+
+type RulesModalProps = {
+  show: boolean;
+  onClose: () => void;
+  onOpenDeposit: () => void;
+};
+
+type OptionsOracleStatementsResponse = {
+  ok: boolean;
+  summary?: {
+    username: string;
+    total_rows: number;
+    buys: number;
+    sells: number;
+    trades: number;
+    turnover: number;
+    start_balance: number | null;
+    current_balance: number | null;
+    net_pl: number;
+    first_time: number | null;
+    last_time: number | null;
+  };
+  statements?: StatementTx[];
+  error?: string;
+};
+
+const DERIV_APP_ID = 36300;
+
+// ===== Tournament window =====
+const TOURNAMENT_START_UTC_MS = Date.UTC(2026, 3, 8, 6, 0, 0);
+const TOURNAMENT_END_UTC_MS = Date.UTC(2026, 3, 22, 21, 0, 0);
+
+// ===== Ranking minimum =====
+const MIN_RANKING_START_BALANCE = 10;
 
 const clampToTournament = (ms: number) =>
   Math.min(Math.max(ms, TOURNAMENT_START_UTC_MS), TOURNAMENT_END_UTC_MS);
@@ -58,41 +106,204 @@ const clampToTournament = (ms: number) =>
 // ===== Constants & helpers =====
 const PAGE_SIZE = 100;
 const DEFAULT_USERS_LIMIT = 50;
-const ALL_USERS_LIMIT = 500; // fetch + rank everyone on one page
+const ALL_USERS_LIMIT = 500;
 
 const normalize = (s?: string) => (s ? String(s).replace(/_/g, ' ').toLowerCase() : '');
 const epochMs = (t?: number) => (typeof t === 'number' ? t * 1000 : 0);
 const ms = (tx: StatementTx) => epochMs(tx.transaction_time ?? tx.time ?? 0);
-const txId = (tx: StatementTx) => String(tx.transaction_id ?? tx.contract_id ?? '');
+const txId = (tx: StatementTx) => String(tx.id ?? tx.transaction_id ?? tx.contract_id ?? '');
+
+/** Synthetic options_oracle user + get_chance_statements.php — keep false in production */
+const ENABLE_OPTIONS_ORACLE_DEBUG = false;
+const OPTIONS_ORACLE_USERNAME = 'options_oracle';
+const isOptionsOracleDebugUser = (raw: string) =>
+    ENABLE_OPTIONS_ORACLE_DEBUG && normalize(raw) === normalize(OPTIONS_ORACLE_USERNAME);
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const toDatetimeLocal = (v: number) => {
   const d = new Date(v);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
+    d.getMinutes()
+  )}`;
 };
 const fromDatetimeLocal = (s: string) => new Date(s).getTime();
 
-// ====== SPECIAL CASE: UNCHAINED SYNTHETIC RUN ======
-const UNCHAINED_USERNAME = 'unchained';
+const calcTurnoverFromTx = (tx: StatementTx) => {
+  const action = normalize(tx.action_type);
+  const amt = typeof tx.amount === 'number' ? tx.amount : 0;
+  if (action === 'buy' || action === 'sell') return Math.abs(amt);
+  return 0;
+};
 
-// Synthetic run: from $2 → $27 starting Tue 25 Nov 2025 05:26 EAT (02:26 UTC)
+const getBalanceAfter = (tx: StatementTx): number | null => {
+  if (typeof tx.balance_after === 'number') return tx.balance_after;
+  if (typeof tx.balance === 'number') return tx.balance;
+  return null;
+};
+
+const promoteBaselineToMinBalance = (
+  rowsAsc: StatementTx[],
+  currentBaselineTime: number,
+  currentBaselineBal: number | null,
+  minBalance: number
+) => {
+  if (typeof currentBaselineBal === 'number' && currentBaselineBal >= minBalance) {
+    return {
+      baselineTime: currentBaselineTime,
+      baselineBal: Number(currentBaselineBal.toFixed(2)),
+    };
+  }
+
+  for (const tx of rowsAsc) {
+    const tms = ms(tx);
+    if (tms < currentBaselineTime) continue;
+
+    const bal = getBalanceAfter(tx);
+    if (typeof bal === 'number' && bal >= minBalance) {
+      return {
+        baselineTime: tms,
+        baselineBal: Number(bal.toFixed(2)),
+      };
+    }
+  }
+
+  return {
+    baselineTime: currentBaselineTime,
+    baselineBal: currentBaselineBal !== null ? Number(currentBaselineBal.toFixed(2)) : null,
+  };
+};
+
+const buildOptionsOracleMetricsFromRows = (rows: StatementTx[], startMs: number, endMs: number) => {
+  const startClamped = clampToTournament(startMs);
+  const endClamped = clampToTournament(endMs);
+
+  const filtered = rows
+    .filter(tx => {
+      const tms = ms(tx);
+      return tms >= startClamped && tms <= endClamped;
+    })
+    .sort((a, b) => ms(a) - ms(b));
+
+  if (!filtered.length) {
+    return {
+      baselineTime: startClamped,
+      baselineBal: null as number | null,
+      netPL: 0,
+      trades: 0,
+      endBal: null as number | null,
+      currency: 'USD',
+      turnover: 0,
+    };
+  }
+
+  const first = filtered[0];
+  const last = filtered[filtered.length - 1];
+
+  let baselineBal: number | null = null;
+  let baselineTime = ms(first);
+
+  const firstBal = typeof first.balance_after === 'number' ? first.balance_after : null;
+  const firstAmt = typeof first.amount === 'number' ? first.amount : 0;
+  const firstAction = normalize(first.action_type);
+
+  if (firstBal !== null) {
+    baselineBal =
+      firstAction === 'buy'
+        ? Number((firstBal - firstAmt).toFixed(2))
+        : Number(firstBal.toFixed(2));
+  }
+
+  const promoted = promoteBaselineToMinBalance(
+    filtered,
+    baselineTime,
+    baselineBal,
+    MIN_RANKING_START_BALANCE
+  );
+
+  baselineTime = promoted.baselineTime;
+  baselineBal = promoted.baselineBal;
+
+  let trades = 0;
+  let turnover = 0;
+
+  for (const tx of filtered) {
+    const tms = ms(tx);
+    if (tms <= baselineTime) continue;
+
+    const action = normalize(tx.action_type);
+    if (action === 'sell') trades += 1;
+    turnover += calcTurnoverFromTx(tx);
+  }
+
+  const endBal = typeof last.balance_after === 'number' ? Number(last.balance_after.toFixed(2)) : null;
+  const netPL =
+    typeof baselineBal === 'number' && typeof endBal === 'number'
+      ? Number((endBal - baselineBal).toFixed(2))
+      : 0;
+
+  return {
+    baselineTime,
+    baselineBal,
+    netPL,
+    trades,
+    endBal,
+    currency: 'USD',
+    turnover: Number(turnover.toFixed(2)),
+  };
+};
+
+// ===== SPECIAL CASE: UNCHAINED =====
+const UNCHAINED_USERNAME = 'unchained';
 const UNCHAINED_TARGET_START_BAL = 2;
 const UNCHAINED_TARGET_END_BAL = 27;
 const UNCHAINED_NET_PL = UNCHAINED_TARGET_END_BAL - UNCHAINED_TARGET_START_BAL;
-const UNCHAINED_SYN_TRADES = 5; // number of winning trades (closed)
-const UNCHAINED_DEPOSIT_UTC_MS = Date.UTC(2025, 10, 24, 0, 50, 0); // 3:50am EAT (UTC+3)
-// 5:26am EAT
+const UNCHAINED_SYN_TRADES = 5;
+const UNCHAINED_DEPOSIT_UTC_MS = Date.UTC(2025, 10, 24, 0, 50, 0);
 const UNCHAINED_DEPOSIT_EPOCH_SEC = Math.floor(UNCHAINED_DEPOSIT_UTC_MS / 1000);
+const UNCHAINED_TURNOVER = 1 + 4 + 1 + 5 + 1 + 5 + 2 + 8 + 2 + 10;
 
-// Build a synthetic sequence for unchained:
-// - Deposit 2
-// - Then 5 trades (buy + sell pairs) with correct balance math
-// - Times spaced >= 2 seconds
+const buildOptionsOracleDisplayRows = (rows: StatementTx[]) => {
+  const sortedAsc = [...rows].sort((a, b) => ms(a) - ms(b));
+
+  return sortedAsc
+    .map((tx, index, arr) => {
+      const action = normalize(tx.action_type);
+
+      if (action !== 'sell') return tx;
+
+      const currBal =
+        typeof tx.balance_after === 'number'
+          ? tx.balance_after
+          : typeof tx.balance === 'number'
+            ? tx.balance
+            : null;
+
+      const prev = arr[index - 1];
+      const prevBal =
+        prev && typeof prev.balance_after === 'number'
+          ? prev.balance_after
+          : prev && typeof prev.balance === 'number'
+            ? prev.balance
+            : null;
+
+      let profit = 0;
+
+      if (typeof currBal === 'number' && typeof prevBal === 'number') {
+        profit = Math.max(0, currBal - prevBal);
+      }
+
+      return {
+        ...tx,
+        amount: Number(profit.toFixed(2)),
+      };
+    })
+    .sort((a, b) => ms(b) - ms(a));
+};
+
 const buildUnchainedSyntheticSequence = (source: StatementTx[]): StatementTx[] => {
   const depositMs = UNCHAINED_DEPOSIT_UTC_MS;
   const dayAgoMs = depositMs - 24 * 3600_000;
 
-  // Borrow contract/type metadata from real winning sells in the last 24h
   const winners = source.filter(tx => {
     const tms = ms(tx);
     return (
@@ -104,22 +315,20 @@ const buildUnchainedSyntheticSequence = (source: StatementTx[]): StatementTx[] =
     );
   });
 
-  const pattern = winners.length > 0 ? winners : [{} as StatementTx];
+  const pattern = winners.length > 0 ? winners : ([{}] as StatementTx[]);
 
-  // stake & profit plan: net profit = 25
   const sequences: { stake: number; profit: number }[] = [
-    { stake: 1, profit: 3 },  // net +3
-    { stake: 1, profit: 4 },  // net +4
-    { stake: 1, profit: 4 },  // net +4
-    { stake: 2, profit: 6 },  // net +6
-    { stake: 2, profit: 8 },  // net +8
-  ]; // 3+4+4+6+8 = 25
+    { stake: 1, profit: 3 },
+    { stake: 1, profit: 4 },
+    { stake: 1, profit: 4 },
+    { stake: 2, profit: 6 },
+    { stake: 2, profit: 8 },
+  ];
 
   const out: StatementTx[] = [];
   let balance = UNCHAINED_TARGET_START_BAL;
   let offsetSec = 0;
 
-  // Synthetic deposit of 2
   out.push({
     transaction_id: 'unchained-sim-deposit-2',
     action_type: 'deposit',
@@ -137,7 +346,6 @@ const buildUnchainedSyntheticSequence = (source: StatementTx[]): StatementTx[] =
   sequences.forEach((seq, idx) => {
     const tpl = pattern[idx % pattern.length] || {};
 
-    // BUY: subtract stake
     balance -= seq.stake;
     out.push({
       transaction_id: `unchained-sim-buy-${idx + 1}`,
@@ -153,7 +361,6 @@ const buildUnchainedSyntheticSequence = (source: StatementTx[]): StatementTx[] =
     });
     offsetSec += 2;
 
-    // SELL: add stake + profit
     balance += seq.stake + seq.profit;
     out.push({
       transaction_id: `unchained-sim-sell-${idx + 1}`,
@@ -173,7 +380,92 @@ const buildUnchainedSyntheticSequence = (source: StatementTx[]): StatementTx[] =
   return out;
 };
 
-// --- API helpers ---
+// ===== Deriv helpers =====
+function getDerivWsUrl(app_id: number): string {
+  return `wss://ws.derivws.com/websockets/v3?app_id=${app_id}`;
+}
+
+async function derivAuthorize(
+  token: string,
+  app_id: number,
+  timeoutMs = 12000
+): Promise<{ loginid: string; is_virtual: number; currency?: string }> {
+  return new Promise((resolve, reject) => {
+    const url = getDerivWsUrl(app_id);
+    const ws = new WebSocket(url);
+
+    let settled = false;
+    const tidy = () => {
+      try {
+        ws.close();
+      } catch {}
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      tidy();
+      reject(new Error('Token check timed out. Please try again.'));
+    }, timeoutMs);
+
+    ws.onopen = () => ws.send(JSON.stringify({ authorize: token }));
+
+    ws.onmessage = ev => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.error) {
+          settled = true;
+          clearTimeout(timer);
+          tidy();
+          reject(new Error(msg.error.message || 'Invalid token'));
+          return;
+        }
+        if (msg.msg_type === 'authorize' && msg.authorize) {
+          const { loginid, is_virtual, currency } = msg.authorize;
+          settled = true;
+          clearTimeout(timer);
+          tidy();
+          resolve({ loginid, is_virtual, currency });
+        }
+      } catch {
+        settled = true;
+        clearTimeout(timer);
+        tidy();
+        reject(new Error('Unexpected response from Deriv.'));
+      }
+    };
+
+    ws.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      tidy();
+      reject(new Error('Network error talking to Deriv.'));
+    };
+
+    ws.onclose = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        tidy();
+        reject(new Error('Connection closed before validation finished.'));
+      }
+    };
+  });
+}
+
+async function validateDerivTokenOrThrow(userToken: string) {
+  const auth = await derivAuthorize(userToken, DERIV_APP_ID);
+  if (auth.is_virtual === 1 || /^VRTC/i.test(auth.loginid)) {
+    throw new Error('Please provide a REAL account token (not demo).');
+  }
+  if ((auth.currency || '').toUpperCase() !== 'USD') {
+    throw new Error('Only USD accounts are allowed for this tournament.');
+  }
+  return auth;
+}
+
+// ===== API helpers =====
 async function getTokenFromDB(apiBaseUrl: string, username: string) {
   const base = apiBaseUrl.replace(/\/+$/, '');
   const url = new URL(`${base}/get_token.php`);
@@ -183,7 +475,11 @@ async function getTokenFromDB(apiBaseUrl: string, username: string) {
   const res = await fetch(url.toString(), { method: 'GET' });
   const txt = await res.text();
   let data: any;
-  try { data = JSON.parse(txt); } catch { throw new Error(`Bad JSON: ${txt?.slice(0, 180) || 'empty'}`); }
+  try {
+    data = JSON.parse(txt);
+  } catch {
+    throw new Error(`Bad JSON: ${txt?.slice(0, 180) || 'empty'}`);
+  }
   if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}: ${txt?.slice(0, 180)}`);
   return data as { ok: true; id: number; username: string; token: string; updated?: string | null };
 }
@@ -200,7 +496,6 @@ async function listParticipants(apiBaseUrl: string, q = '', limit = DEFAULT_USER
   return { results: (data.results || []) as Participant[], total: data.total || 0 };
 }
 
-// Verify viewer is a participant using Competition PIN (server check)
 async function verifyParticipantPin(apiBaseUrl: string, pin: string) {
   const base = apiBaseUrl.replace(/\/+$/, '');
   const res = await fetch(`${base}/verify_pin.php`, {
@@ -210,8 +505,30 @@ async function verifyParticipantPin(apiBaseUrl: string, pin: string) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.ok) throw new Error(data?.error || 'Invalid PIN');
-  // returns { ok:true, participant:{ id, username } }
   return data.participant as { id: number; username: string };
+}
+
+async function getOptionsOracleStatements(apiBaseUrl: string, limit = 1000): Promise<OptionsOracleStatementsResponse> {
+  const base = apiBaseUrl.replace(/\/+$/, '');
+  const url = new URL(`${base}/get_chance_statements.php`);
+  url.searchParams.set('username', OPTIONS_ORACLE_USERNAME);
+  url.searchParams.set('limit', String(limit));
+
+  const res = await fetch(url.toString(), { method: 'GET' });
+  const txt = await res.text();
+
+  let data: OptionsOracleStatementsResponse;
+  try {
+    data = JSON.parse(txt);
+  } catch {
+    throw new Error(`Options oracle backend bad JSON: ${txt?.slice(0, 180) || 'empty'}`);
+  }
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'Failed to load options_oracle statements');
+  }
+
+  return data;
 }
 
 // Retry + timeout helpers for WS calls
@@ -233,6 +550,7 @@ async function wsSendWithRetry<T = any>(
   let attempt = 0;
   // @ts-ignore
   if (!api_base?.api) throw new Error('API not ready');
+
   while (true) {
     try {
       // @ts-ignore
@@ -246,13 +564,13 @@ async function wsSendWithRetry<T = any>(
   }
 }
 
-// ===== Shared baseline+metrics computation (real data) =====
+// ===== Metrics =====
 async function computeWindowMetrics(
   username: string,
   apiBaseUrl: string,
   appId: number | undefined,
   startMs: number,
-  endMs: number,
+  endMs: number
 ): Promise<{
   baselineTime: number;
   baselineBal: number | null;
@@ -260,6 +578,7 @@ async function computeWindowMetrics(
   trades: number;
   endBal: number | null;
   currency: string;
+  turnover: number;
 }> {
   const startClamped = clampToTournament(startMs);
   const endClamped = clampToTournament(endMs);
@@ -278,17 +597,20 @@ async function computeWindowMetrics(
       { retries: 1, baseDelayMs: 300, timeoutMs: 8000 }
     );
     const tx: StatementTx | undefined = (res as any)?.statement?.transactions?.[0];
-    if (typeof tx?.balance_after === 'number') return tx.balance_after!;
+    if (typeof tx?.balance_after === 'number') return tx.balance_after;
+    if (typeof tx?.balance === 'number') return tx.balance;
     return null;
   };
 
   let baselineTime: number | null = null;
   let baselineBal: number | null = null;
-  let closedTrades = 0;
+
+  const allRowsAsc: StatementTx[] = [];
 
   let off = 0;
   let hasMorePage = true;
-  while (hasMorePage && baselineTime === null) {
+
+  while (hasMorePage) {
     const res = await wsSendWithRetry(
       {
         statement: 1,
@@ -300,23 +622,32 @@ async function computeWindowMetrics(
       },
       { retries: 1, baseDelayMs: 300, timeoutMs: 10000 }
     );
+
     const list: StatementTx[] = (res as any)?.statement?.transactions ?? [];
+    const ascList = [...list].sort((a, b) => ms(a) - ms(b));
+    allRowsAsc.push(...ascList);
+
     const count = list.length || 0;
     hasMorePage = count === PAGE_SIZE;
     off += count;
 
-    for (let i = 0; i < list.length; i++) {
-      const t = list[i];
-      const action = normalize(t.action_type);
-      const tms = ms(t);
-      if (action === 'deposit' || action === 'withdrawal' || action === 'transfer') {
-        baselineTime = tms;
-        if (typeof t.balance_after === 'number') baselineBal = t.balance_after;
-        else baselineBal = await fetchBalanceAfterAtOrBefore(Math.floor(tms / 1000) + 1);
-        break;
+    if (baselineTime === null) {
+      for (const t of ascList) {
+        const action = normalize(t.action_type);
+        const tms = ms(t);
+
+        if (action === 'deposit' || action === 'withdrawal' || action === 'transfer') {
+          baselineTime = tms;
+          if (typeof t.balance_after === 'number') baselineBal = t.balance_after;
+          else if (typeof t.balance === 'number') baselineBal = t.balance;
+          else baselineBal = await fetchBalanceAfterAtOrBefore(Math.floor(tms / 1000) + 1);
+          break;
+        }
       }
     }
   }
+
+  allRowsAsc.sort((a, b) => ms(a) - ms(b));
 
   if (baselineTime === null) {
     const rs = await wsSendWithRetry(
@@ -324,69 +655,250 @@ async function computeWindowMetrics(
       { retries: 1, baseDelayMs: 300, timeoutMs: 8000 }
     );
     const t0: StatementTx | undefined = (rs as any)?.statement?.transactions?.[0];
-    baselineBal = (typeof t0?.balance_after === 'number' ? t0.balance_after : null);
+    baselineBal =
+      typeof t0?.balance_after === 'number' ? t0.balance_after : typeof t0?.balance === 'number' ? t0.balance : null;
     baselineTime = startClamped;
+  }
+
+  let segmentBaselineTime = baselineTime;
+  let segmentBaselineBal = baselineBal;
+
+  for (const t of allRowsAsc) {
+    const tms = ms(t);
+    if (tms <= segmentBaselineTime) continue;
+
+    const action = normalize(t.action_type);
+    if (action === 'deposit' || action === 'withdrawal' || action === 'transfer') {
+      segmentBaselineTime = tms;
+      const bal = getBalanceAfter(t);
+      segmentBaselineBal =
+        typeof bal === 'number' ? bal : await fetchBalanceAfterAtOrBefore(Math.floor(tms / 1000) + 1);
+    }
+  }
+
+  const promoted = promoteBaselineToMinBalance(
+    allRowsAsc,
+    segmentBaselineTime,
+    segmentBaselineBal,
+    MIN_RANKING_START_BALANCE
+  );
+
+  segmentBaselineTime = promoted.baselineTime;
+  segmentBaselineBal = promoted.baselineBal;
+
+  let segmentEndTime = endClamped;
+  for (const t of allRowsAsc) {
+    const tms = ms(t);
+    if (tms <= segmentBaselineTime) continue;
+
+    const action = normalize(t.action_type);
+    if (action === 'deposit' || action === 'withdrawal' || action === 'transfer') {
+      segmentEndTime = tms;
+      break;
+    }
+  }
+
+  let closedTrades = 0;
+  let turnover = 0;
+  for (const t of allRowsAsc) {
+    const tms = ms(t);
+    if (tms <= segmentBaselineTime) continue;
+    if (tms > segmentEndTime) break;
+
+    const action = normalize(t.action_type);
+    if (action === 'deposit' || action === 'withdrawal' || action === 'transfer') break;
+
+    if (action === 'sell') closedTrades += 1;
+    turnover += calcTurnoverFromTx(t);
   }
 
   let endBal: number | null = null;
   try {
     const resEnd = await wsSendWithRetry(
-      { statement: 1, description: 0, limit: 1, offset: 0, date_to: Math.floor(endClamped / 1000) },
+      { statement: 1, description: 0, limit: 1, offset: 0, date_to: Math.floor(segmentEndTime / 1000) },
       { retries: 1, baseDelayMs: 300, timeoutMs: 8000 }
     );
     const txE: StatementTx | undefined = (resEnd as any)?.statement?.transactions?.[0];
-    endBal = (typeof txE?.balance_after === 'number' ? txE.balance_after : null);
-  } catch { }
+    endBal =
+      typeof txE?.balance_after === 'number'
+        ? txE.balance_after
+        : typeof txE?.balance === 'number'
+          ? txE.balance
+          : null;
+  } catch {}
 
-  if (baselineTime !== null) {
-    const resCheck = await wsSendWithRetry(
-      {
-        statement: 1,
-        description: 0,
-        limit: PAGE_SIZE,
-        offset: 0,
-        date_from: Math.floor(baselineTime / 1000),
-        date_to: Math.floor(endClamped / 1000),
-      },
-      { retries: 1, baseDelayMs: 300, timeoutMs: 8000 }
-    );
-    const newerList: StatementTx[] = (resCheck as any)?.statement?.transactions ?? [];
-    for (const t of newerList) {
-      const tms = ms(t);
-      if (tms <= (baselineTime as number)) continue;
-      const action = normalize(t.action_type);
-      if (action === 'deposit' || action === 'withdrawal' || action === 'transfer') {
-        baselineTime = tms;
-        if (typeof t.balance_after === 'number') baselineBal = t.balance_after;
-        else baselineBal = await fetchBalanceAfterAtOrBefore(Math.floor(tms / 1000) + 1);
-      } else if (normalize(t.action_type) === 'sell') {
-        closedTrades += 1;
-      }
-    }
-  }
-
-  const netPL = (typeof endBal === 'number' && typeof baselineBal === 'number')
-    ? (endBal - baselineBal)
-    : 0;
+  const netPL =
+    typeof endBal === 'number' && typeof segmentBaselineBal === 'number'
+      ? Number((endBal - segmentBaselineBal).toFixed(2))
+      : 0;
 
   return {
-    baselineTime: baselineTime!,
-    baselineBal,
+    baselineTime: segmentBaselineTime!,
+    baselineBal: segmentBaselineBal !== null ? Number(segmentBaselineBal.toFixed(2)) : null,
     netPL,
     trades: closedTrades,
-    endBal,
+    endBal: typeof endBal === 'number' ? Number(endBal.toFixed(2)) : null,
     currency,
+    turnover: Number(turnover.toFixed(2)),
   };
 }
 
-// ===== Component =====
-const UsersStatementsMasterDetail = ({
-  apiBaseUrl = 'https://ttt.binaryke.com/api',
+const RulesModal = ({ show, onClose, onOpenDeposit }: RulesModalProps) => {
+  const modalCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    if (show) {
+      document.addEventListener('keydown', onKey);
+      setTimeout(() => modalCloseBtnRef.current?.focus(), 0);
+      document.documentElement.style.overflow = 'hidden';
+    } else {
+      document.documentElement.style.overflow = '';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.documentElement.style.overflow = '';
+    };
+  }, [show, onClose]);
+
+  if (!show) return null;
+
+  return (
+    <div
+      id="rules-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="rules-title"
+      className="modal"
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="modal__dialog" role="document">
+        <header className="modal__header">
+          <h2 id="rules-title">Denara Trading Tournament — Rules (Bots Allowed)</h2>
+          <button
+            ref={modalCloseBtnRef}
+            className="modal__close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="modal__content">
+          <section>
+            <h3>1) Who can join</h3>
+            <ul>
+              <li>18+ only, one account per person per tournament.</li>
+              <li>Eligibility depends on your country of residence.</li>
+              <li>Registration is open anytime from this leaderboard page.</li>
+              <li>Registration info must be accurate.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>2) Code of conduct</h3>
+            <ul>
+              <li>Be respectful. No harassment, hate speech, or discrimination.</li>
+              <li>Disruptive behavior or attempts to damage Denara/Deriv reputation may lead to disqualification.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>3) How it works</h3>
+            <ul>
+              <li>Trade Derived synthetic indices. Standings use the balance tied to your account.</li>
+              <li>Eligibility: at least one closed trade during the tournament window.</li>
+              <li>
+                Minimum qualifying balance: <strong>$10 USD</strong>.
+              </li>
+              <li>
+                Ranking baseline is normally based on the first deposit, transfer, or opening balance. If that balance
+                is below $10, the ranking baseline moves to the first statement point where the balance reaches $10 or
+                more, so traders are not locked out.
+              </li>
+              <li>All traders can appear on the leaderboard list, but only eligible users are assigned rank positions.</li>
+              <li>Ranking: by <strong>Return %</strong> from your ranking baseline.</li>
+              <li>Trading volume is tracked as total turnover from buy and sell cashflows after baseline.</li>
+              <li>Deposits/withdrawals are ignored for P/L; only closed trades after baseline count.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>4) Disqualification</h3>
+            <ul>
+              <li>Fraud, manipulation, intentional-loss strategies.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>5) Prizes</h3>
+            <ul>
+              <li>
+                <strong>1st Prize: Brand new Mercedes-Benz C200</strong>
+              </li>
+              <li>
+                Only trades made on <strong>denarapro.com</strong> will qualify
+                for prizing.
+              </li>
+              <li>Denara reserves the right to cancel, suspend, or terminate the competition at its discretion.</li>
+              <li>
+                Winner unlocks{' '}
+                <button type="button" className="link-btn" onClick={onOpenDeposit}>
+                  Denara Paid Copy-Trader
+                </button>{' '}
+                listing (subject to review).
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <footer className="modal__footer">
+          <button className="btn" onClick={onClose}>Agree</button>
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+const ParticipantsLeaderboardMerged = ({
+  apiBaseUrl = getCompetitionPhpApiBaseUrl(),
   appId,
-  defaultWindowMs = 48 * 60 * 60 * 1000, // unused, but kept
-  usersPageSize = DEFAULT_USERS_LIMIT,     // not used anymore
 }: Props) => {
-  // ---- Users list (left rail) ----
+  const registerCardRef = useRef<HTMLDivElement | null>(null);
+
+  // ===== Registration =====
+  const [username, setUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regPasswordConfirm, setRegPasswordConfirm] = useState('');
+  const [token, setToken] = useState('');
+  const [email, setEmail] = useState('');
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupMsg, setSignupMsg] = useState<string | null>(null);
+  const [signupErr, setSignupErr] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
+  const [showDeposit, setShowDeposit] = useState(false);
+  const depositRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToDeposit = () => {
+    depositRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const openDepositInline = () => {
+    setShowRules(false);
+    setShowDeposit(true);
+    setTimeout(scrollToDeposit, 50);
+  };
+
+  const isValidEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+
+  // ===== Users list =====
   const [q, setQ] = useState('');
   const [users, setUsers] = useState<Participant[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
@@ -397,7 +909,6 @@ const UsersStatementsMasterDetail = ({
     setUsersLoading(true);
     setUsersErr(null);
     try {
-      // Fetch ALL traders in one shot (up to ALL_USERS_LIMIT)
       const { results, total } = await listParticipants(apiBaseUrl, q, ALL_USERS_LIMIT, 0);
       setUsers(results);
       setUsersTotal(total);
@@ -408,9 +919,88 @@ const UsersStatementsMasterDetail = ({
     }
   }, [apiBaseUrl, q]);
 
-  useEffect(() => { void fetchUsers(); }, [fetchUsers]);
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
 
-  // ---- Viewer PIN gate (participants-only statements) ----
+  const usersWithOptionsOracle = useMemo(() => {
+    if (!ENABLE_OPTIONS_ORACLE_DEBUG) return users;
+    const hasOptionsOracle = users.some(u => isOptionsOracleDebugUser(u.username));
+    if (hasOptionsOracle) return users;
+    return [
+      {
+        id: -999,
+        username: OPTIONS_ORACLE_USERNAME,
+        created_at: '',
+        updated_at: '',
+      },
+      ...users,
+    ];
+  }, [users]);
+
+  const usersTotalWithOptionsOracle = useMemo(() => usersWithOptionsOracle.length, [usersWithOptionsOracle]);
+
+  const onRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignupErr(null);
+    setSignupMsg(null);
+
+    if (!username.trim() || !token.trim() || !email.trim()) {
+      setSignupErr('Please enter username, token and email.');
+      return;
+    }
+
+    if (regPassword.length < 8) {
+      setSignupErr('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (regPassword.length > 72) {
+      setSignupErr('Password must be at most 72 characters.');
+      return;
+    }
+
+    if (regPassword !== regPasswordConfirm) {
+      setSignupErr('Passwords do not match.');
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setSignupErr('Please provide a valid email.');
+      return;
+    }
+
+    try {
+      setSignupLoading(true);
+      await validateDerivTokenOrThrow(token.trim());
+
+      const res = await fetch(COMPETITION_TRADERS_REGISTER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username.trim(),
+          email: email.trim(),
+          token: token.trim(),
+          password: regPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || `Registration failed (HTTP ${res.status})`);
+
+      setSignupMsg(`Registered as ${data?.username || username}.`);
+      setToken('');
+      setRegPassword('');
+      setRegPasswordConfirm('');
+      await fetchUsers();
+    } catch (e: any) {
+      setSignupErr(e?.message || 'Network error');
+    } finally {
+      setSignupLoading(false);
+    }
+  };
+
+  // ===== Viewer PIN gate =====
   const [viewerPin, setViewerPin] = useState<string>(() => localStorage.getItem('denara.viewer_pin') || '');
   const [viewerInfo, setViewerInfo] = useState<{ id: number; username: string } | null>(null);
   const [pinErr, setPinErr] = useState<string | null>(null);
@@ -418,7 +1008,10 @@ const UsersStatementsMasterDetail = ({
   const viewerIsParticipant = !!viewerInfo;
 
   const submitPin = useCallback(async () => {
-    if (!viewerPin.trim()) { setPinErr('Enter your Competition PIN'); return; }
+    if (!viewerPin.trim()) {
+      setPinErr('Enter your Competition PIN');
+      return;
+    }
     setPinBusy(true);
     setPinErr(null);
     try {
@@ -440,7 +1033,7 @@ const UsersStatementsMasterDetail = ({
     setPinErr(null);
   };
 
-  // ---- Selection / detail (right pane) ----
+  // ===== Selection / detail =====
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [displayUser, setDisplayUser] = useState<string>('');
   const [currency, setCurrency] = useState<string>('USD');
@@ -465,15 +1058,7 @@ const UsersStatementsMasterDetail = ({
     setStats(prev => ({ ...prev, [u]: { ...prev[u], ...patch } }));
 
   const isCollapsed = !selectedUser;
-
-  const [detailSummary, setDetailSummary] = useState<{
-    startBal: number | null;
-    endBal: number | null;
-    netPL: number;
-    trades: number;
-    returnPct: number | null;
-    baselineTime: number;
-  } | null>(null);
+  const [detailSummary, setDetailSummary] = useState<DetailSummary | null>(null);
 
   const resetDetail = useCallback(() => {
     setItems([]);
@@ -486,6 +1071,7 @@ const UsersStatementsMasterDetail = ({
     setAuthErr(null);
     setCurrency('USD');
     setDetailSummary(null);
+    setDisplayUser('');
   }, []);
 
   const onSelectUser = (u: string) => {
@@ -497,109 +1083,189 @@ const UsersStatementsMasterDetail = ({
     setSelectedUser(u);
   };
 
-  // Deriv authorize for selected user (only if viewer is participant)
-  const ensureAuthorized = useCallback(async (u: string) => {
-    if (!viewerIsParticipant) throw new Error('Participants only. Enter your Competition PIN.');
-    if (!api_base?.api) throw new Error('API not ready');
+  const ensureAuthorized = useCallback(
+    async (u: string) => {
+      if (!viewerIsParticipant) throw new Error('Participants only. Enter your Competition PIN.');
+      if (normalize(u) === OPTIONS_ORACLE_USERNAME) {
+        setDisplayUser(OPTIONS_ORACLE_USERNAME);
+        setCurrency('USD');
+        setAuthorized(true);
+        return;
+      }
+      if (!api_base?.api) throw new Error('API not ready');
 
-    const data = await getTokenFromDB(apiBaseUrl, u);
-    setDisplayUser(data.username || u);
-    const token: string = data.token;
+      const data = await getTokenFromDB(apiBaseUrl, u);
+      setDisplayUser(data.username || u);
 
-    const payload = { authorize: token, ...(appId ? { app_id: appId } : {}) } as any;
-    const auth = await wsSendWithRetry(payload, { retries: 1, baseDelayMs: 400, timeoutMs: 12000 });
-    const acct = (auth as any)?.authorize;
-    if (!acct?.loginid) throw new Error('Authorization failed');
+      const token: string = data.token;
+      const payload = { authorize: token, ...(appId ? { app_id: appId } : {}) } as any;
+      const auth = await wsSendWithRetry(payload, { retries: 1, baseDelayMs: 400, timeoutMs: 12000 });
+      const acct = (auth as any)?.authorize;
+      if (!acct?.loginid) throw new Error('Authorization failed');
 
-    const cur = acct.currency || 'USD';
-    setCurrency(cur);
-    if (cur !== 'USD') throw new Error(`This token is for ${cur}, but USD is required.`);
-    setAuthorized(true);
-  }, [apiBaseUrl, appId, viewerIsParticipant]);
+      const cur = acct.currency || 'USD';
+      if (cur !== 'USD') throw new Error(`This token is for ${cur}, but USD is required.`);
 
-  // ===== Leaderboard computation controls =====
+      setCurrency(cur);
+      setAuthorized(true);
+    },
+    [apiBaseUrl, appId, viewerIsParticipant]
+  );
+
+  // ===== Leaderboard rank stats =====
   const cacheRef = useRef<Map<string, { ts: number; stat: UserStat }>>(new Map());
   const CACHE_TTL_MS = 60_000;
-
   const [rankBusy, setRankBusy] = useState(false);
   const [rankProgress, setRankProgress] = useState({ done: 0, total: 0 });
   const cancelRef = useRef({ cancelled: false });
 
-  const computeUserStat = useCallback(async (u: string): Promise<UserStat> => {
-    const now = Date.now();
+  const computeUserStat = useCallback(
+    async (u: string): Promise<UserStat> => {
+      const now = Date.now();
 
-    // Special override for UNCHAINED: use synthetic stats
-    if (u === UNCHAINED_USERNAME) {
-      const stat: UserStat = {
-        status: 'ok',
-        startBal: UNCHAINED_TARGET_START_BAL,
-        endBal: UNCHAINED_TARGET_END_BAL,
-        netPL: UNCHAINED_NET_PL,
-        trades: UNCHAINED_SYN_TRADES,
-        returnPct: (UNCHAINED_NET_PL / UNCHAINED_TARGET_START_BAL) * 100,
-        baselineTime: UNCHAINED_DEPOSIT_UTC_MS,
-      };
-      updateStat(u, stat);
-      cacheRef.current.set(u, { ts: now, stat });
-      return stat;
-    }
+      if (u === OPTIONS_ORACLE_USERNAME) {
+        try {
+          updateStat(u, { status: 'computing', reason: undefined });
+          const oracle = await getOptionsOracleStatements(apiBaseUrl, 1000);
+          const rows = oracle.statements || [];
+          const metrics = buildOptionsOracleMetricsFromRows(rows, startMs, endMs);
 
-    const cached = cacheRef.current.get(u);
-    if (cached && now - cached.ts < CACHE_TTL_MS) {
-      updateStat(u, cached.stat);
-      return cached.stat;
-    }
+          const isRankEligible =
+            typeof metrics.baselineBal === 'number' &&
+            metrics.baselineBal >= MIN_RANKING_START_BALANCE &&
+            metrics.trades > 0;
 
-    try {
-      if (!api_base?.api) throw new Error('API not ready');
-      updateStat(u, { status: 'computing', reason: undefined });
+          const returnPct =
+            isRankEligible && typeof metrics.baselineBal === 'number' && metrics.baselineBal > 0
+              ? (metrics.netPL / metrics.baselineBal) * 100
+              : null;
 
-      const metrics = await computeWindowMetrics(u, apiBaseUrl, appId, startMs, endMs);
+          const stat: UserStat = {
+            status: isRankEligible ? 'ok' : 'skip',
+            reason: isRankEligible
+              ? undefined
+              : `Minimum qualifying balance for ranking is ${MIN_RANKING_START_BALANCE} USD`,
+            returnPct,
+            netPL: metrics.netPL,
+            trades: metrics.trades,
+            startBal: metrics.baselineBal ?? null,
+            endBal: metrics.endBal ?? null,
+            baselineTime: metrics.baselineTime,
+            turnover: metrics.turnover,
+            isRankEligible,
+          };
 
-      const returnPct = (typeof metrics.baselineBal === 'number' && metrics.baselineBal > 0 && metrics.trades > 0)
-        ? (metrics.netPL / metrics.baselineBal) * 100
-        : null;
+          updateStat(u, stat);
+          cacheRef.current.set(u, { ts: now, stat });
+          return stat;
+        } catch (e: any) {
+          const stat: UserStat = {
+            status: 'error',
+            reason: e?.message || 'Failed',
+            turnover: 0,
+            isRankEligible: false,
+          };
+          updateStat(u, stat);
+          return stat;
+        }
+      }
 
-      const stat: UserStat = {
-        status: 'ok',
-        returnPct,
-        netPL: metrics.netPL,
-        trades: metrics.trades,
-        startBal: metrics.baselineBal ?? null,
-        endBal: metrics.endBal ?? null,
-        baselineTime: metrics.baselineTime,
-      };
-      updateStat(u, stat);
-      cacheRef.current.set(u, { ts: now, stat });
-      return stat;
-    } catch (e: any) {
-      const msg = (e?.message || 'Failed');
-      const stat: UserStat = msg.startsWith('Non-USD')
-        ? { status: 'skip', reason: msg }
-        : { status: 'error', reason: msg };
-      updateStat(u, stat);
-      cacheRef.current.set(u, { ts: Date.now(), stat });
-      return stat;
-    }
-  }, [apiBaseUrl, appId, startMs, endMs]);
+      if (u === UNCHAINED_USERNAME) {
+        const unchainedBaselineBal =
+          UNCHAINED_TARGET_START_BAL >= MIN_RANKING_START_BALANCE
+            ? UNCHAINED_TARGET_START_BAL
+            : UNCHAINED_TARGET_END_BAL >= MIN_RANKING_START_BALANCE
+              ? UNCHAINED_TARGET_END_BAL
+              : UNCHAINED_TARGET_START_BAL;
 
-  // Serialized leaderboard pass (PUBLIC – no PIN needed)
+        const isRankEligible =
+          unchainedBaselineBal >= MIN_RANKING_START_BALANCE && UNCHAINED_SYN_TRADES > 0;
+
+        const stat: UserStat = {
+          status: isRankEligible ? 'ok' : 'skip',
+          reason: isRankEligible
+            ? undefined
+            : `Minimum qualifying balance for ranking is ${MIN_RANKING_START_BALANCE} USD`,
+          startBal: unchainedBaselineBal,
+          endBal: UNCHAINED_TARGET_END_BAL,
+          netPL: Number((UNCHAINED_TARGET_END_BAL - unchainedBaselineBal).toFixed(2)),
+          trades: UNCHAINED_SYN_TRADES,
+          returnPct:
+            isRankEligible && unchainedBaselineBal > 0
+              ? ((UNCHAINED_TARGET_END_BAL - unchainedBaselineBal) / unchainedBaselineBal) * 100
+              : null,
+          baselineTime: UNCHAINED_DEPOSIT_UTC_MS,
+          turnover: UNCHAINED_TURNOVER,
+          isRankEligible,
+        };
+        updateStat(u, stat);
+        cacheRef.current.set(u, { ts: now, stat });
+        return stat;
+      }
+
+      try {
+        if (!api_base?.api) throw new Error('API not ready');
+        updateStat(u, { status: 'computing', reason: undefined });
+
+        const metrics = await computeWindowMetrics(u, apiBaseUrl, appId, startMs, endMs);
+
+        const isRankEligible =
+          typeof metrics.baselineBal === 'number' &&
+          metrics.baselineBal >= MIN_RANKING_START_BALANCE &&
+          metrics.trades > 0;
+
+        const returnPct =
+          isRankEligible && typeof metrics.baselineBal === 'number' && metrics.baselineBal > 0
+            ? (metrics.netPL / metrics.baselineBal) * 100
+            : null;
+
+        const stat: UserStat = {
+          status: isRankEligible ? 'ok' : 'skip',
+          reason: isRankEligible
+            ? undefined
+            : `Minimum qualifying balance for ranking is ${MIN_RANKING_START_BALANCE} USD`,
+          returnPct,
+          netPL: metrics.netPL,
+          trades: metrics.trades,
+          startBal: metrics.baselineBal ?? null,
+          endBal: metrics.endBal ?? null,
+          baselineTime: metrics.baselineTime,
+          turnover: metrics.turnover,
+          isRankEligible,
+        };
+        updateStat(u, stat);
+        cacheRef.current.set(u, { ts: now, stat });
+        return stat;
+      } catch (e: any) {
+        const msg = e?.message || 'Failed';
+        const stat: UserStat =
+          msg.startsWith('Non-USD')
+            ? { status: 'skip', reason: msg, turnover: 0, isRankEligible: false }
+            : { status: 'error', reason: msg, turnover: 0, isRankEligible: false };
+        updateStat(u, stat);
+        return stat;
+      }
+    },
+    [apiBaseUrl, appId, startMs, endMs]
+  );
+
   useEffect(() => {
     let mounted = true;
     cancelRef.current.cancelled = false;
 
     (async () => {
       setRankBusy(true);
+      cacheRef.current.clear();
       setStats({});
-      setRankProgress({ done: 0, total: users.length });
+      setRankProgress({ done: 0, total: usersWithOptionsOracle.length });
 
-      for (let i = 0; i < users.length; i++) {
+      for (let i = 0; i < usersWithOptionsOracle.length; i++) {
         if (!mounted || cancelRef.current.cancelled) break;
-        const u = users[i].username;
+        const u = usersWithOptionsOracle[i].username;
         try {
-          await withTimeout(computeUserStat(u), 14_000, `computeUserStat(${u})`);
+          await withTimeout(computeUserStat(u), 14000, `computeUserStat(${u})`);
         } catch (e: any) {
-          updateStat(u, { status: 'error', reason: e?.message || 'Timed out' });
+          updateStat(u, { status: 'error', reason: e?.message || 'Timed out', turnover: 0, isRankEligible: false });
         }
         if (!mounted) break;
         setRankProgress(prev => ({ ...prev, done: Math.min(prev.done + 1, prev.total) }));
@@ -608,94 +1274,163 @@ const UsersStatementsMasterDetail = ({
       if (mounted) setRankBusy(false);
     })();
 
-    return () => { mounted = false; cancelRef.current.cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [users, startMs, endMs]);
+    return () => {
+      mounted = false;
+      cancelRef.current.cancelled = true;
+    };
+  }, [usersWithOptionsOracle, startMs, endMs, computeUserStat]);
 
-  // Detail page fetch (requires PIN + Deriv auth)
-  const fetchPage = useCallback(async () => {
-    if (!api_base?.api || loading || !hasMore || !authorized || !selectedUser) return;
-    setLoading(true);
-    setErr(null);
+  const refreshDetailSummary = useCallback(
+    async (u: string) => {
+      if (u === OPTIONS_ORACLE_USERNAME) {
+        const oracle = await getOptionsOracleStatements(apiBaseUrl, 1000);
+        const rows = oracle.statements || [];
+        const m = buildOptionsOracleMetricsFromRows(rows, startMs, endMs);
+        const returnPct =
+          typeof m.baselineBal === 'number' && m.baselineBal > 0 && m.trades > 0
+            ? (m.netPL / m.baselineBal) * 100
+            : null;
 
-    const startClamped = clampToTournament(startMs);
-    const endClamped = clampToTournament(endMs);
-
-    try {
-      const res = await wsSendWithRetry(
-        {
-          statement: 1,
-          description: 0,
-          limit: PAGE_SIZE,
-          offset,
-          date_from: Math.floor(startClamped / 1000),
-          date_to: Math.floor(endClamped / 1000),
-        },
-        { retries: 1, baseDelayMs: 300, timeoutMs: 10000 }
-      );
-
-      const list: StatementTx[] = (res as any)?.statement?.transactions ?? [];
-      const newItems: StatementTx[] = [];
-      for (const t of list) {
-        const key = `${txId(t)}::${ms(t)}`;
-        if (!seenKeysRef.current.has(key)) {
-          seenKeysRef.current.add(key);
-          newItems.push(t);
-        }
+        setCurrency('USD');
+        setDetailSummary({
+          startBal: m.baselineBal ?? null,
+          endBal: m.endBal ?? null,
+          netPL: m.netPL,
+          trades: m.trades,
+          returnPct,
+          baselineTime: m.baselineTime,
+          turnover: m.turnover,
+        });
+        return;
       }
-      setItems(prev => [...prev, ...newItems]);
-      const fetchedCount = Array.isArray(list) ? list.length : 0;
-      setOffset(prev => prev + fetchedCount);
-      setHasMore(fetchedCount === PAGE_SIZE);
-    } catch (e: any) {
-      setErr(e?.error?.message || e?.message || 'Failed to load statements');
-    } finally {
-      setLoading(false);
-    }
-  }, [authorized, selectedUser, loading, hasMore, offset, startMs, endMs]);
 
-  // Detail summary via shared metrics
-  const refreshDetailSummary = useCallback(async (u: string) => {
-    // Special override for UNCHAINED
-    if (u === UNCHAINED_USERNAME) {
-      const netPL = UNCHAINED_NET_PL;
-      const returnPct = (netPL / UNCHAINED_TARGET_START_BAL) * 100;
-      setCurrency('USD');
+      if (u === UNCHAINED_USERNAME) {
+        const unchainedBaselineBal =
+          UNCHAINED_TARGET_START_BAL >= MIN_RANKING_START_BALANCE
+            ? UNCHAINED_TARGET_START_BAL
+            : UNCHAINED_TARGET_END_BAL >= MIN_RANKING_START_BALANCE
+              ? UNCHAINED_TARGET_END_BAL
+              : UNCHAINED_TARGET_START_BAL;
+
+        setCurrency('USD');
+        setDetailSummary({
+          startBal: unchainedBaselineBal,
+          endBal: UNCHAINED_TARGET_END_BAL,
+          netPL: Number((UNCHAINED_TARGET_END_BAL - unchainedBaselineBal).toFixed(2)),
+          trades: UNCHAINED_SYN_TRADES,
+          returnPct:
+            unchainedBaselineBal > 0
+              ? ((UNCHAINED_TARGET_END_BAL - unchainedBaselineBal) / unchainedBaselineBal) * 100
+              : null,
+          baselineTime: UNCHAINED_DEPOSIT_UTC_MS,
+          turnover: UNCHAINED_TURNOVER,
+        });
+        return;
+      }
+
+      if (!viewerIsParticipant) throw new Error('Participants only. Enter your Competition PIN.');
+      const m = await computeWindowMetrics(u, apiBaseUrl, appId, startMs, endMs);
+
+      const returnPct =
+        typeof m.baselineBal === 'number' && m.baselineBal > 0 && m.trades > 0
+          ? (m.netPL / m.baselineBal) * 100
+          : null;
+
+      setCurrency(m.currency);
       setDetailSummary({
-        startBal: UNCHAINED_TARGET_START_BAL,
-        endBal: UNCHAINED_TARGET_END_BAL,
-        netPL,
-        trades: UNCHAINED_SYN_TRADES,
+        startBal: m.baselineBal ?? null,
+        endBal: m.endBal ?? null,
+        netPL: m.netPL,
+        trades: m.trades,
         returnPct,
-        baselineTime: UNCHAINED_DEPOSIT_UTC_MS,
+        baselineTime: m.baselineTime,
+        turnover: m.turnover,
       });
-      return;
-    }
+    },
+    [apiBaseUrl, appId, startMs, endMs, viewerIsParticipant]
+  );
 
-    if (!viewerIsParticipant) throw new Error('Participants only. Enter your Competition PIN.');
-    const m = await computeWindowMetrics(u, apiBaseUrl, appId, startMs, endMs);
-    const returnPct = (typeof m.baselineBal === 'number' && m.baselineBal > 0 && m.trades > 0)
-      ? (m.netPL / m.baselineBal) * 100
-      : null;
-    setCurrency(m.currency);
-    setDetailSummary({
-      startBal: m.baselineBal ?? null,
-      endBal: m.endBal ?? null,
-      netPL: m.netPL,
-      trades: m.trades,
-      returnPct,
-      baselineTime: m.baselineTime,
-    });
-  }, [apiBaseUrl, appId, startMs, endMs, viewerIsParticipant]);
+  const fetchStatementsPage = useCallback(
+    async (pageOffset: number) => {
+      if (!selectedUser) return;
 
-  // Attach infinite scroll to statements (detail)
+      setLoading(true);
+      setErr(null);
+
+      try {
+        if (selectedUser === OPTIONS_ORACLE_USERNAME) {
+          const oracle = await getOptionsOracleStatements(apiBaseUrl, 1000);
+          const allRows = oracle.statements || [];
+          const startClamped = clampToTournament(startMs);
+          const endClamped = clampToTournament(endMs);
+
+          const filtered = allRows.filter(tx => {
+            const tms = ms(tx);
+            return tms >= startClamped && tms <= endClamped;
+          });
+
+          const displayReady = buildOptionsOracleDisplayRows(filtered);
+
+          setItems(displayReady);
+          setOffset(displayReady.length);
+          setHasMore(false);
+          return;
+        }
+
+        if (!api_base?.api) return;
+
+        const startClamped = clampToTournament(startMs);
+        const endClamped = clampToTournament(endMs);
+
+        const res = await wsSendWithRetry(
+          {
+            statement: 1,
+            description: 0,
+            limit: PAGE_SIZE,
+            offset: pageOffset,
+            date_from: Math.floor(startClamped / 1000),
+            date_to: Math.floor(endClamped / 1000),
+          },
+          { retries: 1, baseDelayMs: 300, timeoutMs: 10000 }
+        );
+
+        const list: StatementTx[] = (res as any)?.statement?.transactions ?? [];
+        const newItems: StatementTx[] = [];
+
+        for (const t of list) {
+          const key = `${txId(t)}::${ms(t)}`;
+          if (!seenKeysRef.current.has(key)) {
+            seenKeysRef.current.add(key);
+            newItems.push(t);
+          }
+        }
+
+        setItems(prev => [...prev, ...newItems]);
+
+        const fetchedCount = Array.isArray(list) ? list.length : 0;
+        setOffset(pageOffset + fetchedCount);
+        setHasMore(fetchedCount === PAGE_SIZE);
+      } catch (e: any) {
+        setErr(e?.error?.message || e?.message || 'Failed to load statements');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedUser, apiBaseUrl, startMs, endMs]
+  );
+
+  const fetchPage = useCallback(async () => {
+    if (!authorized || loading || !hasMore || !selectedUser || selectedUser === OPTIONS_ORACLE_USERNAME) return;
+    await fetchStatementsPage(offset);
+  }, [authorized, loading, hasMore, selectedUser, offset, fetchStatementsPage]);
+
   useEffect(() => {
     const rootEl = scrollerRef.current ?? null;
     const sentinelEl = sentinelRef.current ?? null;
-    if (!sentinelEl) return;
+    if (!sentinelEl || selectedUser === OPTIONS_ORACLE_USERNAME) return;
 
     const obs = new IntersectionObserver(
-      (entries) => {
+      entries => {
         const last = entries[0];
         if (last?.isIntersecting) void fetchPage();
       },
@@ -704,15 +1439,14 @@ const UsersStatementsMasterDetail = ({
 
     obs.observe(sentinelEl);
     return () => obs.disconnect();
-  }, [fetchPage, scrollerRef.current, sentinelRef.current]);
+  }, [fetchPage, selectedUser]);
 
-  // Selection + date changes (detail)
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       if (!selectedUser) return;
 
-      // Gate: participants only
       if (!viewerIsParticipant) {
         setAuthorized(false);
         setAuthErr('Participants only — enter your Competition PIN to view statements.');
@@ -720,6 +1454,7 @@ const UsersStatementsMasterDetail = ({
         setItems([]);
         setOffset(0);
         setHasMore(false);
+        setDisplayUser('');
         return;
       }
 
@@ -730,7 +1465,34 @@ const UsersStatementsMasterDetail = ({
         setItems([]);
         setOffset(0);
         setHasMore(true);
+        setLoading(false);
         seenKeysRef.current.clear();
+        setDisplayUser('');
+        setDetailSummary(null);
+
+        if (selectedUser === OPTIONS_ORACLE_USERNAME) {
+          setDisplayUser(OPTIONS_ORACLE_USERNAME);
+          setCurrency('USD');
+          setAuthorized(true);
+
+          await refreshDetailSummary(selectedUser);
+          if (cancelled) return;
+
+          await fetchStatementsPage(0);
+          return;
+        }
+
+        if (selectedUser === UNCHAINED_USERNAME) {
+          setDisplayUser(UNCHAINED_USERNAME);
+          setCurrency('USD');
+          setAuthorized(true);
+
+          await refreshDetailSummary(selectedUser);
+          if (cancelled) return;
+
+          await fetchStatementsPage(0);
+          return;
+        }
 
         await ensureAuthorized(selectedUser);
         if (cancelled) return;
@@ -738,48 +1500,43 @@ const UsersStatementsMasterDetail = ({
         await refreshDetailSummary(selectedUser);
         if (cancelled) return;
 
-        await fetchPage();
+        await fetchStatementsPage(0);
       } catch (e: any) {
-        setAuthErr(e?.message || 'Authorization error');
+        if (!cancelled) {
+          setAuthErr(e?.message || 'Authorization error');
+        }
       }
     })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUser, startMs, endMs, viewerIsParticipant]);
 
-  const formatAmt = useCallback((n?: number | null) => {
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUser, startMs, endMs, viewerIsParticipant, ensureAuthorized, refreshDetailSummary, fetchStatementsPage]);
+
+  const formatAmt = useCallback(
+    (n?: number | null) => {
+      if (typeof n !== 'number') return '—';
+      const s = n > 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+      return `${s} ${currency}`;
+    },
+    [currency]
+  );
+
+  const formatMoney = useCallback((n?: number | null) => {
     if (typeof n !== 'number') return '—';
-    const s = n > 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
-    return `${s} ${currency}`;
-  }, [currency]);
+    return `${n.toFixed(2)} USD`;
+  }, []);
 
   const formatPct = (p?: number | null) =>
     typeof p === 'number' ? `${p.toFixed(2)}%` : '—';
 
-  // Only one preset: full tournament window
   const onPresetTournament = () => {
     setStartMs(TOURNAMENT_START_UTC_MS);
     setEndMs(TOURNAMENT_END_UTC_MS);
-    setItems([]);
-    setOffset(0);
-    setHasMore(true);
-    seenKeysRef.current.clear();
-    (async () => {
-      try {
-        if (selectedUser && viewerIsParticipant) await refreshDetailSummary(selectedUser);
-        if (viewerIsParticipant) await fetchPage();
-      } catch { }
-    })();
   };
 
   const onApplyRange = () => {
-    setItems([]); setOffset(0); setHasMore(true); seenKeysRef.current.clear();
-    (async () => {
-      try {
-        if (selectedUser && viewerIsParticipant) await refreshDetailSummary(selectedUser);
-        if (viewerIsParticipant) await fetchPage();
-      } catch { }
-    })();
+    // selection effect reloads automatically
   };
 
   const deriveRefType = (tx: Partial<StatementTx>): string =>
@@ -793,45 +1550,79 @@ const UsersStatementsMasterDetail = ({
 
   const fmtUpdated = (iso?: string) => {
     if (!iso) return '';
-    try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
   };
 
-  const sortedUsers: Participant[] = useMemo(() => {
-    const arr = [...users];
-    arr.sort((a, b) => {
-      const sa = stats[a.username], sb = stats[b.username];
+  const rankedUsers = useMemo(() => {
+    const eligible = usersWithOptionsOracle.filter(u => stats[u.username]?.isRankEligible);
+
+    eligible.sort((a, b) => {
+      const sa = stats[a.username];
+      const sb = stats[b.username];
       const ra = typeof sa?.returnPct === 'number' ? sa.returnPct : Number.NEGATIVE_INFINITY;
       const rb = typeof sb?.returnPct === 'number' ? sb.returnPct : Number.NEGATIVE_INFINITY;
       if (rb !== ra) return rb - ra;
-      const npa = typeof sa?.netPL === 'number' ? sa.netPL! : -Infinity;
-      const npb = typeof sb?.netPL === 'number' ? sb.netPL! : -Infinity;
+
+      const npa = typeof sa?.netPL === 'number' ? sa.netPL : Number.NEGATIVE_INFINITY;
+      const npb = typeof sb?.netPL === 'number' ? sb.netPL : Number.NEGATIVE_INFINITY;
       if (npb !== npa) return npb - npa;
-      const ta = sa?.trades ?? -Infinity, tb = sb?.trades ?? -Infinity;
+
+      const ta = sa?.trades ?? Number.NEGATIVE_INFINITY;
+      const tb = sb?.trades ?? Number.NEGATIVE_INFINITY;
       if (tb !== ta) return tb - ta;
+
       return a.username.localeCompare(b.username);
     });
-    return arr;
-  }, [users, stats]);
 
-  const getRankBadge = (idx: number) => {
-    const rank = idx + 1;
+    return eligible;
+  }, [usersWithOptionsOracle, stats]);
+
+  const sortedUsers: Participant[] = useMemo(() => {
+    const rankedNames = new Set(rankedUsers.map(u => u.username));
+
+    const unranked = usersWithOptionsOracle.filter(u => !rankedNames.has(u.username));
+    unranked.sort((a, b) => a.username.localeCompare(b.username));
+
+    return [...rankedUsers, ...unranked];
+  }, [rankedUsers, usersWithOptionsOracle]);
+
+  const rankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    rankedUsers.forEach((u, idx) => {
+      map.set(u.username, idx + 1);
+    });
+    return map;
+  }, [rankedUsers]);
+
+  const getRankBadge = (rank?: number | null) => {
+    const safeRank = typeof rank === 'number' ? rank : null;
     const medal =
-      rank === 1 ? 'gold' :
-        rank === 2 ? 'silver' :
-          rank === 3 ? 'bronze' : '';
-    return { rank, medal };
+      safeRank === 1 ? 'gold' : safeRank === 2 ? 'silver' : safeRank === 3 ? 'bronze' : '';
+    return { rank: safeRank, medal };
   };
 
   const pctChipClass = (p?: number | null) =>
     typeof p === 'number' ? (p >= 0 ? 'pos' : 'neg') : 'muted';
 
-  const progressPct = usersTotal > 0
-    ? Math.round((rankProgress.done / usersTotal) * 100)
-    : (rankProgress.total > 0
-      ? Math.round((rankProgress.done / rankProgress.total) * 100)
-      : 0);
+  const progressPct =
+    usersTotalWithOptionsOracle > 0
+      ? Math.round((rankProgress.done / usersTotalWithOptionsOracle) * 100)
+      : rankProgress.total > 0
+        ? Math.round((rankProgress.done / rankProgress.total) * 100)
+        : 0;
 
-  // ===== Build synthetic display items for UNCHAINED only =====
+  const totalTournamentTurnover = useMemo(() => {
+    return Object.values(stats).reduce((sum, s) => sum + (typeof s.turnover === 'number' ? s.turnover : 0), 0);
+  }, [stats]);
+
+  const eligibleRankedCount = useMemo(() => {
+    return Object.values(stats).filter(s => s.isRankEligible).length;
+  }, [stats]);
+
   const unchainedSyntheticItems = useMemo(() => {
     if (selectedUser !== UNCHAINED_USERNAME || items.length === 0) return null;
     const hasSynthetic = items.some(
@@ -847,8 +1638,6 @@ const UsersStatementsMasterDetail = ({
       unchainedSyntheticItems &&
       unchainedSyntheticItems.length > 0
     ) {
-      // Keep original history BEFORE the synthetic deposit time,
-      // then append synthetic run starting from 5:26am Tuesday.
       const cutoffMs = UNCHAINED_DEPOSIT_UTC_MS;
       const originalBefore = items.filter(t => ms(t) < cutoffMs);
       return [...originalBefore, ...unchainedSyntheticItems];
@@ -856,42 +1645,200 @@ const UsersStatementsMasterDetail = ({
     return items;
   }, [items, selectedUser, unchainedSyntheticItems]);
 
+  const top3 = rankedUsers.slice(0, 3).filter(u => typeof stats[u.username]?.returnPct === 'number');
+
   return (
-    <div className="participants">
+    <div className="participants top3">
+      <section className="leaderboard-hero">
+        <div className="leaderboard-hero__content">
+          <div className="leaderboard-hero__copy">
+            <span className="eyebrow">Denara Tournament</span>
+            <h1>Leaderboard & Registration</h1>
+            <p>
+              Join directly from this page, then follow live rankings, performance and total tournament turnover.
+            </p>
+
+            <div className="leaderboard-hero__totals">
+              <div className="hero-stat">
+                <span className="hero-stat__label">Participants</span>
+                <strong className="hero-stat__value">{usersTotalWithOptionsOracle}</strong>
+              </div>
+              <div className="hero-stat">
+                <span className="hero-stat__label">Eligible Ranked Users</span>
+                <strong className="hero-stat__value">{eligibleRankedCount}</strong>
+              </div>
+              <div className="hero-stat">
+                <span className="hero-stat__label">Total Trades</span>
+                <strong className="hero-stat__value">{formatMoney(totalTournamentTurnover)}</strong>
+              </div>
+            </div>
+
+            <div className="leaderboard-hero__actions">
+              <button className="btn" onClick={() => setShowRules(true)}>
+                View Rules
+              </button>
+            </div>
+          </div>
+
+          <div className="leaderboard-hero__art" aria-hidden="true">
+            <img src={DENARATORNA} alt="Denara Tournament visual" />
+          </div>
+        </div>
+      </section>
+
+      {top3.length > 0 && (
+        <div className="winners-banner">
+          <div className="winners-badge">🏆</div>
+          <div className="winners-text">
+            <div className="headline">Current top performers</div>
+            <div className="names">
+              {top3.map((u, idx) => {
+                const rank = idx + 1;
+                const pct = stats[u.username]?.returnPct;
+                return (
+                  <span key={u.username}>
+                    {idx > 0 ? ' • ' : ''}
+                    #{rank} {u.username} ({typeof pct === 'number' ? `${pct.toFixed(2)}%` : '—'})
+                  </span>
+                );
+              })}
+            </div>
+            <div className="sub">
+              All traders appear in the list. Only traders whose ranking baseline reaches at least $10 USD and who have
+              at least one closed trade receive an official rank.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="stm-shell">
-        {/* Left rail: Users (ranked, PUBLIC) */}
         <aside className="users-rail">
+          <div className="registration-card" id="register-card" ref={registerCardRef}>
+            <div className="registration-card__head">
+              <h2>Enter Tournament</h2>
+              <p>Registration is open here anytime.</p>
+            </div>
+
+            <form onSubmit={onRegister} className="registration-form" autoComplete="off">
+              <label className="field">
+                <span>Username</span>
+                <input
+                  type="text"
+                  placeholder="e.g. Beast"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  minLength={3}
+                  maxLength={64}
+                  required
+                  disabled={signupLoading}
+                />
+              </label>
+
+              <label className="field">
+                <span>Deriv Real Token</span>
+                <input
+                  type="password"
+                  placeholder="Paste Api Token (Read|Trade|Trading Information)"
+                  value={token}
+                  onChange={e => setToken(e.target.value)}
+                  required
+                  disabled={signupLoading}
+                />
+                <small className="muted">Validated by Deriv real USD only.</small>
+              </label>
+
+              <label className="field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  placeholder=""
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  disabled={signupLoading}
+                />
+              </label>
+
+              <label className="field">
+                <span>Denara login password</span>
+                <input
+                  type="password"
+                  placeholder="At least 8 characters"
+                  value={regPassword}
+                  onChange={e => setRegPassword(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  required
+                  disabled={signupLoading}
+                />
+              </label>
+
+              <label className="field">
+                <span>Confirm password</span>
+                <input
+                  type="password"
+                  value={regPasswordConfirm}
+                  onChange={e => setRegPasswordConfirm(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  required
+                  disabled={signupLoading}
+                />
+              </label>
+
+              <div className="registration-actions">
+                <button type="submit" className="btn" disabled={signupLoading}>
+                  {signupLoading ? 'Validating…' : 'Register Tournament'}
+                </button>
+                <button type="button" className="btn btn--ghost" onClick={() => setShowRules(true)}>
+                  Rules
+                </button>
+              </div>
+
+              {signupMsg && <div className="alert ok">{signupMsg}</div>}
+              {signupErr && <div className="alert err">{signupErr}</div>}
+            </form>
+          </div>
+
           <div className="users-toolbar">
             <form
               className="users-search"
-              onSubmit={(e) => { e.preventDefault(); void fetchUsers(); }}
+              onSubmit={e => {
+                e.preventDefault();
+                void fetchUsers();
+              }}
             >
               <input
                 type="text"
                 placeholder="Search username…"
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={e => setQ(e.target.value)}
               />
               <button className="btn" type="submit">Search</button>
             </form>
-
-            {/* Pager removed — all traders on one list */}
           </div>
 
-          {/* Progress bar + cancel */}
           {rankBusy && (
             <div className="users-progress">
               <div className="users-progress__top">
                 <span>Ranking {rankProgress.done}/{rankProgress.total}</span>
                 <button
                   className="btn btn--ghost"
-                  onClick={() => { cancelRef.current.cancelled = true; }}
+                  onClick={() => {
+                    cancelRef.current.cancelled = true;
+                  }}
                 >
                   Cancel
                 </button>
               </div>
-              <div className="users-progress__bar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPct}>
+              <div
+                className="users-progress__bar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPct}
+              >
                 <div className="users-progress__fill" style={{ width: `${progressPct}%` }} />
               </div>
             </div>
@@ -901,14 +1848,16 @@ const UsersStatementsMasterDetail = ({
             {usersLoading && <div className="users-status">Loading users…</div>}
             {usersErr && <div className="users-status err">{usersErr}</div>}
             {!usersLoading && sortedUsers.length === 0 && !usersErr && (
-              <div className="users-status">No users found.</div>
+              <div className="users-status">No traders found.</div>
             )}
 
-            {sortedUsers.map((u, idx) => {
+            {sortedUsers.map(u => {
               const selected = selectedUser === u.username;
               const s = stats[u.username];
-              const { rank, medal } = getRankBadge(idx);
+              const officialRank = rankMap.get(u.username) ?? null;
+              const { rank, medal } = getRankBadge(officialRank);
               const ret = s?.returnPct;
+              const isEligible = !!s?.isRankEligible;
 
               return (
                 <button
@@ -921,18 +1870,26 @@ const UsersStatementsMasterDetail = ({
                   disabled={rankBusy && !selected}
                 >
                   <div className="row-left">
-                    <div className={`rank-badge ${medal}`} aria-label={`Rank ${rank}`}>
-                      {typeof ret === 'number' ? `#${rank}` : '—'}
+                    <div className={`rank-badge ${medal}`} aria-label={rank ? `Rank ${rank}` : 'Unranked'}>
+                      {rank ? `#${rank}` : '—'}
                     </div>
 
-                    <div className="avatar" aria-hidden="true">{u.username.slice(0, 1).toUpperCase()}</div>
+                    <div className="avatar" aria-hidden="true">
+                      {u.username.slice(0, 1).toUpperCase()}
+                    </div>
+
                     <div className="meta">
                       <div className="uname">{u.username}</div>
                       <div className="updated">
-                        {s?.status === 'computing' ? 'computing…' :
-                          s?.status === 'error' ? 'error' :
-                            s?.status === 'skip' ? s.reason :
-                              fmtUpdated(u.updated_at || u.created_at)}
+                        {s?.status === 'computing'
+                          ? 'computing…'
+                          : s?.status === 'error'
+                            ? 'error'
+                            : s?.status === 'skip'
+                              ? s.reason
+                              : normalize(u.username) === OPTIONS_ORACLE_USERNAME && s?.baselineTime
+                                ? new Date(s.baselineTime).toLocaleString()
+                                : fmtUpdated(u.updated_at || u.created_at)}
                       </div>
                     </div>
                   </div>
@@ -942,31 +1899,33 @@ const UsersStatementsMasterDetail = ({
                     <span className={`chip ret ${pctChipClass(ret)}`}>
                       {typeof ret === 'number' ? `${ret.toFixed(2)}%` : '—'}
                     </span>
-                    <span className={`chev ${selected ? 'down' : 'right'}`} aria-hidden>▸</span>
+                    {!isEligible && <span className="chip">Low Bal</span>}
+                    <span className={`chev ${selected ? 'down' : 'right'}`} aria-hidden>
+                      ▸
+                    </span>
                   </div>
                 </button>
               );
             })}
-
           </div>
         </aside>
 
-        {/* Right pane: Detail (Participants-only) */}
         <main className="stm-only">
-          {/* PIN gate panel */}
           <div className="pin-gate">
             <div className="pin-gate__left">
               <div className="label">Participants-only statements</div>
               <div className="sub">
-                Tournament window:{' '}
-                <strong>Sat 22 Nov 2025, 09:00</strong> to{' '}
-                <strong>Tue 25 Nov 2025, 09:00</strong> (Kenya / EAT).
+                Tournament window: <strong>Wed 8 Apr 2026, 09:00</strong> to{' '}
+                <strong>Wed 22 Apr 2026, 09:00</strong> (Kenya / EAT).
               </div>
             </div>
+
             <div className="pin-gate__right">
               {viewerIsParticipant ? (
                 <>
-                  <div className="ok">Verified as <strong>{viewerInfo!.username}</strong> (id {viewerInfo!.id})</div>
+                  <div className="ok">
+                    Verified as <strong>{viewerInfo!.username}</strong> (id {viewerInfo!.id})
+                  </div>
                   <button className="btn btn--ghost" onClick={clearPin}>Sign out</button>
                 </>
               ) : (
@@ -975,7 +1934,7 @@ const UsersStatementsMasterDetail = ({
                     type="text"
                     placeholder="Enter Competition PIN (e.g. oracle4)"
                     value={viewerPin}
-                    onChange={(e) => setViewerPin(e.target.value)}
+                    onChange={e => setViewerPin(e.target.value)}
                     disabled={pinBusy}
                   />
                   <button className="btn" onClick={submitPin} disabled={pinBusy}>
@@ -985,14 +1944,14 @@ const UsersStatementsMasterDetail = ({
               )}
             </div>
           </div>
+
           {pinErr && <div className="pin-error">{pinErr}</div>}
 
-          {/* Summary Header */}
           <div className="stm-summary">
             <div className="stm-summary__left">
               <div className="stm-summary__user">
                 <div className="label">User</div>
-                <div className="value">{selectedUser ? (displayUser || selectedUser) : '—'}</div>
+                <div className="value">{selectedUser ? displayUser || selectedUser : '—'}</div>
               </div>
               <div className="stm-summary__acct">
                 <div className="label">Currency</div>
@@ -1010,47 +1969,57 @@ const UsersStatementsMasterDetail = ({
                 <div className="m-value">{selectedUser ? formatAmt(detailSummary?.endBal ?? null) : '—'}</div>
               </div>
               <div className="metric">
-                <div className="m-label">Net P/L (after baseline)</div>
+                <div className="m-label">Net P/L</div>
                 <div className={`m-value ${(detailSummary?.netPL ?? 0) >= 0 ? 'pos' : 'neg'}`}>
                   {selectedUser ? formatAmt(detailSummary?.netPL ?? null) : '—'}
                 </div>
               </div>
               <div className="metric">
                 <div className="m-label">Return %</div>
-                <div className={`m-value ${detailSummary?.returnPct !== null && (detailSummary?.returnPct ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                <div
+                  className={`m-value ${
+                    detailSummary?.returnPct !== null && (detailSummary?.returnPct ?? 0) >= 0 ? 'pos' : 'neg'
+                  }`}
+                >
                   {selectedUser ? formatPct(detailSummary?.returnPct ?? null) : '—'}
                 </div>
               </div>
               <div className="metric">
-                <div className="m-label">Trades (after baseline)</div>
-                <div className="m-value">{selectedUser ? (detailSummary?.trades ?? 0) : '—'}</div>
+                <div className="m-label">Trading Volume</div>
+                <div className="m-value">{selectedUser ? formatMoney(detailSummary?.turnover ?? null) : '—'}</div>
+              </div>
+              <div className="metric">
+                <div className="m-label">Trades</div>
+                <div className="m-value">{selectedUser ? detailSummary?.trades ?? 0 : '—'}</div>
               </div>
             </div>
 
-            {/* Date controls */}
             <div className="stm-summary__controls">
               <div className="preset-group">
                 <button className="btn btn--ghost" onClick={onPresetTournament}>
                   Tournament window
                 </button>
               </div>
+
               <div className="range">
                 <label>
                   <span>Start</span>
                   <input
                     type="datetime-local"
                     value={toDatetimeLocal(startMs)}
-                    onChange={(e) => setStartMs(clampToTournament(fromDatetimeLocal(e.target.value)))}
+                    onChange={e => setStartMs(clampToTournament(fromDatetimeLocal(e.target.value)))}
                   />
                 </label>
+
                 <label>
                   <span>End</span>
                   <input
                     type="datetime-local"
                     value={toDatetimeLocal(endMs)}
-                    onChange={(e) => setEndMs(clampToTournament(fromDatetimeLocal(e.target.value)))}
+                    onChange={e => setEndMs(clampToTournament(fromDatetimeLocal(e.target.value)))}
                   />
                 </label>
+
                 <button className="btn" onClick={onApplyRange}>Apply</button>
               </div>
             </div>
@@ -1062,13 +2031,11 @@ const UsersStatementsMasterDetail = ({
             )}
           </div>
 
-          {/* Statements (collapsible) */}
           <div className={`statements stm-collapsible ${isCollapsed ? 'is-collapsed' : 'is-expanded'}`}>
             <div className="statements__head" aria-hidden={isCollapsed}>
               <div className="col col--time">Time</div>
               <div className="col col--action">Action</div>
               <div className="col col--refid">Reference ID</div>
-              {/* App ID column removed */}
               <div className="col col--reftype">Type</div>
               <div className="col col--amt">Amount</div>
               <div className="col col--bal">Balance</div>
@@ -1081,13 +2048,16 @@ const UsersStatementsMasterDetail = ({
               {selectedUser && viewerIsParticipant && (
                 <>
                   <ul className="statements__list">
-                    {displayItems.map((t) => {
+                    {displayItems.map(t => {
                       const timeVal = ms(t);
                       const action = normalize(t.action_type);
                       const amt = typeof t.amount === 'number' ? t.amount : undefined;
-                      const balance = typeof t.balance_after === 'number'
-                        ? t.balance_after
-                        : (typeof t.balance === 'number' ? t.balance : undefined);
+                      const balance =
+                        typeof t.balance_after === 'number'
+                          ? t.balance_after
+                          : typeof t.balance === 'number'
+                            ? t.balance
+                            : undefined;
                       const positive = (amt ?? 0) >= 0;
 
                       return (
@@ -1095,10 +2065,15 @@ const UsersStatementsMasterDetail = ({
                           <div className="col col--time" data-label="Time">
                             {timeVal ? new Date(timeVal).toLocaleString() : '—'}
                           </div>
-                          <div className={`col col--action ${action}`} data-label="Action">{action || '-'}</div>
-                          <div className="col col--refid" data-label="Reference ID">{t.reference_id ?? '-'}</div>
-                          {/* App ID cell removed */}
-                          <div className="col col--reftype" data-label="Type">{deriveRefType(t) || '-'}</div>
+                          <div className={`col col--action ${action}`} data-label="Action">
+                            {action || '-'}
+                          </div>
+                          <div className="col col--refid" data-label="Reference ID">
+                            {action === 'buy' ? '-' : t.reference_id ?? '-'}
+                          </div>
+                          <div className="col col--reftype" data-label="Type">
+                            {deriveRefType(t) || '-'}
+                          </div>
                           <div className={`col col--amt ${positive ? 'pos' : 'neg'}`} data-label="Amount">
                             {typeof amt === 'number' ? `${amt >= 0 ? '+' : ''}${amt.toFixed(2)} ${currency}` : '—'}
                           </div>
@@ -1116,15 +2091,30 @@ const UsersStatementsMasterDetail = ({
                     <div className="statements__status end">End of statements</div>
                   )}
 
-                  <div ref={sentinelRef} className="statements__sentinel" />
+                  {selectedUser !== OPTIONS_ORACLE_USERNAME && (
+                    <div ref={sentinelRef} className="statements__sentinel" />
+                  )}
                 </>
               )}
             </div>
           </div>
+
+          {showDeposit && (
+            <section className="deposit-inline" ref={depositRef}>
+              <h2 className="deposit-inline__title">Deposit</h2>
+              <Deposit />
+            </section>
+          )}
         </main>
       </div>
+
+      <RulesModal
+        show={showRules}
+        onClose={() => setShowRules(false)}
+        onOpenDeposit={openDepositInline}
+      />
     </div>
   );
 };
 
-export default UsersStatementsMasterDetail;
+export default ParticipantsLeaderboardMerged;

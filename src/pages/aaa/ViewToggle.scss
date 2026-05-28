@@ -1,64 +1,91 @@
-.view-toggle-container {
-    display: flex;
-    flex-direction: column;
-    width: 75vw;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 13px;
-    background-color: white!important;
-    color: var(--text-general);
-    height: 100vh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    /* Smooth scrolling on iOS */
-    scroll-behavior: smooth;
-    /* Smooth scrolling animation */
-  
-    /* Hide scrollbar for cleaner look (optional) */
-    scrollbar-width: none;
-    
-  
-    .toggle-controls {
-      display: flex;
-      gap: 8px;
-      padding: 10px;
-      align-items: center;
-      border-bottom: 1px solid var(--border-normal);
-  
-      .toggle-btn {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        background: var(--general-section-1);
-        color: var(--text-general);
-        cursor: pointer;
-        transition: all 0.2s;
-        font-weight: 500;
-        
-        &:hover {
-          background: var(--state-hover);
-        }
-        
-        &.active {
-          background: rgb(0, 128, 109);
-          color: white;
-        }
-      }
-    }
-  
-    .view-content {
-      flex-grow: 1;
-      overflow: hidden;
-      
-      > * {
-        height: 100%;
-        width: 100%;
-      }
+@import '../workspace-tab-shell.scss';
+
+.instant-fill-app {
+  @include workspace-tab-shell;
+}
+
+.instant-fill-app {
+  padding-inline: 0;
+
+  /*
+   * `.dc-tabs__content--main__tabs`: flex row, single child shell. Stretch tab-strip height +
+   * allow shrinking with `min-height: 0` so layout does not bleed / stack over siblings at 100% zoom.
+   */
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: min(1280px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-inline: auto;
+}
+
+/*
+ * Desktop zoom quirk (~100%): two-column rail + detail can visually stack over each other because
+ * the shell mixin uses align-items/start + rail align-self:start. Normalize here (page-only).
+ */
+@media screen and (min-width: 1280px) {
+  .instant-fill-app {
+    isolation: isolate;
+  }
+
+  .instant-fill-app .stp-shell {
+    align-items: stretch;
+    min-width: 0;
+  }
+
+  .instant-fill-app .stp-nav-wrap {
+    align-self: stretch;
+  }
+}
+
+@media screen and (max-width: 1279px) {
+  .instant-fill-app {
+    margin: 0;
+    padding: 12px 0 calc(96px + env(safe-area-inset-bottom, 0px));
+    gap: 16px;
+    /* Viewport cap lives on the page (tab panel), not in `workspace-tab-shell` — avoids overlay vs 98vw. */
+    max-height: calc(100vh - 13rem);
+
+    @supports (height: 100dvh) {
+      max-height: calc(100dvh - 13rem);
     }
   }
-  @media (max-width: 768px) {
-    .view-toggle-container {
-      width: 100vw;
-    }
+}
+
+@media screen and (max-width: 900px) {
+  .instant-fill-app .stp-page-header {
+    margin-bottom: 2px;
   }
-  
+
+  .instant-fill-app .stp-page-header__title {
+    padding: 4px 0 0;
+  }
+
+  .instant-fill-app .stp-page-header__sub {
+    margin: 6px 0 0;
+  }
+
+  .instant-fill-app .stp-nav-wrap {
+    margin: 0 0 0.75rem;
+    width: 100%;
+    max-width: none;
+  }
+
+  .instant-fill-app .stp-rail-heading {
+    margin: 0 0 12px;
+    padding: 0;
+  }
+
+  .instant-fill-app .stp-detail {
+    margin: 0;
+    width: 100%;
+    max-width: none;
+  }
+
+  .instant-fill-app .stp-strategy-nav {
+    margin: 0;
+    padding: 14px 0;
+    border-radius: 0;
+  }
+}

@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import ErrorBoundary from '@/components/error-component/error-boundary';
 import ErrorComponent from '@/components/error-component/error-component';
 import ChunkLoader from '@/components/loader/chunk-loader';
+import { applyLegacyAccountUrlToStorage } from '@/components/shared/utils/login/legacy-account-url-sync';
 import TradingAssesmentModal from '@/components/trading-assesment-modal';
 import { api_base } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
@@ -12,7 +13,7 @@ import './app-root.scss';
 const AppContent = lazy(() => import('./app-content'));
 
 const AppRootLoader = () => {
-    return <ChunkLoader message={localize('Initializing Denara Pro...')} />;
+    return <ChunkLoader message={localize('Initializing Denara…')} />;
 };
 
 const ErrorComponentWrapper = observer(() => {
@@ -42,13 +43,14 @@ const AppRoot = () => {
     useEffect(() => {
         const initializeApi = async () => {
             if (!api_base_initialized.current) {
+                applyLegacyAccountUrlToStorage();
                 await api_base.init();
                 api_base_initialized.current = true;
                 setIsApiInitialized(true);
             }
         };
 
-        initializeApi();
+        void initializeApi();
     }, []);
 
     if (!store || !is_api_initialized) return <AppRootLoader />;

@@ -1,0 +1,167 @@
+@use 'components/shared/styles/mixins' as *;
+
+// Align with `transactions`: grid + row chrome in run panel.
+$grid-template-columns: 0.8fr 1fr 1.1fr;
+
+.ready-strategy-panel-summary {
+    /* Same node also has `.dc-themed-scrollbars` from ThemedScrollbars — apply scroll + flex here */
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    max-height: 100%;
+    background: #ffffff;
+
+    .ready-strategy-positions.open-positions {
+        display: flex;
+        flex-direction: column;
+        min-height: 120px;
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+        padding: 0;
+
+        .position-item {
+            display: grid;
+            grid-template-columns: $grid-template-columns;
+            align-items: center;
+            gap: 0 8px;
+            margin: 0;
+            padding: 0.8rem 0;
+            font-size: 12px;
+            color: var(--text-general);
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            border-top: 1px solid var(--general-section-2);
+            transition: background-color 0.15s ease;
+
+            &:first-child {
+                border-top: none;
+            }
+
+            &:hover {
+                background-color: var(--state-hover);
+            }
+
+            &.position-win .position-result.profit,
+            .position-result.profit {
+                color: var(--text-profit-success);
+            }
+
+            &.position-loss .position-result,
+            .position-result.loss {
+                color: var(--text-loss-danger);
+            }
+        }
+
+        .no-positions {
+            padding: 2rem 1rem;
+            text-align: center;
+
+            @include typeface(--small-center-normal-black, none);
+
+            color: var(--text-less-prominent);
+        }
+
+        .position-header {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .position-market-contract {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .virtual-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background-color: var(--general-section-1);
+            border: 1px solid var(--border-normal);
+            color: var(--text-general);
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .position-spots {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .spot-entry,
+        .spot-exit {
+            display: flex;
+            align-items: center;
+            line-height: 1.25;
+            font-weight: normal;
+            color: var(--text-general);
+
+            svg {
+                margin-inline-end: 4px;
+                flex-shrink: 0;
+            }
+        }
+
+        .position-footer {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+            text-align: end;
+            min-width: 0;
+        }
+
+        .position-stake {
+            font-weight: normal;
+            color: var(--text-general);
+        }
+
+        .position-result {
+            font-size: 12px;
+            font-weight: bold;
+
+            &.pending {
+                font-weight: normal;
+                color: var(--text-less-prominent);
+            }
+        }
+
+        .error-display {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .error-badge {
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            background: var(--text-loss-danger);
+            color: var(--text-colored-background);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .error-text {
+            font-size: 11px;
+            color: var(--text-loss-danger);
+            font-weight: normal;
+        }
+    }
+}

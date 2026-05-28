@@ -15,6 +15,13 @@ export const isAuthorized$ = new BehaviorSubject<boolean>(false);
 export const account_list$ = new BehaviorSubject<TAuthData['account_list']>([]);
 export const authData$ = new BehaviorSubject<TAuthData | null>(null);
 
+/** Increment whenever `api_base` swaps its trading `DerivAPIBasic` instance (Options OTP switch, etc.). */
+export const tradingSocketGeneration$ = new BehaviorSubject<number>(0);
+
+export const bumpTradingSocketGeneration = () => {
+    tradingSocketGeneration$.next(tradingSocketGeneration$.getValue() + 1);
+};
+
 // Create functions to easily update status
 export const setConnectionStatus = (status: CONNECTION_STATUS) => {
     connectionStatus$.next(status);

@@ -1,8 +1,10 @@
 import classnames from 'classnames';
 import { observer } from 'mobx-react-lite';
+import { READY_STRATEGY_RUN_PANEL_MAIN_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { useDevice } from '@deriv-com/ui';
 import ThemedScrollbars from '../shared_ui/themed-scrollbars';
+import ReadyStrategyRunSummary from './ready-strategy-run-summary';
 import SummaryCard from './summary-card';
 
 type TSummary = {
@@ -10,10 +12,15 @@ type TSummary = {
 };
 
 const Summary = observer(({ is_drawer_open }: TSummary) => {
-    const { dashboard, summary_card } = useStore();
+    const { dashboard, summary_card, ready_strategy_panel } = useStore();
     const { is_contract_loading, contract_info, is_bot_running } = summary_card;
-    const { active_tour } = dashboard;
+    const { active_tour, active_tab } = dashboard;
     const { isDesktop } = useDevice();
+
+    if (ready_strategy_panel.is_attached && READY_STRATEGY_RUN_PANEL_MAIN_TABS.includes(active_tab)) {
+        return <ReadyStrategyRunSummary is_drawer_open={is_drawer_open} />;
+    }
+
     return (
         <div
             className={classnames({

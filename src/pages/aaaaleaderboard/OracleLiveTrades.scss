@@ -1,0 +1,33 @@
+.oracle-live-trades__hero {
+  padding: 1rem 1.25rem 1.25rem;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  color: #f8fafc;
+  border-radius: 14px;
+  margin-bottom: 1rem;
+}
+
+.oracle-live-trades__hero-inner {
+  max-width: 720px;
+}
+
+.oracle-live-trades__eyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 0.35rem;
+}
+
+.oracle-live-trades__title {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.oracle-live-trades__actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}

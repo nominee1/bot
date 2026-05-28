@@ -130,12 +130,16 @@ export default class RunPanelStore {
     }
 
     get is_clear_stat_disabled() {
-        const { journal, transactions } = this.root_store;
+        const { journal, transactions, ready_strategy_panel } = this.root_store;
+
+        const bot_workspace_idle =
+            journal.unfiltered_messages.length === 0 && transactions?.transactions?.length === 0;
 
         return (
             this.is_running ||
             this.has_open_contract ||
-            (journal.unfiltered_messages.length === 0 && transactions?.transactions?.length === 0)
+            ready_strategy_panel.is_strategy_running ||
+            (bot_workspace_idle && !ready_strategy_panel.has_ready_summary_activity)
         );
     }
 
@@ -286,7 +290,7 @@ export default class RunPanelStore {
     };
 
     clearStat = () => {
-        const { summary_card, journal, transactions } = this.root_store;
+        const { summary_card, journal, transactions, ready_strategy_panel } = this.root_store;
 
         this.setIsRunning(false);
         this.setHasOpenContract(false);
@@ -294,6 +298,8 @@ export default class RunPanelStore {
         journal.clear();
         summary_card.clear();
         transactions.clear();
+        ready_strategy_panel.setSmartTraderRunPanelStats(null);
+        ready_strategy_panel.signalRunPanelClear();
         this.setContractStage(contract_stages.NOT_RUNNING);
     };
 

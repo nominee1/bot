@@ -16,12 +16,22 @@ export default class ActiveSymbols {
     }
 
     async retrieveActiveSymbols(is_forced_update = false) {
-        await this.trading_times.initialise();
-
         if (!is_forced_update && this.is_initialised) {
             await this.init_promise;
             return this.active_symbols;
         }
+
+        /** Symbols already on the socket from init — paint fast; trading_times can load after. */
+        if (is_forced_update && api_base.has_active_symbols) {
+            this.is_initialised = true;
+            this.active_symbols = api_base?.active_symbols ?? [];
+            this.processed_symbols = this.processActiveSymbols();
+            this.init_promise.resolve();
+            void this.trading_times.initialise();
+            return this.active_symbols;
+        }
+
+        await this.trading_times.initialise();
 
         this.is_initialised = true;
 

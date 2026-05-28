@@ -3,6 +3,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { contractStatus, log } from '../utils/broadcast';
 import { doUntilDone, recoverFromError } from '../utils/helpers';
+import { executeMirrorSell } from '../utils/trading-send';
 import { DURING_PURCHASE } from './state/constants';
 
 export default Engine =>
@@ -34,6 +35,9 @@ export default Engine =>
                         const { sold_for } = sell_response.sell;
                         log(LogTypes.SELL, { sold_for });
                     }
+
+                    void executeMirrorSell(this.mirrorContractId);
+                    this.mirrorContractId = null;
 
                     contractStatus('purchase.sold');
                     this.waitForAfter();

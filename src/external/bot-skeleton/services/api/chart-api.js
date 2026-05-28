@@ -1,4 +1,5 @@
 import { generateDerivApiInstance, getLoginId, getToken } from './appId';
+import { getDerivOAuthAccessToken, isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
 
 class ChartAPI {
     api;
@@ -17,7 +18,15 @@ class ChartAPI {
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
         }
         if (getLoginId()) {
-            await this.api.authorize(getToken().token);
+            const optionsOAuth = isDerivOptionsOAuthSession() && Boolean(getDerivOAuthAccessToken());
+            // Options OAuth trading sockets are OTP-authenticated; chart socket does not need PAT authorize.
+            if (!optionsOAuth) {
+                try {
+                    await this.api.authorize(getToken().token);
+                } catch {
+                    /* chart time stream can still run unauthenticated */
+                }
+            }
         }
         this.getTime();
     };

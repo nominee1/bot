@@ -5,12 +5,64 @@
     flex-direction: column;
     height: 100vh;
 
+    /* Brand strip: tab rail purple (`rgb(87, 2, 103)`).
+       Do not set `--text-prominent` / `color` on `.deriv-header` — it cascades into the account-switcher
+       dropdown (white panel). Style toolbar triggers only. */
     .deriv-header {
-        background: var(--general-main-1);
+        background-color: rgb(87, 2, 103) !important;
+        border-bottom: none !important;
+        box-shadow: none !important;
         height: 4.9rem;
 
         @include mobile-or-tablet-screen {
             height: 4rem;
+        }
+
+        .app-header__logo {
+            border-inline-end-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .app-header__account-settings {
+            border-inline-end-color: rgba(255, 255, 255, 0.28);
+
+            svg > path,
+            svg > g > path {
+                fill: #ffffff !important;
+            }
+        }
+
+        .app-header__profile_icon {
+            fill: #ffffff !important;
+        }
+
+        .notifications__wrapper svg > path,
+        .notifications__wrapper svg > g > path {
+            fill: #ffffff !important;
+        }
+
+        .app-header__menu {
+            color: #ffffff;
+
+            span,
+            .deriv-text {
+                color: #ffffff !important;
+            }
+
+            svg path {
+                fill: #ffffff !important;
+            }
+        }
+
+        .deriv-platform-switcher__button {
+            color: #ffffff;
+
+            svg path {
+                fill: #ffffff !important;
+            }
+        }
+
+        .deriv-platform-switcher__button-chevron path {
+            fill: #ffffff !important;
         }
     }
 }

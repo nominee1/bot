@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
+import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton';
+import { sendDerivSessionContractPurchase } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import {
     TradeTypesDigitsMatchesIcon,
     TradeTypesDigitsOverIcon,
@@ -99,6 +101,7 @@ const lastDigitOfQuote = (value: number, marketFormat: string) => {
 };
 
 const Iframe = observer(() => {
+    const { tradingSocketGeneration } = useApiBase();
     const { ui } = useStore();
 
     const [trades, setTrades] = useState<TTrade[]>([]);
@@ -225,20 +228,16 @@ const Iframe = observer(() => {
         setTrades(t => [newTrade, ...t]);
 
         try {
-            const resp = await api_base.api.send({
-                buy: 1,
-                price: stake,
-                parameters: {
-                    amount: stake,
-                    basis: 'stake',
-                    currency: 'USD',
+            const resp = (await sendDerivSessionContractPurchase(
+                d => api_base.api.send(d) as Promise<unknown>,
+                {
                     contract_type: ct,
+                    market,
                     duration: dur,
-                    duration_unit: 't',
-                    symbol: market,
+                    stake,
                     ...(barrier ? { barrier } : {}),
-                },
-            });
+                }
+            )) as { error?: { message?: string }; buy?: { contract_id?: unknown; purchase_id?: unknown } };
 
             if (resp?.error) throw new Error(resp.error.message);
 
@@ -397,8 +396,7 @@ const Iframe = observer(() => {
             }
         });
         return () => sub.unsubscribe();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [tradingSocketGeneration]);
 
     /** ---------------- ANALYSIS (TICKS) WEBSOCKET ---------------- **/
 

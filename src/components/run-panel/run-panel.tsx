@@ -2,6 +2,7 @@ import React from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import Journal from '@/components/journal';
+import ReadyStrategyFloatingStop from '@/components/ready-strategy/ready-strategy-floating-stop';
 import SelfExclusion from '@/components/self-exclusion';
 import Button from '@/components/shared_ui/button';
 import Drawer from '@/components/shared_ui/drawer';
@@ -12,7 +13,7 @@ import Text from '@/components/shared_ui/text';
 import Summary from '@/components/summary';
 import TradeAnimation from '@/components/trade-animation';
 import Transactions from '@/components/transactions';
-import { DBOT_TABS } from '@/constants/bot-contents';
+import { READY_STRATEGY_RUN_PANEL_MAIN_TABS, RUN_PANEL_VISIBLE_MAIN_TABS } from '@/constants/bot-contents';
 import { popover_zindex } from '@/constants/z-indexes';
 import { useStore } from '@/hooks/useStore';
 import { useDevice } from '@deriv-com/ui';
@@ -107,10 +108,12 @@ export const StatisticsSummary = ({
             <StatisticsTile
                 title={localize('Contracts lost')}
                 content={lost_contracts}
+                contentClassName='run-panel__stat-value run-panel__stat-value--lost'
             />
             <StatisticsTile
                 title={localize('Contracts won')}
                 content={won_contracts}
+                contentClassName='run-panel__stat-value run-panel__stat-value--won'
             />
             <StatisticsTile
                 title={localize('Total profit/loss')}
@@ -175,13 +178,25 @@ const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFoote
     </div>
 );
 
-const MobileDrawerFooter = () => (
-    <div className='controls__section'>
-        <div className='controls__buttons'>
-            <TradeAnimation className='controls__animation' should_show_overlay />
+const MobileDrawerFooter = observer(() => {
+    const { dashboard, ready_strategy_panel } = useStore();
+    const { active_tab } = dashboard;
+    const show_strategy_stop =
+        ready_strategy_panel.is_strategy_running &&
+        READY_STRATEGY_RUN_PANEL_MAIN_TABS.includes(active_tab);
+
+    return (
+        <div className='controls__section'>
+            <div className='controls__buttons'>
+                {show_strategy_stop ? (
+                    <ReadyStrategyFloatingStop className='controls__animation' />
+                ) : (
+                    <TradeAnimation className='controls__animation' should_show_overlay />
+                )}
+            </div>
         </div>
-    </div>
-);
+    );
+});
 
 const StatisticsInfoModal = ({
     is_mobile,
@@ -206,8 +221,7 @@ const StatisticsInfoModal = ({
 );
 
 const RunPanel = observer(() => {
-    const { run_panel, dashboard, transactions } = useStore();
-    const { client } = useStore();
+    const { run_panel, dashboard, transactions, ready_strategy_panel, client } = useStore();
     const { isDesktop } = useDevice();
     const { currency } = client;
     const {
@@ -225,8 +239,27 @@ const RunPanel = observer(() => {
     } = run_panel;
     const { statistics } = transactions;
     const { active_tour, active_tab } = dashboard;
-    const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
-    const { BOT_BUILDER, CHART, DENARA_PRO, SMART_TRADER} = DBOT_TABS;
+
+    const use_ready_strategy_stats =
+        ready_strategy_panel.is_attached && READY_STRATEGY_RUN_PANEL_MAIN_TABS.includes(active_tab);
+    const rs = ready_strategy_panel.statistics;
+    const summary_stats = use_ready_strategy_stats
+        ? {
+              lost_contracts: rs.lost_contracts,
+              number_of_runs: rs.number_of_runs,
+              total_stake: rs.total_stake,
+              total_payout: rs.total_payout,
+              total_profit: rs.total_profit,
+              won_contracts: rs.won_contracts,
+          }
+        : {
+              lost_contracts: statistics.lost_contracts,
+              number_of_runs: statistics.number_of_runs,
+              total_stake: statistics.total_stake,
+              total_payout: statistics.total_payout,
+              total_profit: statistics.total_profit,
+              won_contracts: statistics.won_contracts,
+          };
 
     React.useEffect(() => {
         onMount();
@@ -247,14 +280,14 @@ const RunPanel = observer(() => {
                 currency={currency}
                 is_drawer_open={is_drawer_open}
                 is_mobile={!isDesktop}
-                lost_contracts={lost_contracts}
-                number_of_runs={number_of_runs}
+                lost_contracts={summary_stats.lost_contracts}
+                number_of_runs={summary_stats.number_of_runs}
                 setActiveTabIndex={setActiveTabIndex}
                 toggleStatisticsInfoModal={toggleStatisticsInfoModal}
-                total_payout={total_payout}
-                total_profit={total_profit}
-                total_stake={total_stake}
-                won_contracts={won_contracts}
+                total_payout={summary_stats.total_payout}
+                total_profit={summary_stats.total_profit}
+                total_stake={summary_stats.total_stake}
+                won_contracts={summary_stats.won_contracts}
                 active_tour={active_tour}
             />
         
@@ -271,8 +304,8 @@ const RunPanel = observer(() => {
         />
     );
 
-    const show_run_panel =
-        [BOT_BUILDER,CHART, DENARA_PRO, SMART_TRADER].includes(active_tab) || active_tour;
+    /** Desktop: Bot workspace + Strategies (Ready) tab in main.tsx */
+    const show_run_panel = RUN_PANEL_VISIBLE_MAIN_TABS.includes(active_tab) || active_tour;
     if ((!show_run_panel && isDesktop) || active_tour === 'bot_builder') return null;
 
     return (

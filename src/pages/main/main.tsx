@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useCallback } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -17,29 +17,30 @@ import { useStore } from '@/hooks/useStore';
 import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 
+import FloatingRiskDisclaimer from '@/components/floating-risk-disclaimer/floating-risk-disclaimer';
 import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
-import ParticipantsLeaderboard from '../aaaaleaderboard';
-import Deposit from '../aadeposit';
-import DenaraAccount from '../aaaDenaraAccount/DenaraAccount';
-import SignupTournament from '../aaaasignup';
-import Copier from '../aaacopier/CopiersBalances';
-import CopiersBalances from '../aaacopier/CopiersBalances';
-import Tournament from '../aaaatonament';
-import BinaryTetris from '../aaaaTetris/BinaryTetris';
+import Strategy from '../autotrade';
+import DepositTwo from '../aadeposittwo';
+
+
 
 // Lazy modules
-const ViewTrader = lazy(() => import('../aaab/ViewTrader'));
-const Risk = lazy(() => import('../Risk/Risk'));
-const ViewStrategy = lazy(() => import('../aaac/ViewStrategy'));
 const AviatorR = lazy(() => import('../aaviatorR/AviatorR'));
 const ViewToggle = lazy(() => import('../aaa/ViewToggle'));
+// Rise Fall tab hidden until feature is complete — component kept in src/pages/rise-fall-manual/
 const ViewPercentage = lazy(() => import('../aaad/ViewPercentage'));
-const FundTrader = lazy(() => import('../aaaFund/FundTrader'));
-const MainAnalysis = lazy(() => import('../aamainanalysis/MainAnalysis'));
-const Bots = lazy(() => import('../aaabots/Bots'));
+const RiskCalculator = lazy(() => import('../risk-calculator/RiskCalculator'));
+const ParallelCopyTrading = lazy(() => import('../parallel-copy-trading/ParallelCopyTrading'));
+// DTrader tab — re-enable when /dtrader deploy is ready
+// const DTrader = lazy(() => import('../dtrader/DTrader'));
+const Ready = lazy(() => import('../aaaReadyStrategy/ready'));
+const DigitBarReady = lazy(() => import('../aaaDigitBarReady/DigitBarReady'));
+const Multi = lazy(() => import('../aaabc/multi'));
+const Deposit = lazy(() => import('../Rcompetition/Rcompetition'));
+const ManualTrader = lazy(() => import('../manualtrader/ManualTrader'));
 
 // Simple emoji component for consistent a11y/sizing
 const Emoji: React.FC<{ symbol: string; label?: string; size?: number }> = ({ symbol, label, size = 24 }) => (
@@ -56,7 +57,7 @@ const Emoji: React.FC<{ symbol: string; label?: string; size?: number }> = ({ sy
 
 const AppWrapper = observer(() => {
   const { connectionStatus } = useApiBase();
-  const { dashboard, load_modal, run_panel, quick_strategy, summary_card } = useStore();
+  const { dashboard, load_modal, run_panel, quick_strategy, summary_card, ready_strategy_panel } = useStore();
   const {
     active_tab,
     active_tour,
@@ -82,13 +83,23 @@ const AppWrapper = observer(() => {
   const { clear } = summary_card;
   const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
 
-  // Floating Risk modal state
-  const [is_risk_open, setIsRiskOpen] = useState(false);
-  const openRisk = useCallback(() => setIsRiskOpen(true), []);
-  const closeRisk = useCallback(() => setIsRiskOpen(false), []);
-
   const init_render = useRef(true);
-  const hash = ['dashboard', 'bot_builder', 'Instant Fill', 'Smart Trader', 'Pro Aviator', 'Analysis', 'CopyTrading', 'Bots', 'Tournament'];
+  const hash = [
+    'dashboard',
+    'bot_builder',
+    'Instant Fill',
+    'Smart Trader',
+    'Pro Aviator',
+    'Manual Trader',
+    'Ready Strategies',
+    'Double Double',
+    'Auto Strategy',
+    'Risk Calculator',
+    'Parallel Copy',
+    'Challenge',
+    // 'DTrader', // re-enable with DTrader tab below
+    'Oracle Live Trades',
+];
   const { isDesktop } = useDevice();
   const location = useLocation();
   const navigate = useNavigate();
@@ -105,14 +116,20 @@ const AppWrapper = observer(() => {
   useEffect(() => {
     if (connectionStatus !== CONNECTION_STATUS.OPENED) {
       const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
-      if (is_bot_running) {
+      const is_ready_running =
+        document.getElementById('db-ready-strategy__stop-button') !== null ||
+        ready_strategy_panel.is_strategy_running;
+      if (is_ready_running) {
+        ready_strategy_panel.invokeStopStrategy();
+      }
+      if (is_bot_running || is_ready_running) {
         clear();
         stopBot();
         api_base.setIsRunning(false);
         setWebSocketState(false);
       }
     }
-  }, [clear, connectionStatus, setWebSocketState, stopBot]);
+  }, [clear, connectionStatus, ready_strategy_panel, setWebSocketState, stopBot]);
 
   // Hash/tab sync
   useEffect(() => {
@@ -190,21 +207,12 @@ const AppWrapper = observer(() => {
             'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
           })}
         >
-          {/* Floating Risk Button */}
-          <div
-            className="risk-fab"
-            role="button"
-            aria-label="Open Risk controls"
-            onClick={openRisk}
-            title={localize('Risk Disclaimer')}
-          >
-            <Emoji symbol="⚠️" size={18} />
-            <span>{localize('Risk')}</span>
-          </div>
+          <FloatingRiskDisclaimer />
 
           <Tabs
             active_index={active_tab}
             className='main__tabs'
+            is_scrollable
             onTabItemChange={onEntered}
             onTabItemClick={handleTabChange}
             top
@@ -277,7 +285,7 @@ const AppWrapper = observer(() => {
               }
               id='id-tutorials'
             >
-              <div className='tutorials-wrapper'>
+              <div className='tutorials-wrapper tutorials-wrapper--aviator'>
                 <Suspense
                   fallback={<ChunkLoader message={localize('Please wait, loading Pro Aviator...')} />}
                 >
@@ -286,13 +294,64 @@ const AppWrapper = observer(() => {
               </div>
             </div>
 
-         
+            <div
+              label={
+                <>
+                  <Emoji symbol="✍️ " size={16} />
+                  <Localize i18n_default_text='Manual Trader' />
+                </>
+              }
+              id='id-tutorials'
+            >
+              <div className='tutorials-wrapper tutorials-wrapper--manual-trader'>
+                <Suspense
+                  fallback={<ChunkLoader message={localize('Please wait, loading Manual Trader...')} />}
+                >
+                  <ManualTrader />
+                </Suspense>
+              </div>
+            </div>
 
             <div
               label={
                 <>
-                  <Emoji symbol="🔍" size={16} />
-                  <Localize i18n_default_text='Analysis' />
+                  <Emoji symbol="🎯" size={18} />
+                  <Localize i18n_default_text='Strategies' />
+                </>
+              }
+              id='id-tutorials'
+            >
+              <div className='tutorials-wrapper'>
+                <Suspense
+                  fallback={<ChunkLoader message={localize('Please wait, loading Strategies...')} />}
+                >
+                  <Ready />
+                </Suspense>
+              </div>
+            </div>
+
+            <div
+              label={
+                <>
+                  <Emoji symbol="2️⃣2️⃣" size={16} />
+                  <Localize i18n_default_text='Double Double' />
+                </>
+              }
+              id='id-tutorials'
+            >
+              <div className='tutorials-wrapper'>
+                <Suspense
+                  fallback={<ChunkLoader message={localize('Please wait, loading Double Double...')} />}
+                >
+                  <Multi />
+                </Suspense>
+              </div>
+            </div>
+            {/* <div
+              label={
+                <>
+                  <Emoji symbol="🪖" size={16} />
+                  <Localize i18n_default_text='Defender' />
                 </>
               }
               id='id-tutorials'
@@ -301,7 +360,58 @@ const AppWrapper = observer(() => {
                 <Suspense
                   fallback={<ChunkLoader message={localize('Please wait, loading Analysis...')} />}
                 >
-                  <MainAnalysis />
+                  <P2PSafeTrader />
+                </Suspense>
+              </div>
+            </div>  */}
+            <div
+              label={
+                <>
+                  <Emoji symbol="💚" size={18} />
+                  <Localize i18n_default_text='Auto Strategy' />
+                </>
+              }
+              id='id-digit-bar-ready'
+            >
+              <div className='tutorials-wrapper'>
+                <Suspense
+                  fallback={<ChunkLoader message={localize('Please wait, loading Auto Strategy...')} />}
+                >
+                  <DigitBarReady />
+                </Suspense>
+              </div>
+            </div>
+            <div
+              label={
+                <>
+                  <Emoji symbol="📐" size={18} />
+                  <Localize i18n_default_text='Risk Calculator' />
+                </>
+              }
+              id='id-risk-calculator'
+            >
+              <div className='tutorials-wrapper tutorials-wrapper--risk-calculator'>
+                <Suspense
+                  fallback={<ChunkLoader message={localize('Please wait, loading Risk Calculator...')} />}
+                >
+                  <RiskCalculator />
+                </Suspense>
+              </div>
+            </div>
+            <div
+              label={
+                <>
+                  <Emoji symbol="📝" size={16} />
+                  <Localize i18n_default_text='Copytrading' />
+                </>
+              }
+              id='id-parallel-copy'
+            >
+              <div className='tutorials-wrapper tutorials-wrapper--parallel-copy'>
+                <Suspense
+                  fallback={<ChunkLoader message={localize('Please wait, loading Parallel Copy...')} />}
+                >
+                  <ParallelCopyTrading />
                 </Suspense>
               </div>
             </div>
@@ -309,55 +419,23 @@ const AppWrapper = observer(() => {
             <div
               label={
                 <>
-                  <Emoji symbol="👥" size={18} />
-                  <Localize i18n_default_text='CopyTrading' />
+                  <Emoji symbol="🌍" size={16} />
+                  <Localize i18n_default_text='Challenge' />
                 </>
               }
               id='id-tutorials'
             >
-              <div className='tutorials-wrapper'>
+              <div className='tutorials-wrapper tutorials-wrapper--manual-trader'>
                 <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Copytrading...')} />}
+                  fallback={<ChunkLoader message={localize('Please wait, loading Challenge...')} />}
                 >
                   <Deposit />
                 </Suspense>
               </div>
             </div>
-            <div
-              label={
-                <>
-                  <Emoji symbol="🦾" size={18} />
-                  <Localize i18n_default_text='Bots' />
-                </>
-              }
-              id='id-tutorials'
-            >
-              <div className='tutorials-wrapper'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Bots...')} />}
-                >
-                  <BinaryTetris />
-                </Suspense>
-              </div>
-            </div>
-            {/* <div
-              label={
-                <>
-                  <Emoji symbol="🏆" size={18} />
-                  <Localize i18n_default_text='Tournament' />
-                </>
-              }
-              id='id-tutorials'
-            >
-              <div className='tutorials-wrapper'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Tournament...')} />}
-                >
-                  <ParticipantsLeaderboard />
-                </Suspense>
-              </div>
-            </div> */}
-      
+
+            {/* DTrader tab — re-enable when /dtrader deploy is ready (see lazy import above) */}
+
           </Tabs>
         </div>
       </div>
@@ -390,24 +468,6 @@ const AppWrapper = observer(() => {
         {message}
       </Dialog>
 
-      {/* Risk Modal */}
-      <Dialog
-        className="risk-modal"
-        has_close_icon
-        is_mobile_full_width={true}
-        is_visible={is_risk_open}
-        onCancel={closeRisk}
-        onClose={closeRisk}
-        onConfirm={closeRisk}
-        cancel_button_text={localize('Close')}
-        confirm_button_text={localize('Done')}
-        portal_element_id="modal_root"
-        title={localize('Risk Controls')}
-      >
-        <Suspense fallback={<ChunkLoader message={localize('Loading Risk controls…')} />}>
-          <Risk />
-        </Suspense>
-      </Dialog>
     </React.Fragment>
   );
 });

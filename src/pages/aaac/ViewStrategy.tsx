@@ -5,12 +5,12 @@ import OverUnderSwitcher from '../aaaStrategies/OverUnderSwitcher/OverUnderSwitc
 import RecoverSameStake from '../aaaStrategies/RecoverSameStake/RecoverSameStake';
 
 import {
-    TradeTypesDigitsEvenIcon,
-    TradeTypesDigitsOddIcon,
-    TradeTypesDigitsOverIcon,
-    TradeTypesDigitsUnderIcon,
-   
-  } from '@deriv/quill-icons';
+  TradeTypesDigitsEvenIcon,
+  TradeTypesDigitsOddIcon,
+  TradeTypesDigitsOverIcon,
+  TradeTypesDigitsUnderIcon,
+} from '@deriv/quill-icons';
+
 import './ViewStrategy.scss';
 
 type ViewType = 'speed' | 'evenOdd' | 'overUnder' | 'recoverSameStake';
@@ -28,12 +28,22 @@ const ViewStrategy: React.FC = () => {
           Speed
         </button>
 
+        {/* ✅ moved here: second after Speed */}
+        <button
+          className={`toggle-btn ${activeView === 'recoverSameStake' ? 'active' : ''}`}
+          onClick={() => setActiveView('recoverSameStake')}
+        >
+          Same $ Recovery🔄
+        </button>
+
         <button
           className={`toggle-btn ${activeView === 'evenOdd' ? 'active' : ''}`}
           style={{ display: 'flex', alignItems: 'center' }}
           onClick={() => setActiveView('evenOdd')}
         >
-          <TradeTypesDigitsEvenIcon width={16} height={16} />Switcher<TradeTypesDigitsOddIcon width={16} height={16} /> 
+          <TradeTypesDigitsEvenIcon width={16} height={16} />
+          Switcher
+          <TradeTypesDigitsOddIcon width={16} height={16} />
         </button>
 
         <button
@@ -41,15 +51,9 @@ const ViewStrategy: React.FC = () => {
           style={{ display: 'flex', alignItems: 'center' }}
           onClick={() => setActiveView('overUnder')}
         >
-          <TradeTypesDigitsOverIcon width={16} height={16} />Switcher<TradeTypesDigitsUnderIcon width={16} height={16} /> 
-          
-        </button>
-
-        <button
-          className={`toggle-btn ${activeView === 'recoverSameStake' ? 'active' : ''}`}
-          onClick={() => setActiveView('recoverSameStake')}
-        >
-          Same $ Recovery🔄
+          <TradeTypesDigitsOverIcon width={16} height={16} />
+          Switcher
+          <TradeTypesDigitsUnderIcon width={16} height={16} />
         </button>
       </div>
 

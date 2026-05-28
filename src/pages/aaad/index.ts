@@ -1,4 +1,4 @@
 import ViewPercentage from './ViewPercentage';
-import './ViewPercentage.css';
+import './ViewPercentage.scss';
 
 export default ViewPercentage;

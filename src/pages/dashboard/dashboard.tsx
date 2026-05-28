@@ -8,11 +8,29 @@ import { useDevice } from '@deriv-com/ui';
 import OnboardTourHandler from '../tutorials/dbot-tours/onboarding-tour';
 import Announcements from './announcements';
 import Cards from './cards';
-import InfoPanel from './info-panel';
 
 type TMobileIconGuide = {
     handleTabChange: (active_number: number) => void;
 };
+
+type TMarketTickerItem = {
+    code: string;
+    name: string;
+    price: string;
+    change: string;
+    isUp: boolean;
+};
+
+const MARKET_TICKER_ITEMS: TMarketTickerItem[] = [
+    { code: 'BTC', name: 'Bitcoin', price: '$43,256', change: '+2.34%', isUp: true },
+    { code: 'ETH', name: 'Ethereum', price: '$2,284', change: '+1.87%', isUp: true },
+    { code: 'TSLA', name: 'Tesla', price: '$248.90', change: '+3.21%', isUp: true },
+    { code: 'XAU', name: 'Gold', price: '$2,024', change: '+0.89%', isUp: true },
+    { code: 'EUR', name: 'EUR/USD', price: '$1.0892', change: '+0.12%', isUp: true },
+    { code: 'GBP', name: 'GBP/USD', price: '$1.2654', change: '-0.08%', isUp: false },
+    { code: 'SOL', name: 'Solana', price: '$98.42', change: '+5.67%', isUp: true },
+    { code: 'AAPL', name: 'Apple', price: '$178.32', change: '-0.45%', isUp: false },
+];
 
 const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
     const { load_modal, dashboard } = useStore();
@@ -20,6 +38,7 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
     const { active_tab, active_tour } = dashboard;
     const has_dashboard_strategies = !!dashboard_strategies?.length;
     const { isDesktop, isTablet } = useDevice();
+    const tickerItems = [...MARKET_TICKER_ITEMS, ...MARKET_TICKER_ITEMS];
 
     return (
         <React.Fragment>
@@ -37,16 +56,25 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
                             })}
                         >
                             {!has_dashboard_strategies && (
-                                <Text
-                                    className='title'
-                                    as='h2'
-                                    color='prominent'
-                                    size={isDesktop ? 'sm' : 's'}
-                                    lineHeight='xxl'
-                                    weight='bold'
-                                >
-                                    {localize('Load or build your bot')}
-                                </Text>
+                                <div className='market-ticker' role='region' aria-label='Live market ticker'>
+                                    <div className='market-ticker__track'>
+                                        {tickerItems.map((item, idx) => (
+                                            <div className='market-ticker__item' key={`${item.code}-${idx}`}>
+                                                <span className='market-ticker__code'>{item.code}</span>
+                                                <span className='market-ticker__name'>{item.name}</span>
+                                                <span className='market-ticker__price'>{item.price}</span>
+                                                <span
+                                                    className={classNames('market-ticker__change', {
+                                                        'market-ticker__change--up': item.isUp,
+                                                        'market-ticker__change--down': !item.isUp,
+                                                    })}
+                                                >
+                                                    {item.change}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
                             <Text
                                 as='p'
@@ -64,7 +92,6 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
                     </div>
                 </div>
             </div>
-            <InfoPanel />
             {active_tab === 0 && <OnboardTourHandler is_mobile={!isDesktop} />}
         </React.Fragment>
     );

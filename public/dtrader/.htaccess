@@ -1,0 +1,14 @@
+# Optional safety in /dtrader/ — do not send js/css/public to index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /dtrader/
+
+  RewriteRule ^(js|css|public)/ - [L]
+
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteRule ^ index.html [L]
+</IfModule>

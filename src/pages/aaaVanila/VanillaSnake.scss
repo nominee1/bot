@@ -1,0 +1,140 @@
+/* src/pages/aaaStrategies/vanilla/VanillaProfitTrack.scss */
+
+.vanilla-profit-track {
+    width: 100%;
+    margin: 10px 0 14px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(10px);
+  }
+  
+  .vpt-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  
+  .badge {
+    font-size: 12px;
+    font-weight: 1000;
+    letter-spacing: 0.4px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+  }
+  
+  .badge.good {
+    background: rgba(0, 200, 83, 0.14);
+    border-color: rgba(0, 200, 83, 0.26);
+    color: #bfffe0;
+  }
+  
+  .badge.neutral {
+    opacity: 0.9;
+  }
+  
+  .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    opacity: 0.9;
+  }
+  
+  .vpt-track {
+    display: grid;
+    grid-template-columns: 1fr 14px 1fr;
+    gap: 10px;
+    align-items: center;
+  }
+  
+  .side {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 14px;
+  }
+  
+  .side.left { justify-content: flex-end; }
+  .side.right { justify-content: flex-start; }
+  
+  .sq {
+    width: 10px;
+    height: 10px;
+    border-radius: 4px;
+    opacity: 0.95;
+    animation: pop 240ms ease-out both;
+  }
+  
+  @keyframes pop {
+    from { transform: scale(0.7); opacity: 0.6; }
+    to   { transform: scale(1); opacity: 0.95; }
+  }
+  
+  .sq.grey { background: rgba(190, 190, 190, 0.55); }
+  .sq.green { background: rgba(0, 200, 83, 1); }
+  
+  .sq.head {
+    box-shadow: 0 0 10px rgba(255,255,255,0.30);
+  }
+  
+  .center {
+    position: relative;
+    width: 14px;
+    height: 28px;
+    border-radius: 10px;
+    background: rgba(0, 200, 255, 0.08);
+    border: 1px solid rgba(0, 200, 255, 0.18);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+  
+  .center-line {
+    width: 2px;
+    height: 22px;
+    border-radius: 2px;
+    background: rgba(0, 200, 255, 0.85);
+  }
+  
+  .glow {
+    position: absolute;
+    inset: -18px;
+    background: radial-gradient(circle, rgba(0,200,255,0.18), transparent 60%);
+    pointer-events: none;
+  }
+  
+  .overflow {
+    font-size: 12px;
+    font-weight: 1000;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    margin-left: 6px;
+    margin-right: 6px;
+  }
+  
+  .overflow.grey {
+    color: rgba(240,240,240,0.95);
+    background: rgba(190, 190, 190, 0.14);
+    border-color: rgba(190, 190, 190, 0.25);
+  }
+  
+  .overflow.green {
+    color: #bfffe0;
+    background: rgba(0, 200, 83, 0.14);
+    border-color: rgba(0, 200, 83, 0.26);
+  }
+  
+  .vpt-footer {
+    margin-top: 10px;
+    font-size: 11px;
+    opacity: 0.75;
+  }
+  

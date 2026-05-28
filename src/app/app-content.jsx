@@ -3,9 +3,11 @@ import { observer } from 'mobx-react-lite';
 import { ToastContainer } from 'react-toastify';
 import useLiveChat from '@/components/chat/useLiveChat';
 import ChunkLoader from '@/components/loader/chunk-loader';
+import SocialChannelsOnboardingModal from '@/components/layout/social-channels-onboarding-modal/social-channels-onboarding-modal';
 import { getUrlBase } from '@/components/shared';
 import TncStatusUpdateModal from '@/components/tnc-status-update-modal';
 import TransactionDetailsModal from '@/components/transaction-details';
+import { isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
 import { api_base, ApiHelpers, ServerTime } from '@/external/bot-skeleton';
 import { V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
 import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
@@ -38,7 +40,7 @@ const AppContent = observer(() => {
     const { recovered_transactions, recoverPendingContracts } = transactions;
     const is_subscribed_to_msg_listener = React.useRef(false);
     const msg_listener = React.useRef(null);
-    const { connectionStatus } = useApiBase();
+    const { connectionStatus, isAuthorizing, activeLoginid } = useApiBase();
     const { initTrackJS } = useTrackjs();
 
     initTrackJS(client.loginid);
@@ -96,10 +98,10 @@ const AppContent = observer(() => {
     }, []);
 
     React.useEffect(() => {
-        // Check if api is initialized and then subscribe to the api messages
-        // Also we should only subscribe to the messages once user is logged in
-        // And is not already subscribed to the messages
-        if (!is_subscribed_to_msg_listener.current && client.is_logged_in && is_api_initialized && api_base?.api) {
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const sessionLoggedIn = client.is_logged_in || (optionsOAuth && Boolean(activeLoginid));
+
+        if (!is_subscribed_to_msg_listener.current && sessionLoggedIn && is_api_initialized && api_base?.api) {
             is_subscribed_to_msg_listener.current = true;
             msg_listener.current = api_base.api.onMessage()?.subscribe(handleMessage);
         }
@@ -109,7 +111,14 @@ const AppContent = observer(() => {
                 msg_listener.current.unsubscribe?.();
             }
         };
-    }, [is_api_initialized, client.is_logged_in, client.loginid, handleMessage, connectionStatus]);
+    }, [
+        activeLoginid,
+        is_api_initialized,
+        client.is_logged_in,
+        client.loginid,
+        handleMessage,
+        connectionStatus,
+    ]);
 
     React.useEffect(() => {
         showDigitalOptionsMaltainvestError(client, common);
@@ -128,18 +137,30 @@ const AppContent = observer(() => {
     const changeActiveSymbolLoadingState = () => {
         init();
 
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const LOADER_CAP_MS = optionsOAuth ? 10000 : 0;
+        let loaderCapTimer = null;
+
+        const finishLoading = () => {
+            if (loaderCapTimer) {
+                clearTimeout(loaderCapTimer);
+                loaderCapTimer = null;
+            }
+            setIsLoading(false);
+        };
+
+        if (LOADER_CAP_MS > 0) {
+            loaderCapTimer = setTimeout(finishLoading, LOADER_CAP_MS);
+        }
+
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
-            active_symbols.retrieveActiveSymbols(true).then(() => {
-                setIsLoading(false);
-            });
+            active_symbols.retrieveActiveSymbols(true).then(finishLoading).catch(finishLoading);
         };
 
         if (ApiHelpers?.instance?.active_symbols) {
             retrieveActiveSymbols();
         } else {
-            // This is a workaround to fix the issue where the active symbols are not loaded immediately
-            // when the API is initialized. Should be replaced with RxJS pubsub
             const intervalId = setInterval(() => {
                 if (ApiHelpers?.instance?.active_symbols) {
                     clearInterval(intervalId);
@@ -150,23 +171,33 @@ const AppContent = observer(() => {
     };
 
     React.useEffect(() => {
-        if (is_api_initialized) {
-            init();
-            setIsLoading(true);
-            if (!client.is_logged_in) {
-                changeActiveSymbolLoadingState();
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [is_api_initialized]);
+        if (!is_api_initialized) return;
+        init();
 
-    // use is_landing_company_loaded to know got details of accounts to identify should show an error or not
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const sessionLoggedIn = client.is_logged_in || (optionsOAuth && Boolean(activeLoginid));
+
+        if (!sessionLoggedIn) {
+            if (isAuthorizing && !optionsOAuth) {
+                setIsLoading(true);
+            } else {
+                setIsLoading(false);
+            }
+            return;
+        }
+        setIsLoading(true);
+        changeActiveSymbolLoadingState();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeLoginid, client.is_logged_in, isAuthorizing, is_api_initialized]);
+
     React.useEffect(() => {
-        if (client.is_logged_in && client.is_landing_company_loaded && is_api_initialized) {
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const sessionLoggedIn = client.is_logged_in || (optionsOAuth && Boolean(activeLoginid));
+        if (sessionLoggedIn && client.is_landing_company_loaded && is_api_initialized) {
             changeActiveSymbolLoadingState();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client.is_landing_company_loaded, is_api_initialized, client.loginid]);
+    }, [activeLoginid, client.is_landing_company_loaded, client.is_logged_in, is_api_initialized, client.loginid]);
 
     useEffect(() => {
         initDatadog(true);
@@ -178,7 +209,7 @@ const AppContent = observer(() => {
     if (common?.error) return null;
 
     return is_loading ? (
-        <ChunkLoader message={localize('Setting up your account, please hold on $$$')} />
+        <ChunkLoader message={localize('Setting up your account, please hold on…')} />
     ) : (
         <>
             <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>
@@ -192,6 +223,7 @@ const AppContent = observer(() => {
                     <TncStatusUpdateModal />
                 </div>
             </ThemeProvider>
+            <SocialChannelsOnboardingModal />
         </>
     );
 });

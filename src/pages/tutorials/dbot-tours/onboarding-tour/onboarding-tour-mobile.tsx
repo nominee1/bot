@@ -4,7 +4,6 @@ import { observer } from 'mobx-react-lite';
 import ProgressBarTracker from '@/components/shared_ui/progress-bar-tracker';
 import Text from '@/components/shared_ui/text';
 import { useStore } from '@/hooks/useStore';
-import { getSetting } from '@/utils/settings';
 import { LegacyClose1pxIcon } from '@deriv/quill-icons/Legacy';
 import { localize } from '@deriv-com/translations';
 import TourButton from '../common/tour-button';
@@ -24,7 +23,7 @@ type TTourData = TMobileTourConfig & {
 
 const OnboardingTourMobile = observer(() => {
     const { dashboard } = useStore();
-    const { onCloseTour, onTourEnd, setTourActiveStep, active_tour, active_tab, setActiveTour } = dashboard;
+    const { onCloseTour, onTourEnd, setTourActiveStep, active_tour } = dashboard;
     const [tour_step, setStep] = React.useState<number>(1);
     const [tour_data, setTourData] = React.useState<TTourData>(default_tour_data);
     const { content, header, img, media, tour_step_key } = tour_data;
@@ -44,15 +43,7 @@ const OnboardingTourMobile = observer(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tour_step]);
 
-    React.useEffect(() => {
-        const checkTokenForTour = () => {
-            const token = getSetting('onboard_tour_token');
-            if (!token && active_tab === 0) {
-                setActiveTour('onboarding');
-            }
-        };
-        checkTokenForTour();
-    }, [active_tab, active_tour]);
+    // Onboarding tour no longer auto-starts on first dashboard visit.
 
     if (!active_tour) {
         return null;

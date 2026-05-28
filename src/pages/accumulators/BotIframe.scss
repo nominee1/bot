@@ -1,26 +1,27 @@
 @use 'components/shared/styles/mixins' as *;
 
 .bot-app {
-  background-color: white !important;
+  background-color: rgb(248, 178, 254) !important;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 13px;
-  width: 71vw;
+  width: 97vw;
   margin: 0 auto;
   padding: 15px;
-  background-color: var(--general-main-1);
+  
   color: var(--text-general);
   line-height: 1.6;
   padding-bottom: 20rem;
-  height: 100vh;
-  overflow-y: auto;
+  /*
+    Never make `.bot-app` its own scrollport (any breakpoint). Sticky `.trade-buttons--single-top`
+    must track the tab / main / parent shell scroll — same behaviour pre–Instant Fill shell.
+  */
+  height: auto;
+  min-height: 100%;
+  overflow-y: visible;
   overflow-x: hidden;
+  max-width: 100%;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
 
   display: flex;
   flex-direction: column;
@@ -177,10 +178,13 @@
     }
   }
 
-  /* Target all inputs inside trading container */
+  /* Target inputs inside trading panel & bulk/actions bar */
   .trading-container {
     background-color: #e5e5e5;
+  }
 
+  .trading-container,
+  .trading-actions-bar {
     input[type="text"],
     input[type="number"],
     select {
@@ -397,6 +401,12 @@
   .digits-container {
     width: 100%;
     margin: 6px 0 10px 0;
+
+    &--loading {
+      .digits__digit-display-percentage {
+        color: rgba(0, 0, 0, 0.35);
+      }
+    }
     padding: 10px 10px;
     background: rgba(255, 255, 255, 0.72);
     border: 1px solid rgba(6, 78, 114, 0.18);
@@ -451,6 +461,32 @@
         box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.30), 0 10px 20px rgba(0, 0, 0, 0.10);
         border-color: rgba(255, 193, 7, 0.6);
         background: rgba(255, 243, 205, 0.65);
+      }
+
+      &--ou-over {
+        border-color: rgba(231, 76, 60, 0.75);
+        box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.28);
+      }
+
+      &--ou-under {
+        border-color: rgba(46, 204, 113, 0.75);
+        box-shadow: 0 0 0 2px rgba(46, 204, 113, 0.28);
+      }
+
+      &--barrier-target {
+        background: rgba(106, 27, 154, 0.14);
+        border-color: rgba(106, 27, 154, 0.55);
+        box-shadow: 0 0 0 3px rgba(106, 27, 154, 0.22);
+      }
+    }
+
+    &.digits-container--match-diff {
+      .digits__digit:not(.digits__digit--barrier-target) .progress__value {
+        stroke: rgba(0, 0, 0, 0.12) !important;
+      }
+
+      .digits__digit--barrier-target .progress__value {
+        stroke: rgba(106, 27, 154, 0.95) !important;
       }
     }
 
@@ -524,86 +560,6 @@
       @media screen and (max-width: 760px) {
         font-size: 7px;
         
-      }
-    }
-  }
-
-  /* =========================================================
-     ✅ NEW: Sticky single buttons (top) – iPhone glass dock
-     ========================================================= */
-  .trade-buttons--single-top {
-    position: sticky;
-    top: 0;
-    z-index: 60;
-    margin: 10px 0 12px 0;
-    padding: 10px;
-    border-radius: 16px;
-
-    /* glass */
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
-
-    /* keep same layout as your trade-buttons */
-    display: flex;
-    gap: 10px;
-
-    .trade-btn {
-      flex: 1;
-      padding: 14px;
-      border-radius: 16px;
-      font-weight: 800;
-      letter-spacing: 0.2px;
-
-      /* glass look with underlying tint */
-      background: rgba(255, 255, 255, 0.18);
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.10);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-
-      &:hover {
-        transform: translateY(-2px);
-      }
-
-      &:active {
-        transform: translateY(0);
-      }
-
-      .button-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 6px;
-
-        svg {
-          filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
-        }
-      }
-
-      &.even-btn {
-        /* green tint underneath */
-        background: linear-gradient(
-          135deg,
-          rgba(40, 167, 69, 0.25) 0%,
-          rgba(255, 255, 255, 0.18) 55%
-        );
-        border-bottom: 0;
-        color: #0b2d13;
-      }
-
-      &.odd-btn {
-        /* red tint underneath */
-        background: linear-gradient(
-          135deg,
-          rgba(220, 53, 69, 0.25) 0%,
-          rgba(255, 255, 255, 0.18) 55%
-        );
-        border-bottom: 0;
-        color: #3a0b10;
       }
     }
   }
@@ -709,6 +665,19 @@
         flex: 1;
         min-width: 200px;
 
+        &.selector-container--ou-merged {
+          flex: 1 1 100%;
+          min-width: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+
+          .digit-selector {
+            justify-content: center;
+            width: 100%;
+          }
+        }
+
         .selector-header {
           display: flex;
           justify-content: space-between;
@@ -784,6 +753,18 @@
               background: #064e72;
               color: white;
             }
+
+            &.ou-barrier-btn {
+              background: linear-gradient(135deg, rgba(231, 76, 60, 0.42) 0%, rgba(46, 204, 113, 0.42) 100%);
+              color: #1a1a1a;
+              border: 2px solid rgba(0, 0, 0, 0.12);
+            }
+
+            &.ou-barrier-btn.active {
+              background: #064e72;
+              color: #fff;
+              border-color: #064e72;
+            }
           }
 
           @media (max-width: 780px) {
@@ -824,7 +805,7 @@
         margin-top: 10px;
 
         .history-title {
-          font-size: 18px;
+          font-size: 13px;
           font-weight: 600;
           color: var(--text-prominent);
           margin-bottom: 15px;
@@ -918,8 +899,67 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     margin-bottom: 20px;
 
+    /*
+      Desktop: contract settings (left), positions (right). Bulk/reset/stats live in .trading-actions-bar below.
+    */
+    .trading-panel-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+      gap: 16px 20px;
+      /* Match left column height: both cells stretch to the taller column */
+      align-items: stretch;
+
+      @media (max-width: 768px) {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      &__contract-settings {
+        grid-column: 1;
+        grid-row: 1;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(6, 78, 114, 0.28);
+        background: var(--general-section-2);
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+
+        .trade-controls {
+          margin-bottom: 0;
+        }
+
+        @media (max-width: 768px) {
+          padding: 0;
+          border: none;
+          background: transparent;
+        }
+      }
+
+      &__results {
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+
+        .title {
+          flex-shrink: 0;
+        }
+
+        .open-positions {
+          flex: 1;
+          min-height: 0;
+        }
+      }
+    }
+
     .history-title {
-      font-size: 18px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-prominent);
       margin-bottom: 15px;
@@ -1001,6 +1041,7 @@
         margin: 0;
       }
 
+      appearance: textfield;
       -moz-appearance: textfield;
     }
 
@@ -1049,7 +1090,8 @@
       display: flex;
       flex-direction: column;
       overscroll-behavior: contain;
-      background: linear-gradient(0deg, var(--general-main-1) 0%, rgba(242, 243, 244, 0) 80%);
+      /* Same treatment as aaflipaa/flipa.scss `.flipaaaa .open-positions` (theme gradient, not white card) */
+      background: linear-gradient(0deg, var(--general-main-1) 0%, rgba(242, 243, 244, 0.12) 100%);
 
       min-height: 300px;
       max-height: 300px;
@@ -1063,7 +1105,7 @@
       -ms-overflow-style: none;
 
       .position-item {
-        background: white;
+        background: #fff;
         padding: 7px;
         border-radius: 2px;
         margin-bottom: 1px;
@@ -1100,6 +1142,15 @@
       }
     }
 
+    /* Desktop: positions list fills right column to match settings column height */
+    .trading-panel-layout__results .open-positions {
+      @media (min-width: 769px) {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+      }
+    }
+
     @keyframes fadeInRight {
       from { opacity: 0; transform: translateX(400px); }
       to { opacity: 1; transform: translateX(0); }
@@ -1128,26 +1179,265 @@
     }
   }
 
-  /* History Section */
+  /* P/L & runs — above reset/bulk bar; stats use same look as .bot-app .performance-stats */
+  .trading-performance-strip {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+
+    .performance-stats {
+      margin: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
+
+  /* Reset / bulk / status — compact strip below panel */
+  .trading-actions-bar {
+    background-color: var(--general-section-1);
+    border: 3px solid #064e72;
+    padding: 8px 12px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
+
+    @media (max-width: 768px) {
+      padding: 10px;
+      gap: 8px;
+    }
+
+    .trading-actions-bar__controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: stretch;
+
+      @media (min-width: 769px) {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr);
+        align-items: center;
+        gap: 12px 20px;
+        width: 100%;
+
+        > .trade-buttons:first-of-type {
+          justify-self: start;
+        }
+
+        > .trade-control-group {
+          justify-self: center;
+        }
+
+        > .trade-buttons:last-of-type {
+          justify-self: end;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .trade-buttons {
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+
+        .trade-control-group {
+          align-items: center;
+
+          .trade-input {
+            max-width: none;
+          }
+        }
+      }
+    }
+
+    .trade-control-group {
+      display: flex;
+      flex-direction: column;
+      padding: 2px 0;
+
+      label {
+        margin-bottom: 5px;
+        font-size: 14px;
+        color: black;
+      }
+
+      .trade-input {
+        padding: 8px 12px;
+        width: 100%;
+        max-width: 200px;
+        border-radius: 4px;
+        border: 1px solid var(--border-normal);
+      }
+
+      @media (min-width: 769px) {
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        padding: 0;
+
+        label {
+          margin-bottom: 0;
+          font-size: 12px;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
+        .trade-input {
+          width: 4.25rem;
+          max-width: 5rem;
+          padding: 6px 8px;
+          font-size: 13px;
+        }
+      }
+    }
+
+    .trade-buttons {
+      display: flex;
+      gap: 8px;
+      flex: 0 0 auto;
+
+      .trade-btn {
+        flex: 1;
+        border: none;
+        border-radius: 6px;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        padding: 15px;
+
+        &:hover {
+          opacity: 0.9;
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        &.even-btn {
+          background-color: var(--brand-teal);
+        }
+
+        &.odd-btn {
+          background-color: var(--brand-blue);
+        }
+
+        &.stop-btn {
+          background: var(--brand-red);
+          flex: 0.5;
+        }
+
+        &.reset-btn {
+          background-color: var(--text-less-prominent);
+          color: white;
+          padding: 8px 12px;
+          flex: 0 0 auto;
+
+          &:hover {
+            background-color: var(--text-less-prominent-hover);
+          }
+        }
+      }
+
+      /* Bulk row: keep original button height */
+      &:not(:first-child) .trade-btn:not(.reset-btn) {
+        padding: 15px;
+      }
+    }
+
+    /* Bulk trio: intrinsic width + right cluster (overrides flex: 1 above) */
+    .trading-actions-bar__controls > .trade-buttons:last-of-type .trade-btn {
+      flex: 0 1 auto;
+    }
+
+    .trade-status {
+      @media (min-width: 769px) {
+        flex: 1 1 100%;
+        width: 100%;
+        padding: 4px 8px;
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.35;
+        min-height: 0;
+      }
+    }
+  }
+
+  /* History Section — Analysis Chamber: digits wrap inside a bounded, scrollable area */
   .history-container {
     display: flex;
     flex-direction: column;
-    height: 550px;
+    min-height: 200px;
+    max-height: min(760px, 72vh);
     background-color: white;
-    padding-bottom: 30rem;
-    color: white;
-    padding: 20px;
+    color: var(--text-general);
+    padding: 16px 20px 20px;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
 
     .history-title {
-      font-size: 18px;
+      flex-shrink: 0;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-prominent);
-      margin-bottom: 15px;
+      margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
+      gap: 10px;
+
+      .history-title__main {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .history-title__label {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .history-title__legend {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-less-prominent);
+        line-height: 1.4;
+        flex-wrap: wrap;
+      }
+
+      .history-title__sep {
+        color: var(--text-less-prominent);
+        font-weight: 400;
+      }
+
+      .history-title__legend-under {
+        color: #2ecc71;
+        font-weight: 600;
+      }
+
+      .history-title__legend-over {
+        color: #e74c3c;
+        font-weight: 600;
+      }
 
       .refresh-btn {
         background: var(--brand-blue);
@@ -1160,20 +1450,57 @@
         display: flex;
         align-items: center;
         gap: 4px;
+        flex-shrink: 0;
       }
     }
 
     .history-items {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      /* Grid keeps chamber tiles aligned; flex-wrap caused uneven rows / “vertical line” glitches in narrow shells */
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+      gap: 8px;
+      align-content: start;
+      justify-items: stretch;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+
+      @media (max-width: 520px) {
+        grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+        gap: 6px;
+      }
 
       .history-item {
-        padding: 8px 12px;
-        border-radius: 20px;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        margin: 0;
+        padding: 4px 6px;
+        border-radius: 12px;
         font-weight: 600;
-        min-width: 30px;
+        font-size: 12px;
+        line-height: 1;
+        box-sizing: border-box;
         text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 1;
+      }
+
+      .no-results-message {
+        grid-column: 1 / -1;
+        width: 100%;
+        padding: 12px;
+        text-align: center;
+        color: var(--text-less-prominent);
+        font-size: 13px;
       }
     }
   }
@@ -1392,16 +1719,17 @@
     }
 
     .history-container {
-      padding-bottom: 25rem;
+      max-height: min(680px, 62vh);
+      padding: 12px 14px 16px;
     }
 
     .history-title {
       text-align: center;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
-    /* keep sticky dock working on mobile */
     .trade-buttons--single-top {
-      top: 0;
       padding: 8px;
       border-radius: 14px;
 
@@ -1417,12 +1745,16 @@
   }
 
   @media (max-width: 480px) {
-    width: 100vw;
+    width: 100%;
+    max-width: 100%;
     padding: 3px;
     margin: 0;
 
-    .trading-container {
-      padding: 15px 10px;
+    .trading-container,
+    .trading-actions-bar,
+    .trading-performance-strip {
+      padding-left: 10px;
+      padding-right: 10px;
     }
 
     .trade-control-group label {
@@ -1437,59 +1769,84 @@
   }
 }
 
-/* ✅ TOP SINGLE BUTTONS ONLY (direct child of .bot-app) */
-.bot-app > .trade-buttons {
+/*
+ * Single buy dock — `.trade-buttons--single-top` is NOT the first child of `.bot-app`
+ * (mode selector / market / digits come first). Use descendant selector so sticky + glass apply.
+ */
+.bot-app .trade-buttons--single-top {
   position: sticky;
   top: 8px;
   z-index: 60;
-
+  margin: 10px 0 12px 0;
   padding: 10px 12px;
   border-radius: 14px;
+  display: flex;
+  gap: 10px;
 
-  /* dock glass */
-  background: rgba(255, 255, 255, 0.14) !important;   /* 👈 change opacity here */
+  background: rgba(255, 255, 255, 0.14) !important;
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.22);
-
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18),
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.18),
     inset 0 1px 1px rgba(255, 255, 255, 0.35);
 }
 
-/* ✅ TOP BUTTONS glass base */
-.bot-app > .trade-buttons .trade-btn {
-  background: rgba(255, 255, 255, 0.12) !important;  /* 👈 button glass opacity */
+.bot-app .trade-buttons--single-top .trade-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: 16px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  background: rgba(255, 255, 255, 0.12) !important;
   border: 1px solid rgba(255, 255, 255, 0.28) !important;
-
-  /* kill solid “full color” effects */
   border-bottom: 0 !important;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16),
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.16),
     inset 0 1px 1px rgba(255, 255, 255, 0.35) !important;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  .button-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 6px;
+
+    svg {
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
+    }
+  }
 }
 
-/* ✅ GREEN hint (still glassy) */
-.bot-app > .trade-buttons .trade-btn.even-btn {
+.bot-app .trade-buttons--single-top .trade-btn.even-btn {
   background:
-    linear-gradient(135deg,
-      rgba(40, 167, 69, 0.65),     /* 👈 green tint strength */
+    linear-gradient(
+      135deg,
+      rgba(40, 167, 69, 0.65),
       rgba(255, 255, 255, 0.10)
     ) !important;
 }
 
-/* ✅ RED hint (still glassy) */
-.bot-app > .trade-buttons .trade-btn.odd-btn {
+.bot-app .trade-buttons--single-top .trade-btn.odd-btn {
   background:
-    linear-gradient(135deg,
-      rgba(220, 53, 69, 0.65),     /* 👈 red tint strength */
+    linear-gradient(
+      135deg,
+      rgba(220, 53, 69, 0.65),
       rgba(255, 255, 255, 0.10)
     ) !important;
 }
 
-/* ✅ remove your old shine triangle if it's making it look “solid” */
-.bot-app > .trade-buttons .trade-btn::after {
+.bot-app .trade-buttons--single-top .trade-btn::after {
   content: none !important;
 }
-.digits-container {
+.bot-app .digits-container {
   .digits {
     .digits__digit {
       cursor: pointer;
@@ -1508,5 +1865,35 @@
     .digits__digit--selected {
       background-color: rgba(3, 164, 153, 0.55);
     }
+  }
+}
+
+/* Guard against cross-page global class collisions (e.g. ManualTrader `.trade-input` / `.trade-control-group`). */
+.bot-app {
+  .trade-control-group {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+
+  .trade-control-group label {
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: 14px !important;
+  }
+
+  .trade-input {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    border-radius: 4px !important;
+  }
+
+  .trading-container,
+  .trading-actions-bar,
+  .history-container,
+  .performance-stats {
+    color: var(--text-general) !important;
   }
 }

@@ -6,6 +6,7 @@ import {
     connectionStatus$,
     isAuthorized$,
     isAuthorizing$,
+    tradingSocketGeneration$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { TAuthData } from '@/types/api-types';
 
@@ -16,6 +17,7 @@ export const useApiBase = () => {
     const [accountList, setAccountList] = useState<TAuthData['account_list']>([]);
     const [authData, setAuthData] = useState<TAuthData | null>(null);
     const [activeLoginid, setActiveLoginid] = useState<string>('');
+    const [tradingSocketGeneration, setTradingSocketGeneration] = useState(0);
 
     useEffect(() => {
         const connectionStatusSubscription = connectionStatus$.subscribe(status => {
@@ -37,14 +39,27 @@ export const useApiBase = () => {
             setActiveLoginid(authData?.loginid ?? '');
         });
 
+        const socketGenSubscription = tradingSocketGeneration$.subscribe(gen =>
+            setTradingSocketGeneration(Number(gen)),
+        );
+
         return () => {
             connectionStatusSubscription.unsubscribe();
             isAuthorizedSubscription.unsubscribe();
             isAuthorizingSubscription.unsubscribe();
             accountListSubscription.unsubscribe();
             authDataSubscription.unsubscribe();
+            socketGenSubscription.unsubscribe();
         };
     }, []);
 
-    return { connectionStatus, isAuthorized, isAuthorizing, accountList, authData, activeLoginid };
+    return {
+        connectionStatus,
+        isAuthorized,
+        isAuthorizing,
+        accountList,
+        authData,
+        activeLoginid,
+        tradingSocketGeneration,
+    };
 };

@@ -4,6 +4,11 @@ import { observer } from 'mobx-react-lite';
 import { CurrencyIcon } from '@/components/currency/currency-icon';
 import { addComma, getDecimalPlaces } from '@/components/shared';
 import Popover from '@/components/shared_ui/popover';
+import {
+    isDerivOptionsOAuthSession,
+    switchDerivOptionsAccount,
+    upsertAccountQueryInBrowser,
+} from '@/components/shared/utils/login/deriv-oauth-storage';
 import { api_base } from '@/external/bot-skeleton';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
 import { useApiBase } from '@/hooks/useApiBase';
@@ -119,32 +124,43 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
         client.website_status?.currencies_config,
         activeAccount?.loginid,
     ]);
+    const optionsOAuthSession = isDerivOptionsOAuthSession();
+
     const modifiedCRAccountList = useMemo(() => {
+        if (optionsOAuthSession) {
+            return modifiedAccountList?.filter(account => !account?.isVirtual) ?? [];
+        }
         return modifiedAccountList?.filter(account => account?.loginid?.includes('CR')) ?? [];
-    }, [modifiedAccountList]);
+    }, [modifiedAccountList, optionsOAuthSession]);
 
     const modifiedMFAccountList = useMemo(() => {
+        if (optionsOAuthSession) return [];
         return modifiedAccountList?.filter(account => account?.loginid?.includes('MF')) ?? [];
-    }, [modifiedAccountList]);
+    }, [modifiedAccountList, optionsOAuthSession]);
 
     const modifiedVRTCRAccountList = useMemo(() => {
+        if (optionsOAuthSession) {
+            return modifiedAccountList?.filter(account => account?.isVirtual) ?? [];
+        }
         return modifiedAccountList?.filter(account => account?.loginid?.includes('VRT')) ?? [];
-    }, [modifiedAccountList]);
+    }, [modifiedAccountList, optionsOAuthSession]);
 
     const switchAccount = async (loginId: number) => {
         if (loginId.toString() === activeAccount?.loginid) return;
+        if (optionsOAuthSession) {
+            await switchDerivOptionsAccount(loginId.toString());
+            return;
+        }
         const account_list = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
         const token = account_list[loginId];
         if (!token) return;
         localStorage.setItem('authToken', token);
         localStorage.setItem('active_loginid', loginId.toString());
-        await api_base?.init(true);
-        const search_params = new URLSearchParams(window.location.search);
+        await api_base?.switchLegacyAccountSession();
         const selected_account = modifiedAccountList.find(acc => acc.loginid === loginId.toString());
         if (!selected_account) return;
         const account_param = selected_account.is_virtual ? 'demo' : selected_account.currency;
-        search_params.set('account', account_param);
-        window.history.pushState({}, '', `${window.location.pathname}?${search_params.toString()}`);
+        upsertAccountQueryInBrowser(loginId.toString(), account_param, 'push');
     };
 
     return (

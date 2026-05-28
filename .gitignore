@@ -6,6 +6,7 @@
 .vscode/
 dist/
 node_modules/
+api-backend/vendor/
 packages/**/scripts/CNAME
 .DS_Store
 tsconfig.tsbuildinfo
@@ -27,6 +28,11 @@ test-results/
 playwright-report/
 playwright/.cache/
 .nx
+
+# PHP statement cache (get_challenge_participant_statements)
+api dtraderhub/cache/
+api-backend/cache/
+api-dtradehub latest/cache/
 
 # Logs
 logs

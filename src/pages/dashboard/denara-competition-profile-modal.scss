@@ -1,0 +1,66 @@
+/* Desktop Denara profile: portal to #modal_root + remove header offset so dialog is viewport-centered */
+.denara-comp-profile-dialog-wrap {
+    &.dc-dialog__wrapper {
+        width: 100%;
+        height: 100%;
+    }
+
+    .dc-dialog__dialog {
+        margin-top: 0 !important;
+        max-height: min(90vh, 720px);
+        min-height: auto;
+        overflow-x: hidden;
+        overflow-y: auto;
+        max-width: min(560px, calc(100vw - 2rem));
+        text-align: start;
+    }
+
+    .dc-dialog__content {
+        width: 100%;
+        text-align: start;
+    }
+}
+
+.denara-comp-profile-modal__token-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.denara-comp-profile-modal__token-link {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand-red-coral, #cc2e3d);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    align-self: flex-start;
+
+    &:hover {
+        opacity: 0.92;
+    }
+}
+
+.denara-comp-profile-modal__token-note.dc-text {
+    display: block;
+    line-height: 1.45;
+}
+
+@media screen and (max-width: 560px) {
+    .denara-comp-profile-dialog-wrap {
+        &.dc-dialog__wrapper {
+            align-items: center;
+            justify-content: center;
+            padding: 1.2rem;
+            box-sizing: border-box;
+        }
+
+        .dc-dialog__dialog {
+            width: calc(100vw - 2.4rem) !important;
+            max-width: calc(100vw - 2.4rem) !important;
+            min-width: 0 !important;
+            margin-top: 0 !important;
+            max-height: min(88vh, 640px);
+        }
+    }
+}

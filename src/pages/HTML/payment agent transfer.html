@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Denara Tool - Payment Agent Transfer Test</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(21, 128, 61, 0.35), transparent 35%),
+        linear-gradient(135deg, #020617, #0f172a, #052e16);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 980px;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 22px;
+      align-items: stretch;
+    }
+
+    .hero,
+    .card {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 24px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(14px);
+    }
+
+    .hero {
+      padding: 34px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 620px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      font-size: 18px;
+    }
+
+    .brand-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #22c55e, #14b8a6);
+      display: grid;
+      place-items: center;
+      color: #03140b;
+      font-weight: 900;
+    }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 58px);
+      line-height: 1;
+      margin: 52px 0 16px;
+      letter-spacing: -2px;
+    }
+
+    .hero p {
+      color: rgba(255, 255, 255, 0.74);
+      max-width: 580px;
+      font-size: 16px;
+      line-height: 1.7;
+      margin: 0;
+    }
+
+    .warning {
+      margin-top: 26px;
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid rgba(251, 191, 36, 0.28);
+      color: #fde68a;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .mini {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+    }
+
+    .mini strong {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+
+    .mini span {
+      color: rgba(255, 255, 255, 0.62);
+      font-size: 12px;
+    }
+
+    .card {
+      padding: 24px;
+    }
+
+    .card h2 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      letter-spacing: -0.5px;
+    }
+
+    .card-subtitle {
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 14px;
+      margin-bottom: 22px;
+      line-height: 1.5;
+    }
+
+    .field {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(15, 23, 42, 0.72);
+      color: #ffffff;
+      border-radius: 14px;
+      padding: 13px 14px;
+      outline: none;
+      font-size: 14px;
+      transition: 0.2s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: rgba(34, 197, 94, 0.78);
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 72px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 120px;
+      gap: 12px;
+    }
+
+    .check-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 18px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 14px;
+    }
+
+    .check-row input {
+      width: 18px;
+      height: 18px;
+      accent-color: #22c55e;
+    }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-primary {
+      color: #04130a;
+      background: linear-gradient(135deg, #22c55e, #14b8a6);
+    }
+
+    .btn-secondary {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.10);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .status {
+      margin-top: 18px;
+      border-radius: 16px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.55;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.success {
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      color: #bbf7d0;
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #fecaca;
+    }
+
+    .status.info {
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      color: #bfdbfe;
+    }
+
+    .log {
+      margin-top: 12px;
+      max-height: 170px;
+      overflow: auto;
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      padding: 12px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.75);
+      display: none;
+    }
+
+    .log.show {
+      display: block;
+    }
+
+    @media (max-width: 860px) {
+      body {
+        align-items: flex-start;
+      }
+
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      .mini-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <div class="brand">
+          <div class="brand-badge">D</div>
+          Denara Tool
+        </div>
+
+        <h1>Payment Agent Transfer Test</h1>
+
+        <p>
+          This test page connects directly to Deriv WebSocket and transfers from your approved
+          Payment Agent account to a receiver login ID.
+        </p>
+
+        <div class="warning">
+          For testing only. Do not publish this page with your real Payment Agent token.
+          Anyone who can open the page can inspect the token and use it.
+        </div>
+
+        <div class="mini-grid">
+          <div class="mini">
+            <strong>1</strong>
+            <span>Authorize PA token</span>
+          </div>
+          <div class="mini">
+            <strong>2</strong>
+            <span>Validate receiver</span>
+          </div>
+          <div class="mini">
+            <strong>3</strong>
+            <span>Send transfer</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Transfer Form</h2>
+      <div class="card-subtitle">
+        Enter your Payment Agent API token, receiver login ID, and amount.
+      </div>
+
+      <form id="transferForm">
+        <div class="field">
+          <label for="appId">Deriv App ID</label>
+          <input id="appId" type="text" value="76100" placeholder="Example: 76100" required />
+        </div>
+
+        <div class="field">
+          <label for="token">Payment Agent API Token</label>
+          <input id="token" type="password" placeholder="Paste PA token here" required />
+        </div>
+
+        <div class="field">
+          <label for="transferTo">Receiver Deriv Login ID</label>
+          <input id="transferTo" type="text" placeholder="Example: CR1234567" required />
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="amount">Amount</label>
+            <input id="amount" type="number" min="0.01" step="0.01" placeholder="10.00" required />
+          </div>
+
+          <div class="field">
+            <label for="currency">Currency</label>
+            <select id="currency">
+              <option value="USD" selected>USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" placeholder="Example: Denara Tool transfer"></textarea>
+        </div>
+
+        <label class="check-row">
+          <input id="dryRun" type="checkbox" checked />
+          Dry run first, validate only
+        </label>
+
+        <div class="actions">
+          <button class="btn-primary" id="submitBtn" type="submit">
+            Run Transfer Test
+          </button>
+
+          <button class="btn-secondary" id="clearBtn" type="button">
+            Clear Output
+          </button>
+        </div>
+      </form>
+
+      <div id="status" class="status"></div>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('transferForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusBox = document.getElementById('status');
+    const logBox = document.getElementById('log');
+
+    let ws = null;
+    let requestId = 1000;
+    const pendingRequests = new Map();
+
+    function setStatus(type, message) {
+      statusBox.className = `status show ${type}`;
+      statusBox.textContent = message;
+    }
+
+    function clearStatus() {
+      statusBox.className = 'status';
+      statusBox.textContent = '';
+      logBox.className = 'log';
+      logBox.textContent = '';
+    }
+
+    function addLog(title, data) {
+      logBox.className = 'log show';
+      const line = `\n\n===== ${title} =====\n${JSON.stringify(data, null, 2)}`;
+      logBox.textContent += line;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function nextReqId() {
+      requestId += 1;
+      return requestId;
+    }
+
+    function connect(appId) {
+      return new Promise((resolve, reject) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          resolve(ws);
+          return;
+        }
+
+        const url = `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(appId)}`;
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+          addLog('WebSocket connected', { url });
+          resolve(ws);
+        };
+
+        ws.onerror = () => {
+          reject(new Error('WebSocket connection failed.'));
+        };
+
+        ws.onclose = () => {
+          addLog('WebSocket closed', {});
+        };
+
+        ws.onmessage = (event) => {
+          let response;
+
+          try {
+            response = JSON.parse(event.data);
+          } catch (error) {
+            addLog('Invalid JSON response', event.data);
+            return;
+          }
+
+          addLog('Response', response);
+
+          const id = response.req_id;
+
+          if (id && pendingRequests.has(id)) {
+            const { resolve, reject } = pendingRequests.get(id);
+            pendingRequests.delete(id);
+
+            if (response.error) {
+              reject(response.error);
+            } else {
+              resolve(response);
+            }
+          }
+        };
+      });
+    }
+
+    function sendRequest(payload) {
+      return new Promise((resolve, reject) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          reject(new Error('WebSocket is not connected.'));
+          return;
+        }
+
+        const reqId = nextReqId();
+        const request = {
+          ...payload,
+          req_id: reqId,
+        };
+
+        pendingRequests.set(reqId, { resolve, reject });
+
+        addLog('Request', request);
+        ws.send(JSON.stringify(request));
+
+        setTimeout(() => {
+          if (pendingRequests.has(reqId)) {
+            pendingRequests.delete(reqId);
+            reject(new Error('Request timed out.'));
+          }
+        }, 30000);
+      });
+    }
+
+    async function authorize(token) {
+      return sendRequest({
+        authorize: token,
+      });
+    }
+
+    async function paymentAgentTransfer({ transferTo, amount, currency, description, dryRun }) {
+      const payload = {
+        paymentagent_transfer: 1,
+        transfer_to: transferTo,
+        amount: Number(amount),
+        currency,
+        description,
+      };
+
+      if (dryRun) {
+        payload.dry_run = 1;
+      }
+
+      return sendRequest(payload);
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const appId = document.getElementById('appId').value.trim();
+      const token = document.getElementById('token').value.trim();
+      const transferTo = document.getElementById('transferTo').value.trim();
+      const amount = document.getElementById('amount').value;
+      const currency = document.getElementById('currency').value;
+      const description = document.getElementById('description').value.trim() || 'Payment Agent transfer';
+      const dryRun = document.getElementById('dryRun').checked;
+
+      if (!appId || !token || !transferTo || !amount) {
+        setStatus('error', 'Please fill in all required fields.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = dryRun ? 'Validating...' : 'Sending Transfer...';
+      setStatus('info', 'Connecting to Deriv...');
+
+      try {
+        await connect(appId);
+
+        setStatus('info', 'Authorizing Payment Agent account...');
+        const authResponse = await authorize(token);
+
+        const account = authResponse.authorize || {};
+        addLog('Authorized Account', account);
+
+        setStatus('info', dryRun ? 'Running dry validation...' : 'Submitting real transfer...');
+
+        const transferResponse = await paymentAgentTransfer({
+          transferTo,
+          amount,
+          currency,
+          description,
+          dryRun,
+        });
+
+        if (dryRun) {
+          setStatus(
+            'success',
+            'Dry run passed. No money was transferred.\n\nUntick "Dry run first" and submit again to send the real transfer.'
+          );
+        } else {
+          setStatus(
+            'success',
+            'Transfer request completed successfully.\n\nCheck the response log below for the transaction details.'
+          );
+        }
+
+        addLog('Transfer Result', transferResponse);
+      } catch (error) {
+        console.error(error);
+
+        const message =
+          error && error.message
+            ? error.message
+            : error && error.error
+              ? error.error.message
+              : JSON.stringify(error, null, 2);
+
+        setStatus('error', `Transfer failed:\n${message}`);
+        addLog('Error', error);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Run Transfer Test';
+      }
+    });
+
+    clearBtn.addEventListener('click', clearStatus);
+  </script>
+</body>
+</html>

@@ -23,7 +23,13 @@ type TSubscription = {
     };
 };
 
-const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) => {
+type TChartProps = {
+    show_digits_stats: boolean;
+    onTickMessage?: (data: any) => void;
+    onContractMessage?: (contract: any) => void;
+};
+
+const Chart = observer(({ show_digits_stats, onTickMessage, onContractMessage }: TChartProps) => {
     const barriers: [] = [];
     const { common, ui } = useStore();
     const { chart_store, run_panel, dashboard } = useStore();
@@ -47,7 +53,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
 
     // Trading state
     const [numberOfTicks, setNumberOfTicks] = useState(5);
-    const [stake, setStake] = useState(10);
+    const [stake, setStake] = useState<number | ''>(10);
     const [isAuth, setIsAuth] = useState(false);
     const [trades, setTrades] = useState<Array<{ id: string; profit: number | null }>>([]);
     const [balance, setBalance] = useState(0);
@@ -88,11 +94,15 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
             const history = await chart_api.api.send(req);
             setChartSubscriptionId(history?.subscription.id);
             if (history) callback(history);
+            if (history) onTickMessage?.(history);
             if (req.subscribe === 1) {
                 subscriptions.current[history?.subscription.id] = chart_api.api
                     .onMessage()
                     ?.subscribe(({ data }: { data: TicksHistoryResponse }) => {
                         callback(data);
+                        if ((data as any)?.msg_type === 'tick' || (data as any)?.msg_type === 'history') {
+                            onTickMessage?.(data);
+                        }
                     });
             }
         } catch (e) {
@@ -143,13 +153,14 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         window.addEventListener('storage', handleStorageChange);
         handleAccountSwitch(); // Initial auth check
 
-        const balanceSub = api_base.api.onMessage().subscribe(({ data }) => {
+        const balanceSub = api_base.api.onMessage().subscribe(({ data }: { data: any }) => {
             if (data.balance) setBalance(data.balance.balance);
         });
 
-        const contractSub = api_base.api.onMessage().subscribe(({ data }) => {
+        const contractSub = api_base.api.onMessage().subscribe(({ data }: { data: any }) => {
             if (data.proposal_open_contract) {
                 const contract = data.proposal_open_contract;
+                onContractMessage?.(contract);
                 setTrades(prev =>
                     prev.map(trade =>
                         trade.id === contract.contract_id ? { ...trade, profit: contract.profit } : trade
@@ -163,7 +174,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
             balanceSub.unsubscribe();
             contractSub.unsubscribe();
         };
-    }, [handleAccountSwitch]);
+    }, [handleAccountSwitch, onContractMessage]);
 
     const purchaseContract = async (contractType: 'CALL' | 'PUT') => {
         if (!isAuth) {
@@ -174,9 +185,9 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         try {
             const response = await api_base.api.send({
                 buy: 1,
-                price: stake,
+                price: Number(stake),
                 parameters: {
-                    amount: stake,
+                    amount: Number(stake),
                     basis: 'stake',
                     currency: 'USD',
                     contract_type: contractType,

@@ -336,7 +336,7 @@ const TournamentLanding = () => {
                   <li>Prize pool: <strong>Starting $200</strong></li>
                   <li>Top 3 also unlock <em>Denara Paid Copy-Trader</em> listing (subject to review).</li>
                   <li>Winners contacted within 48h after the tournament ends;</li>
-                  <li>Free Denara Digit Pro logins for top 10.</li>
+                  <li>Free DenaraPro logins for top 10.</li>
                   <li>Prizes paid into Deriv accounts; taxes are your responsibility.</li>
                   <li>Winning trades may be audited before payout.</li>
                 </ul>

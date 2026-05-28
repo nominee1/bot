@@ -10,6 +10,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
+import { useApiBase } from '@/hooks/useApiBase';
+import { sendDerivSessionContractPurchase } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import { api_base } from '@/external/bot-skeleton';
 import './IframeEvenOdd.scss';
 
@@ -119,6 +121,7 @@ const L = (...args: any[]) => console.log('[EO-IFRAME]', ...args);
 
 const IframeEvenOdd = observer(() => {
   const { ui } = useStore();
+  const { tradingSocketGeneration } = useApiBase();
 
   // ───── Analysis state ─────
   const [filterCount, setFilterCount] = useState<number | ''>(10);
@@ -246,7 +249,7 @@ const IframeEvenOdd = observer(() => {
       try { conn.removeEventListener('open', bump); } catch {}
       try { conn.removeEventListener('close', bump); } catch {}
     };
-  }, []);
+  }, [tradingSocketGeneration]);
 
   // ───── Current account (currency/loginid) & account-change reset ─────
   const [currentLogin, setCurrentLogin] = useState<string | null>(api_base?.account_info?.loginid || null);
@@ -279,7 +282,7 @@ const IframeEvenOdd = observer(() => {
     }
     setCurrentLogin(loginid);
     setCurrentCurrency(currency);
-  }, [apiEpoch]); // refresh on socket open/close cycles (typical during switch)
+  }, [apiEpoch, tradingSocketGeneration]); // reconnect epoch + Deriv instance swap (Options OTP)
 
   // ───── Deriv connection guard (no local stream subs) ─────
   const ensureApiReady = useCallback(async () => {
@@ -400,14 +403,18 @@ const IframeEvenOdd = observer(() => {
       setStatus(`Placing ${sig.toUpperCase()} @ ${symbol} (${stake.toFixed(2)} / ${dur}t)…`);
       L('BUY send', { ct, stake, symbol, dur, currency });
 
-      const resp = await api_base.api.send({
-        buy: 1,
-        price: stake,
-        parameters: { amount: stake, basis: 'stake', currency, contract_type: ct, duration: dur, duration_unit: 't', symbol }
-      });
+      const resp = (await sendDerivSessionContractPurchase(d => api_base.api!.send(d) as Promise<unknown>, {
+        contract_type: ct,
+        market: symbol,
+        duration: dur,
+        stake,
+        currency,
+      })) as { error?: unknown; buy?: { contract_id?: unknown } };
       if (resp?.error) throw resp.error;
 
-      const realId = String(resp.buy.contract_id);
+      const cidRaw = resp.buy?.contract_id;
+      if (cidRaw == null || cidRaw === '') throw new Error('No contract_id in buy response');
+      const realId = String(cidRaw);
       stakesByIdRef.current[realId] = stake;
       openContractIdRef.current = realId;
 
@@ -565,7 +572,7 @@ const IframeEvenOdd = observer(() => {
       L('Unbind onMessage subscriber @ epoch', apiEpoch);
       sub.unsubscribe();
     };
-  }, [apiEpoch, handleApiMessage]);
+  }, [apiEpoch, tradingSocketGeneration, handleApiMessage]);
 
   // ───── Signal persistence & scheduler ─────
   useEffect(() => {

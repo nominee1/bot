@@ -1,6 +1,8 @@
 import { action, computed, makeObservable, observable } from 'mobx';
 import { ContentFlag, isEmptyObject } from '@/components/shared';
 import { isEuCountry, isMultipliersOnly, isOptionsBlocked } from '@/components/shared/common/utility';
+import { clearDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
+import { api_base } from '@/external/bot-skeleton';
 import {
     setAccountList,
     setAuthData,
@@ -68,6 +70,7 @@ export default class ClientStore {
             setIsLoggedIn: action,
             setIsLoggingOut: action,
             setLandingCompany: action,
+            setOptionsOAuthSessionReady: action,
             setLoginId: action,
             setWebsiteStatus: action,
             setUpgradeableLandingCompanies: action,
@@ -277,6 +280,11 @@ export default class ClientStore {
         this.is_landing_company_loaded = true;
     }
 
+    /** Options OAuth users skip classic WS `landing_company` — unblock dashboard loading. */
+    setOptionsOAuthSessionReady() {
+        this.is_landing_company_loaded = true;
+    }
+
     setUpgradeableLandingCompanies = (upgradeable_landing_companies: string[]) => {
         this.upgradeable_landing_companies = upgradeable_landing_companies;
     };
@@ -309,6 +317,8 @@ export default class ClientStore {
         localStorage.removeItem('accountsList');
         localStorage.removeItem('authToken');
         localStorage.removeItem('clientAccounts');
+        clearDerivOptionsOAuthSession();
+        api_base.clearOptionsAccountsCache();
 
         setIsAuthorized(false);
         setAccountList([]);

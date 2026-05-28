@@ -2,6 +2,11 @@ import React from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { formatMoney, getCurrencyDisplayCode } from '@/components/shared';
+import {
+    isDerivOptionsOAuthSession,
+    switchDerivOptionsAccount,
+    upsertAccountQueryInBrowser,
+} from '@/components/shared/utils/login/deriv-oauth-storage';
 import { AppLinkedWithWalletIcon } from '@/components/shared_ui/app-linked-with-wallet-icon';
 import Text from '@/components/shared_ui/text';
 import { api_base } from '@/external/bot-skeleton';
@@ -40,23 +45,27 @@ export const AccountSwitcherWalletItem = observer(
         const is_dtrade_active = dtrade_loginid === active_loginid;
 
         const switchAccount = async (loginId: number) => {
+            if (isDerivOptionsOAuthSession()) {
+                await switchDerivOptionsAccount(String(loginId));
+                closeAccountsDialog();
+                return;
+            }
+
             const account_list = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
             const token = account_list[loginId];
             if (!token) return;
             localStorage.setItem('authToken', token);
             localStorage.setItem('active_loginid', loginId.toString());
-            await api_base?.init(true);
+            await api_base?.switchLegacyAccountSession();
             closeAccountsDialog();
 
             const client_accounts = JSON.parse(localStorage.getItem('clientAccounts') ?? '{}');
-            const search_params = new URLSearchParams(window.location.search);
             const selected_account = Object.values(client_accounts)?.find(
-                (acc: any) => acc.loginid === loginId.toString()
+                (acc: { loginid: string }) => acc.loginid === loginId.toString()
             );
-            if (!selected_account) return;
+            if (!selected_account || !('currency' in selected_account)) return;
             const account_param = is_virtual ? 'demo' : selected_account.currency;
-            search_params.set('account', account_param);
-            window.history.pushState({}, '', `${window.location.pathname}?${search_params.toString()}`);
+            upsertAccountQueryInBrowser(String(loginId), account_param, 'push');
         };
 
         return (

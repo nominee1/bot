@@ -1,16 +1,15 @@
+check out this component how it works. it uses the virtual hook. // src/pages/aaaStrategies/speed/Speed.tsx
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { observer } from 'mobx-react-lite';
-import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
 import {
-  LegacyExitSpotIcon,
-  LegacyEntrySpotIcon,
   TradeTypesDigitsEvenIcon,
   TradeTypesDigitsOddIcon,
   TradeTypesDigitsMatchesIcon,
-  TradeTypesDigitsDiffersIcon,
   TradeTypesDigitsOverIcon,
+  TradeTypesDigitsDiffersIcon,
+  SocialYoutubeBlackIcon,
   TradeTypesDigitsUnderIcon,
+  LegacyPlayFillIcon,
   TradeTypesUpsAndDownsFallIcon,
   MarketDerivedVolatility1001sIcon,
   MarketDerivedVolatility100Icon,
@@ -30,10 +29,25 @@ import {
   MarketDerivedVolatility151sIcon,
   MarketDerivedVolatility301sIcon,
   MarketDerivedVolatility901sIcon,
-  TradeTypesUpsAndDownsRiseIcon
+  TradeTypesUpsAndDownsRiseIcon,
 } from '@deriv/quill-icons';
 
+import LazyYouTubeModal from '../aaaStrategies/LazyYoutubeModal/LazyYouTubeModal';
 import './Speed.scss';
+
+type StrategyType =
+  | 'even'
+  | 'odd'
+  | 'over'
+  | 'under'
+  | 'matches'
+  | 'differs'
+  | 'rise'
+  | 'fall'
+  | 'only_up'
+  | 'only_down'
+  | 'rise_equals'
+  | 'fall_equals';
 
 type TradeStatus = 'pending' | 'open' | 'active' | 'won' | 'lost' | 'completed' | 'error';
 
@@ -52,1036 +66,1227 @@ interface TTrade {
   exitValue?: number;
   currentValue?: number;
   ticksRemaining?: number;
-  barrier?: number;
   marketFormat?: string;
   temp?: boolean;
   errorReason?: string;
   errorDetails?: string;
+  barrier?: number;
+
+  // ✅ virtual hooks
+  virtual?: boolean;
+  virtualLabel?: string;
 }
 
-type TTransaction = {
-  contract_id: string;
-  amount: number;
-  transaction_time: number;
-};
+type TTransaction = { contract_id: string; amount: number; transaction_time: number };
 
+/* ---------- Market/Contract Icons ---------- */
 const marketIcons: Record<string, JSX.Element> = {
   '1HZ100V': <MarketDerivedVolatility1001sIcon width={16} height={16} />,
-  'R_100': <MarketDerivedVolatility100Icon width={16} height={16} />,
-  'R_10': <MarketDerivedVolatility10Icon width={16} height={16} />,
-  'R_25': <MarketDerivedVolatility25Icon width={16} height={16} />,
-  'R_50': <MarketDerivedVolatility50Icon width={16} height={16} />,
-  'R_75': <MarketDerivedVolatility75Icon width={16} height={16} />,
-  'JD10': <MarketDerivedJump10Icon width={16} height={16} />,
-  'JD25': <MarketDerivedJump25Icon width={16} height={16} />,
-  'JD50': <MarketDerivedJump50Icon width={16} height={16} />,
-  'JD75': <MarketDerivedJump75Icon width={16} height={16} />,
-  'JD100': <MarketDerivedJump100Icon width={16} height={16} />,
+  R_100: <MarketDerivedVolatility100Icon width={16} height={16} />,
+  R_10: <MarketDerivedVolatility10Icon width={16} height={16} />,
+  R_25: <MarketDerivedVolatility25Icon width={16} height={16} />,
+  R_50: <MarketDerivedVolatility50Icon width={16} height={16} />,
+  R_75: <MarketDerivedVolatility75Icon width={16} height={16} />,
+  JD10: <MarketDerivedJump10Icon width={16} height={16} />,
+  JD25: <MarketDerivedJump25Icon width={16} height={16} />,
+  JD50: <MarketDerivedJump50Icon width={16} height={16} />,
+  JD75: <MarketDerivedJump75Icon width={16} height={16} />,
+  JD100: <MarketDerivedJump100Icon width={16} height={16} />,
   '1HZ10V': <MarketDerivedVolatility101sIcon width={16} height={16} />,
   '1HZ25V': <MarketDerivedVolatility251sIcon width={16} height={16} />,
   '1HZ50V': <MarketDerivedVolatility501sIcon width={16} height={16} />,
   '1HZ15V': <MarketDerivedVolatility151sIcon width={16} height={16} />,
   '1HZ30V': <MarketDerivedVolatility301sIcon width={16} height={16} />,
   '1HZ90V': <MarketDerivedVolatility901sIcon width={16} height={16} />,
-  '1HZ75V': <MarketDerivedVolatility751sIcon width={16} height={16} />
+  '1HZ75V': <MarketDerivedVolatility751sIcon width={16} height={16} />,
 };
 
 const contractIcons: Record<string, JSX.Element> = {
-  'DIGITEVEN': <TradeTypesDigitsEvenIcon width={16} height={16} />,
-  'DIGITODD': <TradeTypesDigitsOddIcon width={16} height={16} />,
-  'DIGITMATCH': <TradeTypesDigitsMatchesIcon width={16} height={16} />,
-  'DIGITDIFF': <TradeTypesDigitsDiffersIcon width={16} height={16} />,
-  'DIGITOVER': <TradeTypesDigitsOverIcon width={16} height={16} />,
-  'DIGITUNDER': <TradeTypesDigitsUnderIcon width={16} height={16} />,
-  'CALL': <TradeTypesUpsAndDownsRiseIcon width={16} height={16} />,
-  'PUT': <TradeTypesUpsAndDownsFallIcon width={16} height={16} />
+  DIGITEVEN: <TradeTypesDigitsEvenIcon width={16} height={16} />,
+  DIGITODD: <TradeTypesDigitsOddIcon width={16} height={16} />,
+  DIGITMATCH: <TradeTypesDigitsMatchesIcon width={16} height={16} />,
+  DIGITDIFF: <TradeTypesDigitsDiffersIcon width={16} height={16} />,
+  DIGITOVER: <TradeTypesDigitsOverIcon width={16} height={16} />,
+  DIGITUNDER: <TradeTypesDigitsUnderIcon width={16} height={16} />,
+
+  CALL: <TradeTypesUpsAndDownsRiseIcon width={16} height={16} />,
+  PUT: <TradeTypesUpsAndDownsFallIcon width={16} height={16} />,
+
+  CALLE: <TradeTypesUpsAndDownsRiseIcon width={16} height={16} />,
+  PUTE: <TradeTypesUpsAndDownsFallIcon width={16} height={16} />,
+
+  RUNHIGH: <TradeTypesUpsAndDownsRiseIcon width={16} height={16} />,
+  RUNLOW: <TradeTypesUpsAndDownsFallIcon width={16} height={16} />,
 };
 
-function useTickStream(symbol: string, onTick: (p: number, epoch: number) => void) {
-  useEffect(() => {
-    let active = true;
+/* ---------- Custom Entry/Exit Spot Icons ---------- */
+const EntrySpotIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx={8} cy={8} r={6} stroke="#FF4444" strokeWidth={1.5} fill="white" />
+    <circle cx={8} cy={8} r={3} fill="#FF4444" />
+  </svg>
+);
+const ExitSpotIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx={8} cy={8} r={6} stroke="#999999" strokeWidth={1.5} fill="white" />
+  </svg>
+);
 
-    const run = async () => {
-      try {
-        await api_base.api.send({ ticks: symbol, subscribe: 1 });
+/* ----- BUY THROTTLE ----- */
+const MIN_BUY_GAP_MS = 500;
 
-        const sub = api_base.api.onMessage().subscribe(({ data }: any) => {
-          if (!active || data?.msg_type !== 'tick' || !data?.tick?.quote) return;
-          onTick(data.tick.quote, data.tick.epoch);
-        });
+/* ---------- Helpers ---------- */
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-        return () => sub.unsubscribe();
-      } catch (error) {
-        console.error('Tick stream error:', error);
-      }
-    };
+const toNum = (v: string) => {
+  if (v.trim() === '') return 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
 
-    run();
-    return () => {
-      active = false;
-    };
-  }, [symbol, onTick]);
-}
+const clampInt = (v: string, min: number, max: number) => {
+  if (v.trim() === '') return 0;
+  const n = Math.trunc(Number(v));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(max, Math.max(min, n));
+};
 
-const Speed = observer(() => {
-  const { ui } = useStore();
+const clampNonNegInt = (v: string, max: number) => {
+  if (v.trim() === '') return 0;
+  const n = Math.trunc(Number(v));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(max, n);
+};
 
+const formatTickValue = (v?: number, mf?: string) => {
+  if (v === undefined) return '—';
+  if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(mf || '')) return v.toFixed(3);
+  if (['R_50', 'R_75'].includes(mf || '')) return v.toFixed(4);
+  return v.toFixed(2);
+};
+
+const isDigitContract = (ct: string) =>
+  ct === 'DIGITOVER' || ct === 'DIGITUNDER' || ct === 'DIGITMATCH' || ct === 'DIGITDIFF';
+
+const minTicksForContract = (ct: string) => {
+  if (ct === 'RUNHIGH' || ct === 'RUNLOW') return 2;
+  return 1;
+};
+
+/* ===== RateLimit backoff helpers ===== */
+const parseRetryAfterMs = (message: string): number | null => {
+  if (!message) return null;
+  let m = message.match(/retry(?:ing)?\s+in\s+(\d+(?:\.\d+)?)\s*(seconds?|secs?|s)\b/i);
+  if (m) return Math.round(Number(m[1]) * 1000);
+  m = message.match(/retry\s+after\s+(\d+(?:\.\d+)?)\s*(seconds?|secs?|s)\b/i);
+  if (m) return Math.round(Number(m[1]) * 1000);
+  return null;
+};
+
+const isRateLimitError = (e: any) => {
+  const errObj = e?.error ?? e;
+  const code = (errObj?.code ?? '').toString();
+  const msg = (errObj?.message ?? '').toString();
+  return code === 'RateLimit' || /rate\s*limit|too\s*many\s*requests|throttl/i.test(msg);
+};
+
+/* ===== Virtual hook config ===== */
+type VirtualMode = 'wins' | 'losses';
+
+/* ===== Entry pattern helpers ===== */
+const normalizePattern = (s: string) => (s || '').replace(/\D/g, '').slice(0, 12);
+const patternDigits = (s: string) => normalizePattern(s).split('').map(d => Number(d)).filter(n => Number.isFinite(n));
+
+const endsWithPattern = (windowDigits: number[], patt: number[]) => {
+  if (!patt.length) return true;
+  if (windowDigits.length < patt.length) return false;
+  for (let i = 0; i < patt.length; i++) {
+    if (windowDigits[windowDigits.length - patt.length + i] !== patt[i]) return false;
+  }
+  return true;
+};
+
+export default function MultiStrategyBot() {
+  /* ===== Inputs ===== */
+  const [isRunning, setIsRunning] = useState(false);
+  const [market, setMarket] = useState('1HZ10V');
+
+  const [stakeStr, setStakeStr] = useState('10');
+  const [martingaleStr, setMartingaleStr] = useState('1.25');
+  const [paramStr, setParamStr] = useState('2');
+  const [tpStr, setTpStr] = useState('10');
+  const [slStr, setSlStr] = useState('40');
+
+  const [strategy, setStrategy] = useState<StrategyType>('over');
+  const [ticks, setTicks] = useState(1);
+
+  // ✅ Virtual hooks (DEFAULT = virtual wins)
+  const [virtualMode, setVirtualMode] = useState<VirtualMode>('wins');
+  const [virtualCountStr, setVirtualCountStr] = useState('3');
+  const [martingaleDelayStr, setMartingaleDelayStr] = useState('0');
+  const [entryPatternStr, setEntryPatternStr] = useState('');
+
+  // ✅ one input: return-to-virtual threshold
+  const [returnToVirtualStr, setReturnToVirtualStr] = useState('1');
+
+  // Derived
+  const stakeInput = toNum(stakeStr);
+  const martingaleInput = toNum(martingaleStr);
+  const param = clampInt(paramStr, 0, 9);
+  const tpInput = toNum(tpStr);
+  const slInput = toNum(slStr);
+
+  const virtualTarget = clampNonNegInt(virtualCountStr, 999);
+  const martingaleDelay = clampNonNegInt(martingaleDelayStr, 999);
+  const entryPatternClean = normalizePattern(entryPatternStr);
+
+  const returnToVirtual = clampNonNegInt(returnToVirtualStr, 999);
+
+  const [ytOpen, setYtOpen] = useState(false);
+  const YT_URL = 'https://youtu.be/lJZO89NS78Q?si=Z_jJLcS1uTTXmNA6';
+
+  /* ===== Trades & status ===== */
   const [trades, setTrades] = useState<TTrade[]>([]);
+  const [msg, setMsg] = useState<{ txt: string; type: 'info' | 'success' | 'error' | 'loading' | 'warning' }>({
+    txt: '',
+    type: 'info',
+  });
   const [profitLoss, setPL] = useState(0);
-  const [msg, setMsg] = useState<{ txt: string; type: 'info' | 'success' | 'error' | 'loading' | 'warning' }>({ txt: '', type: 'info' });
-  const [strategy, setStrat] = useState('over');
-  const [ctypes, setCT] = useState<{ left: string; right: string }>({ left: 'DIGITEVEN', right: 'DIGITODD' });
-  const [currentSymbol, setCurrentSymbol] = useState('JD10');
-  const [bothMode, setBothMode] = useState<boolean>(false);
-  const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
-  const [activeTickSubscription, setActiveTickSubscription] = useState<string | null>(null);
-  const [activeMode, setActiveMode] = useState('evenOdd');
+  const [sessionPL, setSessionPL] = useState(0);
+  const sessionPLRef = useRef(0);
 
-  const [takeProfit, setTakeProfit] = useState(50);
-  const [stopLoss, setStopLoss] = useState(100);
-  const [martingale, setMartingale] = useState(2);
-  const [currentStake, setCurrentStake] = useState(0);
-  const [consecutiveTriggers, setConsecutiveTriggers] = useState(0);
-  const [baseStake, setBaseStake] = useState(0);
-  const stakeProgression = useRef<number[]>([]);
+  // ✅ latest trades ref (fixes TP miscalc caused by stale closure in transaction handler)
+  const tradesRef = useRef<TTrade[]>([]);
+  useEffect(() => {
+    tradesRef.current = trades;
+  }, [trades]);
 
-  const [analysisData, setAnalysisData] = useState({
-    evenCount: 0,
-    oddCount: 0,
-    riseCount: 0,
-    fallCount: 0,
-    totalCount: 0,
-    lastResults: [] as Array<{
-      digit: number;
-      isEven: boolean;
-      isRise: boolean | null;
-      price: number;
-      timestamp: Date;
-    }>,
-    lastDigit: null as number | null,
-    lastPrice: null as number | null,
-    digitCounts: Array(10).fill(0),
-    overDigit: 1,
-    underDigit: 7,
-    tickRange: 100,
-    currentMarket: "1HZ10V"
+  // ✅ virtual counters UI
+  const [vWinsUI, setVWinsUI] = useState(0);
+  const [vLossesUI, setVLossesUI] = useState(0);
+  const [readyForRealUI, setReadyForRealUI] = useState(false);
+
+  // ✅ recovery UI
+  const [recoveryUI, setRecoveryUI] = useState<{ on: boolean; wins: number; losses: number }>({
+    on: false,
+    wins: 0,
+    losses: 0,
   });
 
-  // Generate stake progression when base stake or martingale changes
-  useEffect(() => {
-    if (baseStake > 0 && martingale > 1) {
-      const progression = [baseStake];
-      for (let i = 1; i <= 7; i++) {
-        progression.push(parseFloat((baseStake * Math.pow(martingale, i)).toFixed(2)));
-      }
-      stakeProgression.current = progression;
-      setCurrentStake(baseStake);
-      setConsecutiveTriggers(0);
-    }
-  }, [baseStake, martingale]);
-
-  const marketSelectionRef = useRef<HTMLSelectElement>(null);
-  const marketRef = useRef<HTMLSelectElement>(null);
-  const strategyRef = useRef<HTMLSelectElement>(null);
-  const stakeRef = useRef<HTMLInputElement>(null);
-  const durRef = useRef<HTMLSelectElement>(null);
-  const digitRef = useRef<HTMLInputElement>(null);
-  const takeProfitRef = useRef<HTMLInputElement>(null);
-  const stopLossRef = useRef<HTMLInputElement>(null);
-  const martingaleRef = useRef<HTMLInputElement>(null);
+  /* ===== Tick stream refs ===== */
   const wsRef = useRef<WebSocket | null>(null);
-  const subs = useRef<Set<string>>(new Set());
-  const prevTickRef = useRef<number | null>(null);
-  const debounceTimer = useRef<NodeJS.Timeout>();
-  const currentStrategyRef = useRef(strategy);
+  const lastEpochRef = useRef<number | null>(null);
+  const digitWindowRef = useRef<number[]>([]);
 
-  useEffect(() => {
-    currentStrategyRef.current = strategy;
-  }, [strategy]);
+  /* ===== Sequential anti-slip ref ===== */
+  const buyPendingRef = useRef(false);
 
+  /* ===== Martingale refs (REAL ONLY) ===== */
+  const ladderRef = useRef<number[]>([]);
+  const consecutiveRealLossesRef = useRef(0);
+  const stakeIndexRef = useRef(0);
+  const nextStakeRef = useRef(2);
+
+  /* ===== Virtual readiness refs ===== */
+  const vWinsRef = useRef(0);
+  const vLossesRef = useRef(0);
+  const readyForRealRef = useRef(false);
+
+  /* ===== Recovery mode refs ===== */
+  const recoveryRef = useRef<{ on: boolean; wins: number; losses: number }>({ on: false, wins: 0, losses: 0 });
+
+  /* ===== Virtual settlement waiting ===== */
+  const awaitingVirtualRef = useRef<null | { tradeId: string; entryPrice: number; remaining: number; dur: number }>(
+    null
+  );
+
+  /* ===== Real settle gating (sequential) ===== */
+  const inFlightRealRef = useRef<string | null>(null);
+
+  const settleRequiredForStrategy = useCallback((st: StrategyType) => {
+    return (
+      st === 'rise' ||
+      st === 'fall' ||
+      st === 'rise_equals' ||
+      st === 'fall_equals' ||
+      st === 'only_up' ||
+      st === 'only_down'
+    );
+  }, []);
+
+  /* ===== Running/Stop guards ===== */
+  const isRunningRef = useRef(false);
   useEffect(() => {
-    if (takeProfit > 0 && profitLoss >= takeProfit) {
-      setAutoTradeEnabled(false);
-      showStatus(`Target profit hit ($${takeProfit})`, 'success');
-    } else if (stopLoss > 0 && profitLoss <= -stopLoss) {
-      setAutoTradeEnabled(false);
-      showStatus(`Stop loss hit ($${stopLoss})`, 'error');
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  const stopRequestedRef = useRef(false);
+  const settledContractsRef = useRef<Set<string>>(new Set());
+
+  /* ===== Locked runtime config ===== */
+  const locked = useRef({
+    S: 2,
+    M: 2,
+    strat: 'even' as StrategyType,
+    param: 4,
+    market: '1HZ10V',
+    ticks: 1,
+    tp: 0,
+    sl: 0,
+
+    // ✅ default virtual wins
+    vMode: 'wins' as VirtualMode,
+    vTarget: 0,
+    mDelay: 0,
+    entryPatternDigits: [] as number[],
+    entryPatternStr: '',
+
+    returnToVirtual: 1,
+  });
+
+  /* 🔒 Buy throttle clock */
+  const lastBuyTsRef = useRef<number>(0);
+
+  /* ✅ GLOBAL RateLimit backoff */
+  const rateLimitRef = useRef<{ until: number; attempt: number; lastMsg: string }>({
+    until: 0,
+    attempt: 0,
+    lastMsg: '',
+  });
+
+  const waitForRateLimitBackoff = useCallback(async () => {
+    const now = Date.now();
+    if (now < rateLimitRef.current.until) {
+      await sleep(rateLimitRef.current.until - now);
     }
-  }, [profitLoss, takeProfit, stopLoss]);
+  }, []);
 
+  const applyRateLimitBackoff = useCallback(async (err: any) => {
+    const errObj = err?.error ?? err;
+    const msgText = (errObj?.message ?? 'Rate limit').toString();
+
+    const hinted = parseRetryAfterMs(msgText);
+    const attempt = Math.min(10, (rateLimitRef.current.attempt ?? 0) + 1);
+
+    const base = 900;
+    const cap = 25000;
+    const exp = Math.min(cap, base * Math.pow(2, attempt - 1));
+    const waitMs = Math.max(700, hinted ?? exp);
+
+    const jitter = Math.floor(Math.random() * 250);
+    rateLimitRef.current.attempt = attempt;
+    rateLimitRef.current.lastMsg = msgText;
+    rateLimitRef.current.until = Date.now() + waitMs + jitter;
+
+    const sec = Math.max(1, Math.ceil((waitMs + jitter) / 1000));
+    setMsg({ txt: `⏳ Rate limit detected — backing off ~${sec}s`, type: 'warning' });
+
+    await sleep(waitMs + jitter);
+  }, []);
+
+  const clearRateLimitBackoff = useCallback(() => {
+    rateLimitRef.current.attempt = 0;
+    rateLimitRef.current.until = 0;
+    rateLimitRef.current.lastMsg = '';
+  }, []);
+
+  /* ===== Account-switch safe ===== */
+  const [apiEpoch, setApiEpoch] = useState(0);
   useEffect(() => {
-    if (stakeRef.current) {
-      const stake = parseFloat(stakeRef.current.value) || 0;
-      setBaseStake(stake);
-    }
-  }, [stakeRef.current?.value]);
+    const api = api_base.api;
+    const conn = (api as any)?.connection;
+    if (!conn) return;
 
-  const getBalanceError = useCallback((error: any): { isBalanceError: boolean; message: string } => {
-    if (!error) return { isBalanceError: false, message: 'Unknown error' };
+    const bump = () => setApiEpoch(x => x + 1);
+    conn.addEventListener('open', bump);
+    conn.addEventListener('close', bump);
 
-    const errorObj = error.error || error;
-    const rawMsg = (errorObj.message || 'Unknown error').toString().trim();
-    const errorCode = errorObj.code || '';
-
-    const isBalanceError = errorCode === 'InsufficientBalance' || [
-      'insufficient',
-      'balance',
-      'fund',
-      'not enough',
-      'no enough',
-      'low balance'
-    ].some(term => rawMsg.toLowerCase().includes(term));
-
-    return {
-      isBalanceError,
-      message: isBalanceError ? rawMsg : 'Unknown error'
+    return () => {
+      try {
+        conn.removeEventListener('open', bump);
+      } catch {}
+      try {
+        conn.removeEventListener('close', bump);
+      } catch {}
     };
   }, []);
 
-  const showStatus = useCallback((txt: string, type: 'info' | 'success' | 'error' | 'loading' | 'warning' = 'info') =>
-    setMsg({ txt, type }), []);
-
-  const playSound = useCallback((ok: boolean) => {
-    try {
-      const a = new Audio(ok ? '/sounds/success.mp3' : '/sounds/fail.mp3');
-      a.volume = .5; a.play().catch(() => { });
-    } catch { }
+  /* ===== API readiness + throttle ===== */
+  const ensureApiReady = useCallback(async () => {
+    const OPEN = 1 as const;
+    const conn = (api_base.api as any)?.connection;
+    if (!conn || conn.readyState !== OPEN) {
+      await api_base.init(true);
+    }
   }, []);
 
-  const needsDigit = useCallback((s: string) => ['matches', 'differs', 'over', 'under'].includes(s), []);
+  const waitForThrottleGap = useCallback(async () => {
+    const now = Date.now();
+    const delta = now - (lastBuyTsRef.current || 0);
+    if (delta < MIN_BUY_GAP_MS) await sleep(MIN_BUY_GAP_MS - delta);
+    lastBuyTsRef.current = Date.now();
+  }, []);
 
-  const mapContracts = useCallback((s: string): [string, string] => ({
-    even: ['DIGITEVEN', 'DIGITODD'],
-    odd: ['DIGITODD', 'DIGITEVEN'],
-    matches: ['DIGITMATCH', 'DIGITDIFF'],
-    differs: ['DIGITDIFF', 'DIGITMATCH'],
-    over: ['DIGITOVER', 'DIGITUNDER'],
-    under: ['DIGITUNDER', 'DIGITOVER'],
-    rise: ['CALL', 'PUT'],
-    fall: ['PUT', 'CALL'],
-  }[s] ?? ['DIGITEVEN', 'DIGITODD']), []);
+  const setStatus = useCallback(
+    (txt: string, type: 'info' | 'success' | 'error' | 'loading' | 'warning' = 'info') => setMsg({ txt, type }),
+    []
+  );
 
-  const label = useCallback((ct: string) => ({
-    DIGITEVEN: 'Even', DIGITODD: 'Odd', DIGITMATCH: 'Matches', DIGITDIFF: 'Differs',
-    DIGITOVER: 'Over', DIGITUNDER: 'Under', CALL: 'Rise', PUT: 'Fall',
-  } as Record<string, string>)[ct] ?? ct, []);
+  const buildLadder = useCallback((S: number, M: number) => {
+    const arr: number[] = [];
+    for (let k = 0; k <= 7; k++) arr.push(Number((S * Math.pow(M, k)).toFixed(2)));
+    return arr;
+  }, []);
 
-  const createTempTrade = useCallback((ct: string, stake: number, market: string, dur: number, barrier?: number) => {
-    const tmpID = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const createTempTrade = useCallback((ct: string, stake: number, mkt: string, dur: number, barrier?: number) => {
+    const id = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const t: TTrade = {
-      id: tmpID,
+      id,
       contractType: ct,
       stake,
-      market,
+      market: mkt,
       duration: dur,
       status: 'pending',
       timestamp: new Date(),
+      marketFormat: mkt,
+      temp: true,
       barrier,
-      marketFormat: currentSymbol,
-      temp: true
+      virtual: false,
     };
     setTrades(prev => [t, ...prev]);
-    return tmpID;
-  }, [currentSymbol]);
+    return id;
+  }, []);
 
-  const buy = useCallback(async (ct: string, stakeOv?: number, marketOv?: string, durOv?: number) => {
-    const stake = stakeOv ?? currentStake;
-    const dur = durOv ?? parseInt(durRef.current?.value || '1', 10);
-    const market = marketOv ?? marketRef.current?.value ?? '1HZ10V';
-
-    let barrier: string | undefined;
-    if (['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(ct)) {
-      const d = digitRef.current ? parseInt(digitRef.current.value, 10) : NaN;
-      if (isNaN(d)) {
-        showStatus('Enter digit 0-9', 'error');
-        return;
-      }
-      barrier = d.toString();
-    }
-
-    const tmpID = createTempTrade(ct, stake, market, dur, barrier ? +barrier : undefined);
-
-    try {
-      const resp = await api_base.api.send({
-        buy: 1,
-        price: stake,
-        parameters: {
-          amount: stake,
-          basis: 'stake',
-          currency: 'USD',
-          contract_type: ct,
-          duration: dur,
-          duration_unit: 't',
-          symbol: market,
-          ...(barrier ? { barrier } : {})
-        }
-      });
-
-      if (resp.error) throw new Error(resp.error.message);
-
-      const realID = resp.buy.contract_id;
-      setTrades(t =>
-        t.map(tr =>
-          tr.id === tmpID ? { ...tr, id: realID, temp: false, status: 'open' } : tr
-        )
-      );
-
-      showStatus('Trade placed ✅', 'success');
-      return realID;
-    } catch (e: any) {
-      const errorObj = (() => {
-        try {
-          return JSON.parse(e.message);
-        } catch {
-          return e;
-        }
-      })();
-
-      const { isBalanceError, message } = getBalanceError(errorObj);
-
-      setTrades(t =>
-        t.map(tr =>
-          tr.id === tmpID
-            ? {
-              ...tr,
-              status: 'error',
-              temp: false,
-              errorReason: isBalanceError ? 'Insufficient balance' : 'Trade failed',
-              errorDetails: message,
-              closeTime: new Date()
-            }
-            : tr
-        )
-      );
-
-      showStatus(message || 'Trade failed', 'error');
-      return;
-    }
-  }, [currentStake, createTempTrade, getBalanceError, showStatus]);
-
-  const buyBoth = useCallback(async () => {
-    try {
-      await Promise.all([
-        buy(ctypes.left),
-        buy(ctypes.right)
-      ]);
-    } catch {
-      /* individual errors already handled */
-    }
-  }, [buy, ctypes.left, ctypes.right]);
-
-  const handleReset = useCallback(() => {
-    setTrades([]);
-    setPL(0);
-    setCurrentStake(baseStake);
-    setConsecutiveTriggers(0);
-    showStatus('History cleared', 'info');
-  }, [showStatus, baseStake]);
-
-  const getNextStake = useCallback((lastDigit: number, isRise: boolean | null) => {
-    if (stakeProgression.current.length === 0) return baseStake;
-
-    let shouldProgress = false;
-    const currentPrediction = currentStrategyRef.current;
-    const digitPrediction = digitRef.current ? parseInt(digitRef.current.value, 10) : 0;
-
-    switch (currentPrediction) {
-      case 'even':
-        shouldProgress = lastDigit % 2 !== 0;
-        break;
-      case 'odd':
-        shouldProgress = lastDigit % 2 === 0;
-        break;
-      case 'over':
-        shouldProgress = lastDigit <= digitPrediction;
-        break;
-      case 'under':
-        shouldProgress = lastDigit >= digitPrediction;
-        break;
-      case 'matches':
-        shouldProgress = lastDigit !== digitPrediction;
-        break;
-      case 'differs':
-        shouldProgress = lastDigit === digitPrediction;
-        break;
-      case 'rise':
-        shouldProgress = isRise === false;
-        break;
-      case 'fall':
-        shouldProgress = isRise === true;
-        break;
-      default:
-        shouldProgress = false;
-    }
-
-    if (shouldProgress) {
-      const nextTrigger = Math.min(consecutiveTriggers + 1, 7);
-      setConsecutiveTriggers(nextTrigger);
-      return stakeProgression.current[nextTrigger];
-    } else {
-      setConsecutiveTriggers(0);
-      return stakeProgression.current[0];
-    }
-  }, [baseStake, consecutiveTriggers]);
-
-  const handleTick = useCallback((price: number, epoch: number) => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      const prev = prevTickRef.current;
-      if (prev === null) { prevTickRef.current = price; return; }
-
-      const currentMarket = marketSelectionRef.current?.value || '1HZ10V';
-      let tickString: string;
-
-      if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(currentMarket)) {
-        tickString = price.toFixed(3);
-      } else if (currentMarket === 'R_50' || currentMarket === 'R_75') {
-        tickString = price.toFixed(4);
-      } else {
-        tickString = price.toFixed(2);
-      }
-
-      const lastDigit = parseInt(tickString.slice(-1));
-      const isEven = lastDigit % 2 === 0;
-
-      let isRise = null as boolean | null;
-      if (prevTickRef.current !== null) {
-        if (price > prevTickRef.current) {
-          isRise = true;
-        } else if (price < prevTickRef.current) {
-          isRise = false;
-        }
-      }
-
-      // Update current stake based on tick evaluation
-      const newStake = getNextStake(lastDigit, isRise);
-      setCurrentStake(newStake);
-
-      setAnalysisData(prev => {
-        const digitCounts = [...prev.digitCounts];
-        digitCounts[lastDigit]++;
-
-        const newLastResults = [{
-          digit: lastDigit,
-          isEven,
-          isRise,
-          price,
-          timestamp: new Date()
-        }, ...prev.lastResults].slice(0, 1000);
-
-        return {
-          ...prev,
-          evenCount: isEven ? prev.evenCount + 1 : prev.evenCount,
-          oddCount: !isEven ? prev.oddCount + 1 : prev.oddCount,
-          riseCount: isRise === true ? prev.riseCount + 1 : prev.riseCount,
-          fallCount: isRise === false ? prev.fallCount + 1 : prev.fallCount,
-          totalCount: prev.totalCount + 1,
-          lastResults: newLastResults,
-          lastDigit,
-          lastPrice: price,
-          digitCounts,
-          currentMarket
-        };
-      });
-      prevTickRef.current = price;
-
-      if (autoTradeEnabled) {
-        processTick(price, epoch);
-      }
-    }, 50);
-  }, [autoTradeEnabled, getNextStake]);
-
-  const processTick = useCallback(async (price: number, tickTime: number) => {
-    if (!autoTradeEnabled) return;
-
-    const dur = parseInt(durRef.current?.value || '1', 10);
-    const market = marketRef.current?.value ?? '1HZ10V';
-    const currentStrategy = currentStrategyRef.current;
-    const [leftContract, rightContract] = mapContracts(currentStrategy);
-
-    try {
-      await buy(leftContract, currentStake, market, dur);
-      if (bothMode) {
-        await buy(rightContract, currentStake, market, dur);
-      }
-    } catch (e) {
-      console.error("Auto-trade failed:", e);
-    }
-  }, [autoTradeEnabled, bothMode, buy, currentStake, mapContracts]);
-
-  const handleWS = useCallback((d: any) => {
-    if (d.error?.message?.includes('proposal_open_contract')) {
-      return;
-    }
-
-    if (d.error) {
-      const { message } = getBalanceError(d);
-      showStatus(message, 'error');
-      console.error('WebSocket error:', d.error);
-      return;
-    }
-
-    switch (d.msg_type) {
-      case 'buy':
-        showStatus('✅ Trade placed', 'success');
-        break;
-      case 'proposal_open_contract':
-        handlePOC(d.proposal_open_contract);
-        break;
-      case 'transaction':
-        if (d.transaction.action === 'sell') handleTX(d.transaction);
-        break;
-    }
-  }, [getBalanceError, showStatus]);
-
-  const handlePOC = useCallback((c: any) => {
-    setTrades(prev => prev.map(tr => {
-      if (tr.id !== c.contract_id) return tr;
-
-      if (!tr.startTime && c.entry_tick_time) {
-        tr.startTime = new Date(c.entry_tick_time * 1000);
-        tr.entryValue = c.entry_tick ? Number(c.entry_tick) : undefined;
-        tr.marketFormat = currentSymbol;
-      }
-
-      if (c.tick_count && c.current_tick)
-        tr.ticksRemaining = c.tick_count - c.current_tick;
-
-      tr.currentValue = c.current_spot ? Number(c.current_spot) : tr.currentValue;
-
-      const finished = c.is_sold || c.is_expired || c.is_settleable || c.status === 'sold';
-      if (finished) {
-        const net = Number(c.profit ?? 0);
-        tr.status = net >= 0 ? 'won' : 'lost';
-        tr.profit = net;
-        tr.closeTime = new Date();
-        tr.exitValue = c.exit_tick ? Number(c.exit_tick) : undefined;
-        playSound(net >= 0);
-      } else {
-        tr.status = (c.status as TradeStatus) || 'active';
-      }
-      return { ...tr };
-    }));
-  }, [currentSymbol, playSound]);
-
-  const handleTX = useCallback((tx: TTransaction) => {
-    setTrades(prev => prev.map(tr => {
-      if (tr.id !== tx.contract_id) return tr;
-      const net = Number(tx.amount) - tr.stake;
-      tr.status = net >= 0 ? 'won' : 'lost';
-      tr.profit = net;
-      tr.closeTime = new Date(tx.transaction_time * 1000);
-      playSound(net >= 0);
-      return { ...tr };
-    }));
-  }, [playSound]);
-
-  const getTradeStats = useCallback(() => {
-    const completedTrades = trades.filter(t => t.status === 'won' || t.status === 'lost');
-    return {
-      total: completedTrades.length,
-      won: completedTrades.filter(t => t.status === 'won').length,
-      lost: completedTrades.filter(t => t.status === 'lost').length,
+  const createVirtualTrade = useCallback((ct: string, stake: number, mkt: string, dur: number, barrier?: number) => {
+    const id = `vtmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const t: TTrade = {
+      id,
+      contractType: ct,
+      stake,
+      market: mkt,
+      duration: dur,
+      status: 'open',
+      timestamp: new Date(),
+      marketFormat: mkt,
+      temp: false,
+      barrier,
+      virtual: true,
+      virtualLabel: 'Virtual Hook',
     };
-  }, [trades]);
-
-  const toggleMode = useCallback((mode: string) => {
-    setActiveMode(mode);
+    setTrades(prev => [t, ...prev]);
+    return id;
   }, []);
 
-  const handleOverDigitSelect = useCallback((digit: number) => {
-    setAnalysisData(prev => ({ ...prev, overDigit: digit }));
+  const getBalanceError = useCallback((e: any) => {
+    const errorObj = e?.error ?? e;
+    const message = (errorObj?.message || 'Unknown error').toString();
+    const code = errorObj?.code || '';
+    const isBalanceError =
+      code === 'InsufficientBalance' || /insufficient|balance|fund|not enough|no enough|low balance/i.test(message);
+    return { isBalanceError, message };
   }, []);
 
-  const handleUnderDigitSelect = useCallback((digit: number) => {
-    setAnalysisData(prev => ({ ...prev, underDigit: digit }));
-  }, []);
-
-  const refreshData = useCallback(() => {
-    if (marketSelectionRef.current && wsRef.current) {
-      const newMarket = marketSelectionRef.current.value;
-      setCurrentSymbol(newMarket);
-      wsRef.current.send(JSON.stringify({
-        ticks_history: newMarket,
-        style: 'ticks',
-        count: 5000,
-        end: 'latest',
-        subscribe: 1
-      }));
-
-      setAnalysisData({
-        evenCount: 0,
-        oddCount: 0,
-        riseCount: 0,
-        fallCount: 0,
-        totalCount: 0,
-        lastResults: [],
-        lastDigit: null,
-        lastPrice: null,
-        digitCounts: Array(10).fill(0),
-        overDigit: 1,
-        underDigit: 7,
-        tickRange: 100,
-        currentMarket: newMarket
-      });
+  const contractFor = useCallback((st: StrategyType) => {
+    switch (st) {
+      case 'even':
+        return 'DIGITEVEN';
+      case 'odd':
+        return 'DIGITODD';
+      case 'over':
+        return 'DIGITOVER';
+      case 'under':
+        return 'DIGITUNDER';
+      case 'matches':
+        return 'DIGITMATCH';
+      case 'differs':
+        return 'DIGITDIFF';
+      case 'rise':
+        return 'CALL';
+      case 'fall':
+        return 'PUT';
+      case 'rise_equals':
+        return 'CALLE';
+      case 'fall_equals':
+        return 'PUTE';
+      case 'only_up':
+        return 'RUNHIGH';
+      case 'only_down':
+        return 'RUNLOW';
     }
   }, []);
 
-  const renderEvenOddHistory = useCallback(() => {
-    return analysisData.lastResults.slice(0, 100).map((result, index) => (
-      <div key={index} className="history-item" style={{ color: result.isEven ? '#2ecc71' : '#e74c3c' }}>
-        {result.isEven ? 'E' : 'O'}
-      </div>
-    ));
-  }, [analysisData.lastResults]);
+  /* ===== HARD STOP ===== */
+  const hardStop = useCallback(
+    (reason: 'tp' | 'sl' | 'manual') => {
+      stopRequestedRef.current = true;
+      isRunningRef.current = false;
+      setIsRunning(false);
 
-  const renderOverUnderHistory = useCallback(() => {
-    return analysisData.lastResults.slice(0, 100).map((result, index) => {
-      const isOver = analysisData.overDigit === 0 ?
-        result.digit > 0 :
-        result.digit > analysisData.overDigit;
-      const isUnder = result.digit < analysisData.underDigit;
+      awaitingVirtualRef.current = null;
+      inFlightRealRef.current = null;
+      buyPendingRef.current = false;
 
-      return (
-        <div
-          key={index}
-          className="history-item"
-          style={{
-            backgroundColor: isOver && isUnder ? '#9b59b6' : undefined,
-            color: isOver ? '#e74c3c' : isUnder ? '#2ecc71' : undefined
-          }}
-          title={`Price: ${result.price}`}
-        >
-          {result.digit}
-        </div>
-      );
-    });
-  }, [analysisData.lastResults, analysisData.overDigit, analysisData.underDigit]);
-
-  const renderRiseFallHistory = useCallback(() => {
-    const filteredResults = analysisData.lastResults
-      .filter(result => result.isRise !== null)
-      .slice(0, 100);
-
-    if (filteredResults.length === 0) {
-      return (
-        <div className="no-results-message">
-          {analysisData.lastResults.length === 0
-            ? "Waiting for first price data..."
-            : "No price changes detected (all ticks had same price)"}
-        </div>
-      );
-    }
-
-    return filteredResults.map((result, index) => (
-      <div
-        key={index}
-        className="history-item"
-        style={{
-          color: result.isRise ? '#2ecc71' :
-            result.isRise === false ? '#e74c3c' : '#3498db'
-        }}
-        title={`Price: ${result.price} (Previous: ${analysisData.lastPrice})`}
-      >
-        {result.isRise ? 'R' : result.isRise === false ? 'F' : '='}
-      </div>
-    ));
-  }, [analysisData.lastPrice, analysisData.lastResults]);
-
-  useEffect(() => {
-    const sub = api_base.api.onMessage().subscribe(({ data }: any) => handleWS(data));
-    return () => sub.unsubscribe();
-  }, [handleWS]);
-
-  useEffect(() => {
-    if (autoTradeEnabled && currentSymbol !== activeTickSubscription) {
-      setActiveTickSubscription(currentSymbol);
-    }
-  }, [autoTradeEnabled, currentSymbol]);
-
-  useEffect(() => {
-    const initializeWebSocket = (symbol: string) => {
       if (wsRef.current) {
-        wsRef.current.close();
+        try {
+          wsRef.current.close();
+        } catch {}
+        wsRef.current = null;
       }
 
-      const app_id = 1089;
-      wsRef.current = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${app_id}`);
+      if (reason === 'manual') setStatus('Bot stopped', 'info');
+    },
+    [setStatus]
+  );
 
-      wsRef.current.onopen = () => {
-        wsRef.current?.send(JSON.stringify({
-          ticks_history: symbol,
-          style: 'ticks',
-          count: 5000,
-          end: 'latest',
-          subscribe: 1
-        }));
-        setAnalysisData(prev => ({
-          ...prev,
-          evenCount: 0,
-          oddCount: 0,
-          riseCount: 0,
-          fallCount: 0,
-          totalCount: 0,
-          lastResults: [],
-          lastDigit: null,
-          lastPrice: null,
-          digitCounts: Array(10).fill(0),
-          currentMarket: symbol
-        }));
-      };
+  /* ===== Session P/L apply + TP/SL enforce ===== */
+  const applyPnLAndMaybeStop = useCallback(
+    (delta: number) => {
+      const next = Number((sessionPLRef.current + delta).toFixed(2));
+      sessionPLRef.current = next;
+      setSessionPL(next);
 
-      wsRef.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+      const { tp, sl } = locked.current;
 
-        if (data?.error) {
-          console.error("WebSocket error:", data.error.message);
+      if (!stopRequestedRef.current && isRunningRef.current) {
+        if (tp > 0 && next >= tp) {
+          stopRequestedRef.current = true;
+          setStatus(`🎉 Take Profit hit: +$${next.toFixed(2)} (session)`, 'success');
+          hardStop('tp');
           return;
         }
-
-        if (data?.msg_type === 'history') {
-          const prices: number[] = data.history.prices.map(Number);
-          if (!prices.length) return;
-
-          prices.forEach(price => {
-            const currentMarket = marketSelectionRef.current?.value || '1HZ10V';
-            let tickString: string;
-
-            if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(currentMarket)) {
-              tickString = price.toFixed(3);
-            } else if (currentMarket === 'R_50' || currentMarket === 'R_75') {
-              tickString = price.toFixed(4);
-            } else {
-              tickString = price.toFixed(2);
-            }
-
-            const lastDigit = parseInt(tickString.slice(-1));
-            const isEven = lastDigit % 2 === 0;
-
-            setAnalysisData(prev => {
-              const digitCounts = [...prev.digitCounts];
-              digitCounts[lastDigit]++;
-
-              const newLastResults = [{
-                digit: lastDigit,
-                isEven,
-                isRise: null,
-                price,
-                timestamp: new Date()
-              }, ...prev.lastResults].slice(0, 1000);
-
-              return {
-                ...prev,
-                evenCount: isEven ? prev.evenCount + 1 : prev.evenCount,
-                oddCount: !isEven ? prev.oddCount + 1 : prev.oddCount,
-                totalCount: prev.totalCount + 1,
-                lastResults: newLastResults,
-                lastDigit,
-                lastPrice: price,
-                digitCounts,
-                currentMarket
-              };
-            });
-          });
-          prevTickRef.current = prices[prices.length - 1];
-        } else if (data?.tick) {
-          handleTick(data.tick.quote, data.tick.epoch);
+        if (sl > 0 && -next >= sl) {
+          stopRequestedRef.current = true;
+          setStatus(`🛑 Stop Loss hit: -$${Math.abs(next).toFixed(2)} (session)`, 'error');
+          hardStop('sl');
+          return;
         }
-      };
-
-      wsRef.current.onclose = () => { };
-      wsRef.current.onerror = (error) => console.error("WebSocket error: ", error);
-    };
-
-    if (marketSelectionRef.current) {
-      initializeWebSocket(marketSelectionRef.current.value);
-    }
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
       }
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
-    };
-  }, [marketSelectionRef.current?.value, handleTick]);
+    },
+    [hardStop, setStatus]
+  );
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTrades(prev => prev.map(tr => {
-        if (tr.status === 'pending') {
-          const age = Date.now() - tr.timestamp.getTime();
-          if (age > 8000) {
-            return { ...tr, status: 'error', temp: false };
-          }
-        }
-        return tr;
-      }));
-    }, 3000);
-    return () => clearInterval(id);
+  /* ===== Martingale apply (REAL ONLY) ===== */
+  const applyRealStakeProgression = useCallback((realLoss: boolean) => {
+    if (realLoss) consecutiveRealLossesRef.current += 1;
+    else consecutiveRealLossesRef.current = 0;
+
+    const delay = locked.current.mDelay || 0;
+    const effective = Math.max(0, consecutiveRealLossesRef.current - delay);
+
+    stakeIndexRef.current = Math.min(7, effective);
+    nextStakeRef.current = ladderRef.current[stakeIndexRef.current] ?? ladderRef.current[0] ?? 0;
   }, []);
 
+  /* ===== Virtual streak + readiness (NO martingale changes here) ===== */
+  const applyVirtualStreak = useCallback((virtualLoss: boolean) => {
+    const mode = locked.current.vMode;
+    const target = locked.current.vTarget;
+
+    if (mode === 'wins') {
+      if (!virtualLoss) vWinsRef.current += 1;
+      else vWinsRef.current = 0;
+    } else {
+      if (virtualLoss) vLossesRef.current += 1;
+      else vLossesRef.current = 0;
+    }
+
+    const ready = target > 0 && (mode === 'wins' ? vWinsRef.current >= target : vLossesRef.current >= target);
+    readyForRealRef.current = ready;
+
+    setVWinsUI(vWinsRef.current);
+    setVLossesUI(vLossesRef.current);
+    setReadyForRealUI(ready);
+  }, []);
+
+  const resetVirtualCycle = useCallback(() => {
+    vWinsRef.current = 0;
+    vLossesRef.current = 0;
+    readyForRealRef.current = locked.current.vTarget <= 0;
+    setVWinsUI(0);
+    setVLossesUI(0);
+    setReadyForRealUI(readyForRealRef.current);
+  }, []);
+
+  /* ===== Recovery mode (REAL outcomes only) ===== */
+  const updateRecoveryOnRealOutcome = useCallback(
+    (isWin: boolean) => {
+      if (locked.current.vTarget <= 0) return;
+
+      // Enter recovery ONLY on a real loss
+      if (!recoveryRef.current.on && !isWin) {
+        recoveryRef.current.on = true;
+        recoveryRef.current.wins = 0;
+        recoveryRef.current.losses = 0;
+        setRecoveryUI({ ...recoveryRef.current });
+        return;
+      }
+
+      // If not in recovery and it's a win => return to virtual immediately
+      if (!recoveryRef.current.on && isWin) {
+        resetVirtualCycle();
+        setRecoveryUI({ ...recoveryRef.current });
+        return;
+      }
+
+      // If in recovery, count outcomes
+      if (recoveryRef.current.on) {
+        if (isWin) recoveryRef.current.wins += 1;
+        else recoveryRef.current.losses += 1;
+
+        const r = locked.current.returnToVirtual || 0;
+
+        if (r > 0) {
+          const exit = recoveryRef.current.wins >= r; // ✅ always REAL wins
+          if (exit) {
+            recoveryRef.current.on = false;
+            recoveryRef.current.wins = 0;
+            recoveryRef.current.losses = 0;
+            resetVirtualCycle();
+          }
+        }
+
+        setRecoveryUI({ ...recoveryRef.current });
+      }
+    },
+    [resetVirtualCycle]
+  );
+
+  /* ===== BUY (REAL) ===== */
+  const buyContract = useCallback(
+    async (stake: number) => {
+      if (!isRunningRef.current || stopRequestedRef.current) return null;
+
+      const ct = contractFor(locked.current.strat);
+      const mkt = locked.current.market;
+
+      let dur = locked.current.ticks;
+      dur = Math.max(dur, minTicksForContract(ct));
+
+      const needsBarrier = isDigitContract(ct);
+      const barrier =
+        needsBarrier &&
+        (locked.current.strat === 'over' ||
+          locked.current.strat === 'under' ||
+          locked.current.strat === 'matches' ||
+          locked.current.strat === 'differs')
+          ? Number(locked.current.param)
+          : undefined;
+
+      try {
+        await ensureApiReady();
+        if (!isRunningRef.current || stopRequestedRef.current) return null;
+
+        await waitForThrottleGap();
+        if (!isRunningRef.current || stopRequestedRef.current) return null;
+
+        await waitForRateLimitBackoff();
+        if (!isRunningRef.current || stopRequestedRef.current) return null;
+
+        const MAX_RL_RETRIES = 8;
+        let tmpID: string | null = null;
+
+        for (let attempt = 0; attempt <= MAX_RL_RETRIES; attempt++) {
+          if (!isRunningRef.current || stopRequestedRef.current) {
+            if (tmpID) setTrades(ts => ts.filter(t => t.id !== tmpID));
+            return null;
+          }
+
+          if (!tmpID) tmpID = createTempTrade(ct, stake, mkt, dur, barrier);
+
+          try {
+            const resp = await api_base.api.send({
+              buy: 1,
+              price: stake,
+              parameters: {
+                amount: stake,
+                basis: 'stake',
+                currency: 'USD',
+                contract_type: ct,
+                duration: dur,
+                duration_unit: 't',
+                symbol: mkt,
+                ...(typeof barrier === 'number' ? { barrier: String(barrier) } : {}),
+              },
+            });
+
+            if (resp?.error) throw resp;
+
+            clearRateLimitBackoff();
+            if (stopRequestedRef.current) return null;
+
+            const realID = String(resp.buy.contract_id);
+
+            setTrades(ts =>
+              ts.map(t => (t.id === tmpID ? { ...t, id: realID, temp: false, status: 'open', barrier } : t))
+            );
+
+            setStatus('✅ Trade placed', 'success');
+            return realID;
+          } catch (e: any) {
+            if (isRateLimitError(e) && attempt < MAX_RL_RETRIES) {
+              await applyRateLimitBackoff(e);
+              if (!isRunningRef.current || stopRequestedRef.current) {
+                if (tmpID) setTrades(ts => ts.filter(t => t.id !== tmpID));
+                return null;
+              }
+              await waitForRateLimitBackoff();
+              continue;
+            }
+
+            const { isBalanceError, message } = getBalanceError(e);
+
+            if (tmpID) {
+              setTrades(ts =>
+                ts.map(t =>
+                  t.id === tmpID
+                    ? {
+                        ...t,
+                        status: 'error',
+                        temp: false,
+                        errorReason: isBalanceError ? 'Insufficient balance' : 'Trade failed',
+                        errorDetails: message,
+                        closeTime: new Date(),
+                      }
+                    : t
+                )
+              );
+            }
+
+            setStatus(message || 'Trade failed', 'error');
+            return null;
+          }
+        }
+
+        setStatus('Rate limit retries exhausted', 'error');
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    [
+      applyRateLimitBackoff,
+      contractFor,
+      createTempTrade,
+      ensureApiReady,
+      getBalanceError,
+      setStatus,
+      waitForRateLimitBackoff,
+      waitForThrottleGap,
+      clearRateLimitBackoff,
+    ]
+  );
+
+  /* ===== Real settlement handler: outcome drives martingale + recovery ===== */
+  const onRealSettled = useCallback(
+    (cid: string, net: number) => {
+      const isWin = net >= 0;
+      const isLoss = !isWin;
+
+      applyRealStakeProgression(isLoss);
+      updateRecoveryOnRealOutcome(isWin);
+
+      if (inFlightRealRef.current === cid) inFlightRealRef.current = null;
+    },
+    [applyRealStakeProgression, updateRecoveryOnRealOutcome]
+  );
+
+  /* ===== POC / TX settlement ===== */
+  useEffect(() => {
+    const sub = api_base.api.onMessage().subscribe(({ data }: any) => {
+      if (data?.error) return;
+
+      if (data?.msg_type === 'proposal_open_contract') {
+        const c = data.proposal_open_contract;
+        const cid = String(c.contract_id);
+
+        setTrades(prev =>
+          prev.map(tr => {
+            if (tr.id !== cid) return tr;
+
+            const next: TTrade = { ...tr };
+
+            if (!next.startTime && c.entry_tick_time) {
+              next.startTime = new Date(c.entry_tick_time * 1000);
+              next.entryValue = c.entry_tick ? Number(c.entry_tick) : next.entryValue;
+            }
+
+            if (c.tick_count && c.current_tick) next.ticksRemaining = c.tick_count - c.current_tick;
+            next.currentValue = c.current_spot ? Number(c.current_spot) : next.currentValue;
+
+            const finished = c.is_sold || c.is_expired || c.is_settleable || c.status === 'sold';
+            if (finished) {
+              const net = Number(c.profit ?? 0);
+              next.status = net >= 0 ? 'won' : 'lost';
+              next.profit = net;
+              next.closeTime = new Date();
+              next.exitValue = c.exit_tick ? Number(c.exit_tick) : next.exitValue;
+            } else {
+              next.status = (c.status as TradeStatus) || 'active';
+            }
+
+            return next;
+          })
+        );
+
+        const finished = c.is_sold || c.is_expired || c.is_settleable || c.status === 'sold';
+        if (finished && !settledContractsRef.current.has(cid)) {
+          settledContractsRef.current.add(cid);
+          const net = Number(c.profit ?? 0);
+          applyPnLAndMaybeStop(net);
+          onRealSettled(cid, net);
+        }
+      }
+
+      if (data?.msg_type === 'transaction' && data.transaction?.action === 'sell') {
+        const tx: TTransaction = data.transaction;
+        const cid = String(tx.contract_id);
+
+        setTrades(prev =>
+          prev.map(tr => {
+            if (tr.id !== cid) return tr;
+            if (tr.profit !== undefined) return tr;
+
+            const net = Number(tx.amount) - tr.stake;
+            return {
+              ...tr,
+              status: net >= 0 ? 'won' : 'lost',
+              profit: net,
+              closeTime: new Date(tx.transaction_time * 1000),
+            };
+          })
+        );
+
+        if (!settledContractsRef.current.has(cid)) {
+          settledContractsRef.current.add(cid);
+
+          // ✅ use latest trades ref to avoid stake=0 (stale closure)
+          const tr = tradesRef.current.find(t => String(t.id) === cid);
+          const stake = tr?.stake ?? 0;
+          const net = Number(tx.amount) - stake;
+
+          applyPnLAndMaybeStop(net);
+          onRealSettled(cid, net);
+        }
+      }
+    });
+
+    return () => sub.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiEpoch, applyPnLAndMaybeStop, onRealSettled]);
+
+  /* ===== Aggregate P/L ===== */
   useEffect(() => {
     setPL(trades.reduce((s, t) => s + (t.profit ?? 0), 0));
   }, [trades]);
 
-  useEffect(() => {
-    if (!strategyRef.current) return;
-    const h = (e: any) => setStrat(e.target.value);
-    strategyRef.current.addEventListener('change', h);
-    return () => strategyRef.current?.removeEventListener('change', h);
+  /* ===== Last digit ===== */
+  const getLastDigit = useCallback((price: number, mkt: string) => {
+    let s: string;
+    if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(mkt)) s = price.toFixed(3);
+    else if (['R_50', 'R_75'].includes(mkt)) s = price.toFixed(4);
+    else s = price.toFixed(2);
+    return parseInt(s.slice(-1), 10);
   }, []);
 
-  useEffect(() => {
-    setCT({ left: mapContracts(strategy)[0], right: mapContracts(strategy)[1] });
-    if (digitRef.current) {
-      const need = needsDigit(strategy);
-      digitRef.current.disabled = !need;
-      digitRef.current.style.backgroundColor = need ? '' : 'gray';
-    }
-  }, [strategy, mapContracts, needsDigit]);
+  /* ===== Virtual loss eval ===== */
+  const evalVirtualIsLoss = useCallback((lastDigit: number, price: number, entryPrice: number) => {
+    const st = locked.current.strat;
+    switch (st) {
+      case 'even':
+        return lastDigit % 2 !== 0;
+      case 'odd':
+        return lastDigit % 2 === 0;
+      case 'over':
+        return lastDigit <= locked.current.param;
+      case 'under':
+        return lastDigit >= locked.current.param;
+      case 'matches':
+        return lastDigit !== locked.current.param;
+      case 'differs':
+        return lastDigit === locked.current.param;
 
+      case 'rise':
+      case 'only_up':
+        return price <= entryPrice;
+
+      case 'fall':
+      case 'only_down':
+        return price >= entryPrice;
+
+      case 'rise_equals':
+        return price < entryPrice;
+
+      case 'fall_equals':
+        return price > entryPrice;
+    }
+  }, []);
+
+  /* ===== Main tick loop ===== */
   useEffect(() => {
-    if (!marketRef.current) return;
-    const h = (e: any) => {
-      const newMarket = e.target.value;
-      setCurrentSymbol(newMarket);
-      if (marketSelectionRef.current) {
-        marketSelectionRef.current.value = newMarket;
-      }
+    if (!isRunning) {
       if (wsRef.current) {
-        wsRef.current.send(JSON.stringify({
-          ticks_history: newMarket,
-          style: 'ticks',
-          count: 5000,
-          end: 'latest',
-          subscribe: 1
-        }));
+        try {
+          wsRef.current.close();
+        } catch {}
+        wsRef.current = null;
       }
-      setAnalysisData(prev => ({
-        ...prev,
-        evenCount: 0,
-        oddCount: 0,
-        riseCount: 0,
-        fallCount: 0,
-        totalCount: 0,
-        lastResults: [],
-        lastDigit: null,
-        lastPrice: null,
-        digitCounts: Array(10).fill(0),
-        currentMarket: newMarket
-      }));
+      return;
+    }
+
+    stopRequestedRef.current = false;
+
+    const app_id = 36300;
+    const ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${app_id}`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (!isRunningRef.current) return;
+      ws.send(JSON.stringify({ ticks: locked.current.market, subscribe: 1 }));
     };
-    marketRef.current.addEventListener('change', h);
-    return () => marketRef.current?.removeEventListener('change', h);
-  }, []);
 
-  const posClass = useCallback((st: TradeStatus, p?: number) =>
-    st === 'won' ? 'position-win' :
-      st === 'lost' || st === 'error' ? 'position-loss' :
-        'position-open', []);
+    ws.onmessage = async ev => {
+      if (!isRunningRef.current || stopRequestedRef.current) return;
 
-  const formatTickValue = useCallback((value?: number, marketFormat?: string) => {
-    if (value === undefined) return '—';
-    if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(marketFormat)) {
-      return value.toFixed(3);
+      const d = JSON.parse(ev.data);
+      if (d?.error) return;
+      if (!d?.tick?.quote || !d?.tick?.epoch) return;
+
+      const price = Number(d.tick.quote);
+      const epoch = Number(d.tick.epoch);
+      if (lastEpochRef.current === epoch) return;
+      lastEpochRef.current = epoch;
+
+      const lastDigit = getLastDigit(price, locked.current.market);
+
+      // ✅ update digit window
+      digitWindowRef.current.push(lastDigit);
+      const keep = Math.max(locked.current.entryPatternDigits.length || 0, 12);
+      if (digitWindowRef.current.length > keep) {
+        digitWindowRef.current.splice(0, digitWindowRef.current.length - keep);
+      }
+
+      // ✅ score virtual outcome (duration-aware)
+      if (awaitingVirtualRef.current) {
+        const a = awaitingVirtualRef.current;
+        a.remaining -= 1;
+
+        if (a.remaining <= 0) {
+          const loss = evalVirtualIsLoss(lastDigit, price, a.entryPrice);
+
+          const deciding = price;
+          const entryShown = a.dur === 1 ? deciding : a.entryPrice;
+          const exitShown = deciding;
+
+          setTrades(prev =>
+            prev.map(tr =>
+              tr.id === a.tradeId
+                ? {
+                    ...tr,
+                    status: loss ? 'lost' : 'won',
+                    profit: 0,
+                    closeTime: new Date(),
+                    entryValue: entryShown,
+                    exitValue: exitShown,
+                    currentValue: deciding,
+                  }
+                : tr
+            )
+          );
+
+          applyVirtualStreak(loss);
+          awaitingVirtualRef.current = null;
+        } else {
+          setTrades(prev => prev.map(tr => (tr.id === a.tradeId ? { ...tr, currentValue: price } : tr)));
+        }
+      }
+
+      if (!isRunningRef.current || stopRequestedRef.current) return;
+
+      // ✅ entry trigger
+      const patt = locked.current.entryPatternDigits;
+      const triggered = endsWithPattern(digitWindowRef.current, patt);
+      if (!triggered) return;
+
+      // ✅ SEQUENTIAL MODE to eliminate slips when Virtual Hooks enabled
+      const sequentialMode = locked.current.vTarget > 0;
+      if (sequentialMode) {
+        if (awaitingVirtualRef.current) return;
+        if (inFlightRealRef.current) return;
+        if (buyPendingRef.current) return;
+      }
+
+      // settle-required: (still needed for "no virtual hooks" mode)
+      const settleRequired = settleRequiredForStrategy(locked.current.strat);
+
+      // ✅ Virtual vs Real decision
+      const wantVirtualHooks = locked.current.vTarget > 0;
+      const inRecovery = recoveryRef.current.on;
+
+      const canPlaceVirtual = wantVirtualHooks && !inRecovery && !readyForRealRef.current;
+
+      const ct = contractFor(locked.current.strat);
+      let dur = locked.current.ticks;
+      dur = Math.max(dur, minTicksForContract(ct));
+
+      const needsBarrier = isDigitContract(ct);
+      const barrier =
+        needsBarrier &&
+        (locked.current.strat === 'over' ||
+          locked.current.strat === 'under' ||
+          locked.current.strat === 'matches' ||
+          locked.current.strat === 'differs')
+          ? Number(locked.current.param)
+          : undefined;
+
+      // ✅ VIRTUAL
+      if (canPlaceVirtual) {
+        const vId = createVirtualTrade(ct, nextStakeRef.current, locked.current.market, dur, barrier);
+
+        // Digit strategies with dur=1 settle SAME tick => entry=exit
+        if (!settleRequired && dur === 1) {
+          const loss = evalVirtualIsLoss(lastDigit, price, price);
+
+          setTrades(prev =>
+            prev.map(tr =>
+              tr.id === vId
+                ? {
+                    ...tr,
+                    entryValue: price,
+                    exitValue: price,
+                    currentValue: price,
+                    status: loss ? 'lost' : 'won',
+                    profit: 0,
+                    closeTime: new Date(),
+                  }
+                : tr
+            )
+          );
+
+          applyVirtualStreak(loss);
+          return;
+        }
+
+        // dur>1 OR settle-required strategies wait to expiry/next tick
+        setTrades(prev => prev.map(tr => (tr.id === vId ? { ...tr, entryValue: price, currentValue: price } : tr)));
+        awaitingVirtualRef.current = { tradeId: vId, entryPrice: price, remaining: dur, dur };
+        return;
+      }
+
+      // ✅ REAL
+      buyPendingRef.current = true;
+      const realId = await buyContract(nextStakeRef.current);
+      buyPendingRef.current = false;
+
+      if (!isRunningRef.current || stopRequestedRef.current) return;
+
+      // ✅ When Virtual Hooks enabled, ALWAYS wait for settlement of real trade to avoid slips
+      if (realId && locked.current.vTarget > 0) {
+        inFlightRealRef.current = realId;
+        return;
+      }
+
+      // Normal mode: only block on settle-required
+      if (realId && settleRequired) {
+        inFlightRealRef.current = realId;
+      }
+    };
+
+    ws.onerror = () => {};
+    ws.onclose = () => {};
+
+    return () => {
+      try {
+        ws.close();
+      } catch {}
+    };
+  }, [
+    isRunning,
+    buyContract,
+    contractFor,
+    createVirtualTrade,
+    evalVirtualIsLoss,
+    getLastDigit,
+    applyVirtualStreak,
+    settleRequiredForStrategy,
+  ]);
+
+  /* ===== Start / Stop ===== */
+  const startBot = useCallback(() => {
+    if (strategy === 'over' && param === 9) {
+      setStatus('Over 9 never resets (unwinnable). Choose ≤ 8.', 'warning');
+      return;
     }
-    if (['R_50', 'R_75'].includes(marketFormat)) {
-      return value.toFixed(4);
+    if (strategy === 'under' && param === 0) {
+      setStatus('Under 0 never resets (unwinnable). Choose ≥ 1.', 'warning');
+      return;
     }
-    return value.toFixed(2);
-  }, []);
 
-  const tradeStats = useMemo(() => getTradeStats(), [getTradeStats]);
+    const patt = patternDigits(entryPatternStr);
+
+    locked.current = {
+      S: stakeInput,
+      M: martingaleInput,
+      strat: strategy,
+      param,
+      market,
+      ticks,
+      tp: Math.max(0, Number(tpInput || 0)),
+      sl: Math.max(0, Number(slInput || 0)),
+
+      vMode: virtualMode,
+      vTarget: Math.max(0, virtualTarget),
+      mDelay: Math.max(0, martingaleDelay),
+      entryPatternDigits: patt,
+      entryPatternStr: normalizePattern(entryPatternStr),
+
+      returnToVirtual: Math.max(0, returnToVirtual || 0),
+    };
+
+    ladderRef.current = buildLadder(locked.current.S, locked.current.M);
+
+    consecutiveRealLossesRef.current = 0;
+    stakeIndexRef.current = 0;
+    nextStakeRef.current = ladderRef.current[0] ?? 0;
+
+    awaitingVirtualRef.current = null;
+    inFlightRealRef.current = null;
+    buyPendingRef.current = false;
+
+    digitWindowRef.current = [];
+    lastEpochRef.current = null;
+
+    stopRequestedRef.current = false;
+    sessionPLRef.current = 0;
+    setSessionPL(0);
+
+    settledContractsRef.current.clear();
+    lastBuyTsRef.current = 0;
+    clearRateLimitBackoff();
+
+    vWinsRef.current = 0;
+    vLossesRef.current = 0;
+    readyForRealRef.current = locked.current.vTarget <= 0;
+    setVWinsUI(0);
+    setVLossesUI(0);
+    setReadyForRealUI(readyForRealRef.current);
+
+    recoveryRef.current = { on: false, wins: 0, losses: 0 };
+    setRecoveryUI({ on: false, wins: 0, losses: 0 });
+
+    isRunningRef.current = true;
+    setIsRunning(true);
+
+    const entryTxt = locked.current.entryPatternStr || 'every tick';
+    const virtTxt = locked.current.vTarget > 0 ? `${locked.current.vMode}×${locked.current.vTarget}` : 'OFF';
+    const rtnTxt = locked.current.vTarget > 0 ? `Return to Virtual After: ${locked.current.returnToVirtual} REAL win(s)` : 'n/a';
+
+    setStatus(`Bot started | Entry: ${entryTxt} | Virtual: ${virtTxt} | ${rtnTxt}`, 'success');
+  }, [
+    buildLadder,
+    clearRateLimitBackoff,
+    market,
+    martingaleInput,
+    param,
+    setStatus,
+    slInput,
+    stakeInput,
+    strategy,
+    ticks,
+    tpInput,
+    entryPatternStr,
+    virtualMode,
+    virtualTarget,
+    martingaleDelay,
+    returnToVirtual,
+  ]);
+
+  const stopBot = useCallback(() => hardStop('manual'), [hardStop]);
+
+  /* ===== Reset (only when stopped) ===== */
+  const handleReset = useCallback(() => {
+    if (isRunningRef.current) return;
+
+    setTrades([]);
+    setPL(0);
+
+    sessionPLRef.current = 0;
+    setSessionPL(0);
+
+    consecutiveRealLossesRef.current = 0;
+    stakeIndexRef.current = 0;
+    ladderRef.current = buildLadder(stakeInput, martingaleInput);
+    nextStakeRef.current = ladderRef.current[0] ?? 0;
+
+    stopRequestedRef.current = false;
+    settledContractsRef.current.clear();
+    clearRateLimitBackoff();
+
+    vWinsRef.current = 0;
+    vLossesRef.current = 0;
+    readyForRealRef.current = false;
+    setVWinsUI(0);
+    setVLossesUI(0);
+    setReadyForRealUI(false);
+
+    recoveryRef.current = { on: false, wins: 0, losses: 0 };
+    setRecoveryUI({ on: false, wins: 0, losses: 0 });
+
+    setStatus('History cleared', 'info');
+  }, [buildLadder, stakeInput, martingaleInput, setStatus, clearRateLimitBackoff]);
+
+  /* ===== Derived stats (REAL only) ===== */
+  const tradeStats = useMemo(() => {
+    const realCompleted = trades.filter(t => !t.virtual && (t.status === 'won' || t.status === 'lost'));
+    return {
+      total: realCompleted.length,
+      won: realCompleted.filter(t => t.status === 'won').length,
+      lost: realCompleted.filter(t => t.status === 'lost').length,
+    };
+  }, [trades]);
 
   return (
-    <div className="speed-appp" style={{ background: ui.is_dark_mode_on ? 'var(--general-main-1)' : 'transparent' }}>
-      {autoTradeEnabled && activeTickSubscription && (
-        <TickSubscriber symbol={activeTickSubscription} onTick={handleTick} />
-      )}
-
-      <div className="analysis-mode-selector">
-        <ul className="mode-list">
-          <li>
-            <button
-              className={`mode-btn ${activeMode === 'evenOdd' ? 'active' : ''}`}
-              onClick={() => toggleMode('evenOdd')}
-              style={{ padding: '10px' }}
-            >
-              Even/Odd
-            </button>
-          </li>
-          <li>
-            <button
-              className={`mode-btn ${activeMode === 'overUnder' ? 'active' : ''}`}
-              onClick={() => toggleMode('overUnder')}
-              style={{ padding: '10px' }}
-            >
-              Over/Under
-            </button>
-          </li>
-          <li>
-            <button
-              className={`mode-btn ${activeMode === 'riseFall' ? 'active' : ''}`}
-              onClick={() => toggleMode('riseFall')}
-              style={{ padding: '10px' }}
-            >
-              Rise/Fall
-            </button>
-          </li>
-        </ul>
-      </div>
-
-      <div className="market-selector one">
-        <i className="fas fa-chart-line market-icon"></i>
-        <select
-          className="marketSelection"
-          id="marketSelection"
-          ref={marketSelectionRef}
-          onChange={(e) => {
-            const newMarket = e.target.value;
-            setCurrentSymbol(newMarket);
-            if (marketRef.current) {
-              marketRef.current.value = newMarket;
+    <div className="speed-apppt">
+      <div className="history-title">
+        <div className="eve">
+          <TradeTypesDigitsEvenIcon width={18} height={18} />
+          Speed Bot V6 | Virtual Hooks + Sequential Anti-Slip
+          <TradeTypesDigitsOddIcon width={16} height={16} />
+        </div>
+        <div
+          className="youtube"
+          role="button"
+          tabIndex={0}
+          aria-label="Play tutorial video"
+          onClick={() => setYtOpen(true)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setYtOpen(true);
             }
-            if (wsRef.current) {
-              wsRef.current.send(JSON.stringify({
-                ticks_history: newMarket,
-                style: 'ticks',
-                count: 5000,
-                end: 'latest',
-                subscribe: 1
-              }));
-            }
-            setAnalysisData(prev => ({
-              ...prev,
-              evenCount: 0,
-              oddCount: 0,
-              riseCount: 0,
-              fallCount: 0,
-              totalCount: 0,
-              lastResults: [],
-              lastDigit: null,
-              lastPrice: null,
-              digitCounts: Array(10).fill(0),
-              overDigit: 1,
-              underDigit: 7,
-              tickRange: 100,
-              currentMarket: newMarket
-            }));
           }}
-          value={currentSymbol}
         >
-     <option className="Volatility10" value="R_10">Volatility 10 index</option>
-          <option className="Volatility10s" value="1HZ10V">Volatility 10(1s) index</option>
-          <option className="Volatility10s" value="1HZ15V">Volatility 15(1s) index</option>
-          <option className="Volatility25" value="R_25">Volatility 25 index</option>
-          <option className="Volatility25s" value="1HZ25V">Volatility 25(1s) index</option>
-          <option className="Volatility25s" value="1HZ30V">Volatility 30(1s) index</option>
-          <option className="Volatility50" value="R_50">Volatility 50 index</option>
-          <option className="Volatility50s" value="1HZ50V">Volatility 50(1s) index</option>
-          <option className="Volatility75" value="R_75">Volatility 75 index</option>
-          <option className="Volatility75s" value="1HZ75V">Volatility 75(1s) index</option>
-          <option className="Volatility75s" value="1HZ90V">Volatility 90(1s) index</option>
-          <option className="Volatility100" value="R_100">Volatility 100 index</option>
-          <option className="Volatility100s" value="1HZ100V">Volatility 100(1s) index</option>
-          <option className="Jump10" value="JD10">Jump 10 Index</option>
-          <option className="Jump25" value="JD25">Jump 25 Index</option>
-          <option className="Jump50" value="JD50">Jump 50 Index</option>
-          <option className="Jump75" value="JD75">Jump 75 Index</option>
-          <option className="Jump100" value="JD100">Jump 100 Index</option>
-        </select>
-      </div>
-
-      <div id="evenOddSection" className="analysis-section" style={{ display: activeMode === 'evenOdd' ? 'block' : 'none' }} />
-      <div id="overUnderSection" className="analysis-section" style={{ display: activeMode === 'overUnder' ? 'block' : 'none', minWidth: '100%' }}>
-        <div className="control-panel">
-          <div className="selector-container">
-            <div className="selector-header">
-              <div className="selector-title">Over Analysis</div>
-            </div>
-            <div className="digit-selector" id="overSelector">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(digit => (
-                <button
-                  key={`over-${digit}`}
-                  className={`digit-btn over-btn ${analysisData.overDigit === digit ? 'active' : ''}`}
-                  onClick={() => handleOverDigitSelect(digit)}
-                >{digit}</button>
-              ))}
-            </div>
-          </div>
-          <div className="selector-container">
-            <div className="selector-header">
-              <div className="selector-title">Under Analysis</div>
-              <div style={{ width: '60px' }}></div>
-            </div>
-            <div className="digit-selector" id="underSelector">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(digit => (
-                <button
-                  key={`under-${digit}`}
-                  className={`digit-btn under-btn ${analysisData.underDigit === digit ? 'active' : ''}`}
-                  onClick={() => handleUnderDigitSelect(digit)}
-                >{digit}</button>
-              ))}
-            </div>
-          </div>
+          <SocialYoutubeBlackIcon width={16} height={16} />
         </div>
       </div>
-      <div id="riseFallSection" className="analysis-section" style={{ display: activeMode === 'riseFall' ? 'block' : 'none', minWidth: '100%' }} />
 
       <div className="trading-container">
-        <div className="history-title">Speed Bot</div>
+        <LazyYouTubeModal videoUrl={YT_URL} isOpen={ytOpen} onClose={() => setYtOpen(false)} />
 
         <div className="trade-controls">
           <div className="trade-control-group market-selector">
             <label>Market</label>
-            <select id="tradeMarket" className="trade-input" ref={marketRef} value={currentSymbol}
-              onChange={(e) => {
-                const newMarket = e.target.value;
-                setCurrentSymbol(newMarket);
-                if (marketSelectionRef.current) {
-                  marketSelectionRef.current.value = newMarket;
-                }
-                if (wsRef.current) {
-                  wsRef.current.send(JSON.stringify({
-                    ticks_history: newMarket,
-                    style: 'ticks',
-                    count: 5000,
-                    end: 'latest',
-                    subscribe: 1
-                  }));
-                }
-                setAnalysisData(prev => ({
-                  ...prev,
-                  evenCount: 0,
-                  oddCount: 0,
-                  riseCount: 0,
-                  fallCount: 0,
-                  totalCount: 0,
-                  lastResults: [],
-                  lastDigit: null,
-                  lastPrice: null,
-                  digitCounts: Array(10).fill(0),
-                  currentMarket: newMarket
-                }));
-              }}
-            >
-             <option value="R_10">Vol 10</option>
+            <select value={market} onChange={e => setMarket(e.target.value)} disabled={isRunning} className="trade-input">
+              <option value="R_10">Vol 10</option>
               <option value="1HZ10V">Vol 10 (1s)</option>
               <option value="1HZ15V">Vol 15 (1s)</option>
-
               <option value="R_25">Vol 25</option>
               <option value="1HZ25V">Vol 25 (1s)</option>
               <option value="1HZ30V">Vol 30 (1s)</option>
-
               <option value="R_50">Vol 50</option>
               <option value="1HZ50V">Vol 50 (1s)</option>
-
               <option value="R_75">Vol 75</option>
               <option value="1HZ75V">Vol 75 (1s)</option>
               <option value="1HZ90V">Vol 90 (1s)</option>
-
               <option value="R_100">Vol 100</option>
               <option value="1HZ100V">Vol 100 (1s)</option>
               <option value="JD10">Jump 10</option>
@@ -1093,51 +1298,130 @@ const Speed = observer(() => {
           </div>
 
           <div className="trade-control-group">
-            <label>Strategy</label>
-            <select id="tradeStrategy"
-              className="trade-input"
-              ref={strategyRef}
-              value={strategy}
-              onChange={e => setStrat(e.target.value)}>
-              <option value="even">Even</option><option value="odd">Odd</option>
-              <option value="matches">Matches</option><option value="differs">Differs</option>
-              <option value="over">Over</option><option value="under">Under</option>
-              <option value="rise">Rise</option><option value="fall">Fall</option>
-            </select>
-          </div>
-
-          <div className="trade-control-group">
-            <label>Stake (USD)</label>
+            <label>Stake</label>
             <input
               type="number"
               className="trade-input"
-              defaultValue="10"
-              min="1"
-              step="1"
-              ref={stakeRef}
-              onChange={(e) => {
-                const value = parseFloat(parseFloat(e.target.value).toFixed(2)) || 0;
-                setCurrentStake(value);
-                setBaseStake(value);
-              }}
+              value={stakeStr}
+              onChange={e => setStakeStr(e.target.value)}
+              min={0}
+              step="any"
+              disabled={isRunning}
             />
           </div>
 
           <div className="trade-control-group">
-            <label>Ticks</label>
-            <select className="trade-input" ref={durRef}>
-              <option value="1">1</option><option value="2">2</option>
-              <option value="3">3</option><option value="5">5</option>
-              <option value="10">10</option>
+            <label>Martingale</label>
+            <input
+              type="number"
+              className="trade-input"
+              value={martingaleStr}
+              onChange={e => setMartingaleStr(e.target.value)}
+              min={0}
+              step="any"
+              disabled={isRunning}
+            />
+          </div>
+
+          <div className="trade-control-group">
+            <label>Martingale Delay (REAL)</label>
+            <input
+              type="number"
+              className="trade-input"
+              value={martingaleDelayStr}
+              onChange={e => setMartingaleDelayStr(e.target.value)}
+              min={0}
+              step={1}
+              disabled={isRunning}
+            />
+          </div>
+
+          <div className="trade-control-group">
+            <label>Strategy</label>
+            <select className="trade-input" value={strategy} onChange={e => setStrategy(e.target.value as StrategyType)} disabled={isRunning}>
+              <option value="even">Even</option>
+              <option value="odd">Odd</option>
+              <option value="over">Over</option>
+              <option value="under">Under</option>
+              <option value="matches">Matches</option>
+              <option value="differs">Differs</option>
+              <option value="rise">Rise</option>
+              <option value="fall">Fall</option>
+              <option value="rise_equals">Rise =</option>
+              <option value="fall_equals">Fall =</option>
+              <option value="only_up">Only Ups</option>
+              <option value="only_down">Only Downs</option>
+            </select>
+          </div>
+
+          {(strategy === 'over' || strategy === 'under' || strategy === 'matches' || strategy === 'differs') && (
+            <div className="trade-control-group">
+              <label>{strategy === 'over' || strategy === 'under' ? 'Prediction' : 'Digit'}</label>
+              <input
+                type="number"
+                className="trade-input"
+                value={paramStr}
+                onChange={e => setParamStr(e.target.value)}
+                min={0}
+                max={9}
+                disabled={isRunning}
+              />
+            </div>
+          )}
+
+          <div className="trade-control-group">
+            <label>Entry Pattern</label>
+            <input
+              type="text"
+              className="trade-input"
+              value={entryPatternStr}
+              onChange={e => setEntryPatternStr(e.target.value)}
+              disabled={isRunning}
+              placeholder="e.g. 999 or 34 (blank = every tick)"
+            />
+            {entryPatternClean !== '' && (
+              <small style={{ opacity: 0.75 }}>
+                Using: <b>{entryPatternClean}</b>
+              </small>
+            )}
+          </div>
+
+          <div className="trade-control-group">
+            <label>Virtual Mode</label>
+            <select className="trade-input" value={virtualMode} onChange={e => setVirtualMode(e.target.value as VirtualMode)} disabled={isRunning}>
+              <option value="wins">Virtual Wins</option>
+              <option value="losses">Virtual Losses</option>
             </select>
           </div>
 
           <div className="trade-control-group">
-            <label>Prediction</label>
-            <input type="number" className="trade-input" defaultValue="2"
-              min="0" max="9" step="1" ref={digitRef}
-              disabled={!needsDigit(strategy)}
-              style={{ backgroundColor: needsDigit(strategy) ? '' : 'gray' }} />
+            <label>Virtual Count</label>
+            <input
+              type="number"
+              className="trade-input"
+              value={virtualCountStr}
+              onChange={e => setVirtualCountStr(e.target.value)}
+              min={0}
+              step={1}
+              disabled={isRunning}
+              placeholder="0 = OFF"
+            />
+          </div>
+
+          <div className="trade-control-group">
+            <label>Return to Virtual After</label>
+            <input
+              type="number"
+              className="trade-input"
+              value={returnToVirtualStr}
+              onChange={e => setReturnToVirtualStr(e.target.value)}
+              min={0}
+              step={1}
+              disabled={isRunning}
+            />
+            <small style={{ opacity: 0.75 }}>
+              Counts: <b>REAL wins</b>
+            </small>
           </div>
 
           <div className="trade-control-group">
@@ -1145,11 +1429,11 @@ const Speed = observer(() => {
             <input
               type="number"
               className="trade-input"
-              min="0"
-              step="1"
-              defaultValue="50"
-              ref={takeProfitRef}
-              onChange={(e) => setTakeProfit(parseFloat(e.target.value) || 0)}
+              value={tpStr}
+              onChange={e => setTpStr(e.target.value)}
+              min={0}
+              step="any"
+              disabled={isRunning}
               placeholder="0 to disable"
             />
           </div>
@@ -1159,246 +1443,204 @@ const Speed = observer(() => {
             <input
               type="number"
               className="trade-input"
-              min="0"
-              step="1"
-              defaultValue="100"
-              ref={stopLossRef}
-              onChange={(e) => setStopLoss(parseFloat(e.target.value) || 0)}
+              value={slStr}
+              onChange={e => setSlStr(e.target.value)}
+              min={0}
+              step="any"
+              disabled={isRunning}
               placeholder="0 to disable"
             />
           </div>
 
           <div className="trade-control-group">
-            <label>Martingale</label>
-            <input
-              type="number"
-              className="trade-input"
-              min="0"
-              step="0.1"
-              disabled={true}
-              defaultValue="1.25"
-              ref={martingaleRef}
-              onChange={(e) => setMartingale(parseFloat(e.target.value) || 0)}
-              placeholder="0 to disable"
-            />
+            <label>Ticks</label>
+            <select className="trade-input" value={ticks} onChange={e => setTicks(parseInt(e.target.value, 10))} disabled={isRunning}>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+            </select>
           </div>
 
-          {/* <div className="trade-control-group">
-            <div className="current-stake-display" >
-              ${currentStake.toFixed(2)}
-            </div>
-          </div> */}
-
-          {/* <div className="trade-control-group">
-            <button
-              className={`both-toggle ${bothMode ? 'on' : 'off'}`}
-              onClick={() => setBothMode(b => !b)}
-              style={{
-                padding: '.4rem .8rem',
-                background: bothMode ? 'linear-gradient(90deg,#0f9d58,#34a853)' : '#555',
-                color: '#fff',
-                border: '1px solid #222',
-                display: 'none',
-                borderRadius: '4px',
-                fontWeight: 'bold'
-              }}
-              title="When ON, single trade buttons buy both sides simultaneously"
-            >
-              {bothMode ? 'ON' : 'OFF'}
-            </button>
-          </div> */}
-
           <div className="trade-control-group">
-            <label className='start'>▶️ Start Bot ▶️</label>
+            <label className="start" style={{ display: 'flex', alignItems: 'center', fontWeight: 'bold', fontSize: '15px', gap: '4px', cursor: 'pointer' }}>
+              <LegacyPlayFillIcon width={20} height={20} /> Run
+            </label>
+
             <button
-              className={`auto-trade-toggle ${autoTradeEnabled ? 'on' : 'off'}`}
-              onClick={() => setAutoTradeEnabled(e => !e)}
+              className={`auto-trade-toggle ${isRunning ? 'on' : 'off'}`}
+              onClick={isRunning ? () => stopBot() : () => startBot()}
               style={{
-                padding: '.4rem .8rem',
-                background: autoTradeEnabled ? 'linear-gradient(90deg,#4285F4,#34a853)' : '#555',
+                padding: '.8rem .12rem',
+                background: isRunning ? 'linear-gradient(90deg,#4285F4,#34a853)' : '#E6A85C',
                 color: '#fff',
                 border: '1px solid #222',
                 justifyContent: 'center',
                 display: 'flex',
                 borderRadius: '4px',
-                fontWeight: 'bold'
+                fontWeight: 'bold',
               }}
-              title="Switch between markets, strategies, predictions,and martingale"
             >
-              {autoTradeEnabled ? 'ON' : 'OFF'}
+              {isRunning ? 'ON' : 'OFF'}
             </button>
           </div>
         </div>
-        <div className="title"><small>Type</small><small>Entry/Exit spot</small><small>Buy price and P/L</small></div>
+
+        <div className="title">
+          <small>Type|Market</small>
+          <small>Entry|Exit spot</small>
+          <small>Buy price & P/L</small>
+        </div>
 
         <div className="open-positions">
-          {trades.length === 0
-            ? <div className="no-positions"><small>No positions</small></div>
-            : trades.map(tr => (
-              <div key={tr.id} className={`position-item ${posClass(tr.status, tr.profit)}`}>
+          {trades.length === 0 ? (
+            <div className="no-positions">
+              <small>No positions</small>
+            </div>
+          ) : (
+            trades.map(tr => (
+              <div
+                key={tr.id}
+                className={`position-item ${
+                  tr.status === 'won'
+                    ? 'position-win'
+                    : tr.status === 'lost' || tr.status === 'error'
+                    ? 'position-loss'
+                    : 'position-open'
+                }`}
+              >
                 <div className="position-header">
                   <div className="position-market-contract">
                     {marketIcons[tr.market] || <span>{tr.market}</span>}
-                    {contractIcons[tr.contractType] || <span>{label(tr.contractType)}</span>}
+                    {contractIcons[tr.contractType] || <span>{tr.contractType}</span>}
+
+                    {tr.virtual && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 10,
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          border: '1px solid rgba(255,255,255,0.25)',
+                          opacity: 0.95,
+                          fontWeight: 800,
+                          color:
+                            tr.status === 'won'
+                              ? '#20d26a'
+                              : tr.status === 'lost'
+                              ? '#ff4d4f'
+                              : 'rgba(255,255,255,0.85)',
+                        }}
+                      >
+                        Virtual Hook
+                      </span>
+                    )}
+
+                    {isDigitContract(tr.contractType) && typeof tr.barrier === 'number' && (
+                      <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.8 }}>d{tr.barrier}</span>
+                    )}
                   </div>
 
                   {tr.status === 'error' && (
                     <div className="error-display">
-                      <span
-                        className="error-badge"
-                        title={tr.errorDetails || 'Trade failed'}
-                        onClick={() => showStatus(tr.errorDetails || 'Trade failed', 'error')}
-                      >
-                        ! {tr.errorReason === 'Insufficient balance' && '💰'}
+                      <span className="error-badge" title={tr.errorDetails || 'Trade failed'}>
+                        !
                       </span>
-                      <span className="error-text">
-                        {tr.errorReason}
-                      </span>
+                      <span className="error-text">{tr.errorReason}</span>
                     </div>
                   )}
                 </div>
 
                 <div className="position-spots">
                   <div className="spot-entry">
-                    <svg width={16} height={16} viewBox="0 0 16 16">
-                      <circle cx={8} cy={8} r={6} stroke="#FF4444" strokeWidth={1.5} fill="white" />
-                      <circle cx={8} cy={8} r={3} fill="#FF4444" />
-                    </svg>
+                    <EntrySpotIcon />
                     {formatTickValue(tr.entryValue, tr.marketFormat)}
                   </div>
-
                   <div className="spot-exit">
-                    <svg width={16} height={16} viewBox="0 0 16 16">
-                      <circle cx={8} cy={8} r={6} stroke="#999999" strokeWidth={1.5} fill="white" />
-                    </svg>
+                    <ExitSpotIcon />
                     {formatTickValue(tr.exitValue, tr.marketFormat)}
                   </div>
                 </div>
 
                 <div className="position-footer">
                   <div className="position-stake">{tr.stake.toFixed(2)} USD</div>
-                  <div className={`position-result ${tr.status === 'pending' ? 'pending' :
-                    tr.status === 'error' ? 'loss' :
-                      tr.profit !== undefined
-                        ? (tr.profit >= 0 ? 'profit' : 'loss')
-                        : ''}`}>
+                  <div
+                    className={`position-result ${
+                      tr.status === 'pending'
+                        ? 'pending'
+                        : tr.status === 'error'
+                        ? 'loss'
+                        : tr.profit !== undefined
+                        ? tr.profit >= 0
+                          ? 'profit'
+                          : 'loss'
+                        : ''
+                    }`}
+                  >
                     {tr.status === 'pending'
                       ? '...'
                       : tr.profit !== undefined
-                        ? `${tr.profit >= 0 ? '+' : ''}${tr.profit.toFixed(2)}`
-                        : '—'}
+                      ? `${tr.profit >= 0 ? '+' : ''}${tr.profit.toFixed(2)}`
+                      : '—'}
                   </div>
                 </div>
               </div>
-            ))}
-        </div>
-        <div className="messege">
-        <span>Start Bot [on] to start trading | Buys Every Tick</span>
-
+            ))
+          )}
         </div>
 
-        <div className="trade-buttons">
-          <button
-            className={`trade-btn even-btn ${autoTradeEnabled ? 'disabled' : ''}`}
-            onClick={() => bothMode ? buyBoth() : buy(ctypes.left)}
-            disabled={true}
-            title={bothMode ? 'Both mode: TWO trades will be placed' : ''}
-          >
-            <span className="button-icon">
-              {contractIcons[ctypes.left] || null}
-            </span>
-            {label(ctypes.left)}{bothMode ? ' (Both)' : ''}
-          </button>
-          <button
-            className={`trade-btn odd-btn ${autoTradeEnabled ? 'disabled' : ''}`}
-            onClick={() => bothMode ? buyBoth() : buy(ctypes.right)}
-            disabled={true}
-            title={bothMode ? 'Both mode: TWO trades will be placed' : ''}
-          >
-            <span className="button-icon">
-              {contractIcons[ctypes.right] || null}
-            </span>
-            {label(ctypes.right)}{bothMode ? ' (Both)' : ''}
-          </button>
-          <button className="trade-btn reset-btn"
-            onClick={handleReset}>Reset</button>
-        </div>
+        {!isRunning && (
+          <div className="trade-control-group">
+            <label>&nbsp;</label>
+            <button className="trade-btn reset-btn" onClick={handleReset} title="Clear results and P/L">
+              Reset
+            </button>
+          </div>
+        )}
+      </div>
 
-        <div className={`trade-status status-${msg.type}`}>
-          {msg.txt}{msg.type === 'loading' && <div className="loading-spinner" />}
-          {autoTradeEnabled && <span style={{ marginLeft: '10px' }}>🔥 Market Switcher is ACTIVE</span>}
-          {martingale > 0 && consecutiveLosses > 0 && (
-            <span style={{ marginLeft: '10px' }}>
-              Martingale: {consecutiveLosses} loss(es), current stake: ${currentStake.toFixed(2)}
+      <div className="trade-status">
+        <div>
+          {msg.txt}
+          {isRunning && (
+            <span style={{ marginLeft: 10 }}>
+              🎯 Entry: <b>{locked.current.entryPatternStr || 'every tick'}</b> · Virtual:{' '}
+              <b>{locked.current.vTarget > 0 ? `${locked.current.vMode}×${locked.current.vTarget}` : 'OFF'}</b> · Ready:{' '}
+              <b>{locked.current.vTarget > 0 ? (readyForRealUI ? 'YES ✅' : 'no') : 'YES ✅'}</b> · Recovery:{' '}
+              <b>{recoveryUI.on ? `ON (${recoveryUI.wins}W / ${recoveryUI.losses}L)` : 'OFF'}</b> · Pending:{' '}
+              <b>{buyPendingRef.current ? 'YES' : 'no'}</b>
             </span>
           )}
         </div>
 
-        <div className="performance-stats">
-          <div className="stat-item">
-            <div className="stat-title">Total P/L</div>
-            <div className={`stat-value ${profitLoss >= 0 ? 'profit' : 'loss'}`}>
-              {profitLoss >= 0 ? '+' : ''}${Math.abs(profitLoss).toFixed(2)} USD
-            </div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-title">No. of runs</div>
-            <div className="stat-value">{tradeStats.total}</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-title">Won</div>
-            <div className="stat-value profit">{tradeStats.won}</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-title">Lost</div>
-            <div className="stat-value loss">{tradeStats.lost}</div>
-          </div>
+        <div style={{ marginTop: 6 }}>
+          REAL loss row: <b>{consecutiveRealLossesRef.current}</b> · Delay: <b>{locked.current.mDelay}</b> · Stake idx:{' '}
+          <b>{stakeIndexRef.current}</b>/7 · Next stake: <b>${nextStakeRef.current.toFixed(2)}</b> · Virtual W/L:{' '}
+          <b>{vWinsUI}</b>/<b>{vLossesUI}</b> · Session P/L:{' '}
+          <b style={{ marginLeft: 6 }}>
+            {sessionPL >= 0 ? '+' : '-'}${Math.abs(sessionPL).toFixed(2)}
+          </b>
         </div>
       </div>
 
-      <div className="history-container" >
-        <div className="history-title">
-          Analysis Chamber
-          <button
-            className="refresh-btn"
-            id="refreshBtn"
-            onClick={refreshData}
-          >
-            <i className="fas fa-sync-alt"></i> Refresh
-          </button>
+      <div className="performance-stats">
+        <div className="stat-item">
+          <div className="stat-title">Total P/L</div>
+          <div className={`stat-value ${profitLoss >= 0 ? 'profit' : 'loss'}`}>
+            {profitLoss >= 0 ? '+' : ''}${Math.abs(profitLoss).toFixed(2)} USD
+          </div>
         </div>
-        <div
-          className="history-items"
-          id="lastResults"
-          style={{ display: activeMode === 'evenOdd' ? 'flex' : 'none' }}
-        >
-          {renderEvenOddHistory()}
+        <div className="stat-item">
+          <div className="stat-title">No. of runs (REAL)</div>
+          <div className="stat-value">{tradeStats.total}</div>
         </div>
-        <div
-          className="history-items"
-          id="lastResultsOverUnder"
-          style={{ display: activeMode === 'overUnder' ? 'flex' : 'none' }}
-        >
-          {renderOverUnderHistory()}
+        <div className="stat-item">
+          <div className="stat-title">Won (REAL)</div>
+          <div className="stat-value profit">{tradeStats.won}</div>
         </div>
-        <div
-          className="history-items"
-          id="lastResultsRiseFall"
-          style={{
-            display: activeMode === 'riseFall' ? 'flex' : 'none',
-            minWidth: '100%'
-          }}
-        >
-          {renderRiseFallHistory()}
+        <div className="stat-item">
+          <div className="stat-title">Lost (REAL)</div>
+          <div className="stat-value loss">{tradeStats.lost}</div>
         </div>
       </div>
     </div>
   );
-});
-
-const TickSubscriber = ({ symbol, onTick }: { symbol: string; onTick: (p: number, epoch: number) => void }) => {
-  useTickStream(symbol, onTick);
-  return null;
-};
-
-export default Speed;
+}

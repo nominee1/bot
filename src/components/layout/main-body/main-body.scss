@@ -1,3 +1,13 @@
+@use 'components/shared/styles/mixins' as *;
+
 .main-body {
     flex-grow: 1;
+    /* Lets nested routes scroll inside flex column layouts */
+    min-height: 0;
+
+    @include mobile-or-tablet-screen {
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }

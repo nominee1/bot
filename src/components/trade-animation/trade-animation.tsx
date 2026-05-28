@@ -17,7 +17,7 @@ type TTradeAnimation = {
 };
 
 const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnimation) => {
-    const { dashboard, run_panel, summary_card } = useStore();
+    const { dashboard, run_panel, summary_card, ready_strategy_panel } = useStore();
     const { client } = useStore();
     const { active_tab } = dashboard;
     const { is_contract_completed, profit } = summary_card;
@@ -102,6 +102,11 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                     setShouldDisable(true);
                     if (is_stop_button_visible) {
                         onStopBotClick();
+                        return;
+                    }
+                    if (ready_strategy_panel.start_strategy_fn) {
+                        ready_strategy_panel.invokeStartStrategy();
+                        rudderStackSendRunBotEvent({ subpage_name: getTabName(active_tab) });
                         return;
                     }
                     onRunButtonClick();

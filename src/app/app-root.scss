@@ -10,3 +10,53 @@
         margin-top: 6rem;
     }
 }
+
+.oauth-account-setup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 16, 28, 0.42);
+    backdrop-filter: blur(3px);
+}
+
+.oauth-account-setup-overlay__card {
+    min-width: 240px;
+    max-width: 320px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: #111827;
+    color: #f8fafc;
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    box-shadow: 0 16px 42px rgba(0, 0, 0, 0.36);
+
+    strong {
+        font-size: 15px;
+        font-weight: 900;
+    }
+
+    small {
+        font-size: 12px;
+        color: #cbd5e1;
+    }
+}
+
+.oauth-account-setup-overlay__spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 2px solid rgba(148, 163, 184, 0.45);
+    border-top-color: #3b82f6;
+    animation: oauth-account-setup-spin 0.8s linear infinite;
+}
+
+@keyframes oauth-account-setup-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

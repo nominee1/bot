@@ -1,0 +1,20 @@
+.run-strategy-detached {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 43px;
+    z-index: 8;
+    width: fit-content;
+    pointer-events: auto;
+    padding: 0 1.6rem;
+
+    /* Keep it inside small viewports without touching screen edges */
+    max-width: 100vw;
+    box-sizing: border-box;
+}
+
+/* Scope any animation tweaks to the detached wrapper */
+.run-strategy-detached__animation {
+    width: min(40rem, 100vw);
+}
+

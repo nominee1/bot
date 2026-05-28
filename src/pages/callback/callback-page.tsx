@@ -1,5 +1,6 @@
 import { Callback } from '@deriv-com/auth-client';
 import { Button } from '@deriv-com/ui';
+import { pickDefaultActiveLoginAccount } from '@/components/shared/utils/login/pick-default-account';
 
 const CallbackPage = () => {
     return (
@@ -30,8 +31,10 @@ const CallbackPage = () => {
                 localStorage.setItem('accountsList', JSON.stringify(accountsList));
                 localStorage.setItem('clientAccounts', JSON.stringify(clientAccounts));
 
-                localStorage.setItem('authToken', tokens.token1);
-                localStorage.setItem('active_loginid', tokens.acct1);
+                const accounts = Object.values(clientAccounts);
+                const active = pickDefaultActiveLoginAccount(accounts);
+                localStorage.setItem('authToken', active?.token ?? tokens.token1);
+                localStorage.setItem('active_loginid', active?.loginid ?? tokens.acct1);
 
                 window.location.assign('/');
             }}

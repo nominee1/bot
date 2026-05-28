@@ -70,16 +70,16 @@ const Toolbox = observer(() => {
                     buttonOnClick={() => {
                         window.location.href = 'https://www.'; // Direct redirection on click
                     }}
-                    button_text={localize('Go to DenaraDigitPro')} // Denara Bots & Strategies
+                    button_text={localize('Go to DenaraPro')} // Denara Bots & Strategies
                 /> */}
                 <ToolbarButton
                     popover_message={localize('Click here to start trading on.')}
                     button_id='db-toolbar__get-started-button'
                     button_classname='toolbar__btn toolbar__btn--icon toolbar__btn--start'
                     buttonOnClick={() => {
-                        window.location.href = 'https://www.denaradigitpro.com'; // Direct redirection on click
+                        window.location.href = 'https://www.denarapro.com';
                     }}
-                    button_text={localize('DenaraDigitPro')} // Denara Bots & Strategies
+                    button_text={localize('DenaraPro')} // Denara Bots & Strategies
                 />
                 {/* <ToolbarButton
                     popover_message={localize('Click here to start trading on.')}

@@ -12,7 +12,7 @@ const Deriv = () => {
             className='app-footer__icon'
             href={standalone_routes.denarapro}
             target='_blank'
-            tooltipContent={localize('Go to denaradigitpro.com')}
+            tooltipContent={localize('Go to denarapro.com')}
         >
             <LegacyGoogleIcon iconSize='xs' />
         </Tooltip>
