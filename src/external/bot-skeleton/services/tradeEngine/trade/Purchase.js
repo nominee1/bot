@@ -1,3 +1,8 @@
+import { isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
+import {
+    sendDerivSessionContractPurchase,
+    tradeOptionsToDerivBuyIntent,
+} from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contractStatus, info, log } from '../utils/broadcast';
@@ -83,7 +88,15 @@ export default Engine =>
                 ).then(onSuccess);
             }
             const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
-            const action = () => api_base.api.send(trade_option);
+            const action = () => {
+                if (isDerivOptionsOAuthSession()) {
+                    return sendDerivSessionContractPurchase(
+                        data => api_base.api.send(data),
+                        tradeOptionsToDerivBuyIntent(contract_type, this.tradeOptions)
+                    );
+                }
+                return api_base.api.send(trade_option);
+            };
 
             this.isSold = false;
 

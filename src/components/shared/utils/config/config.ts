@@ -178,3 +178,71 @@ export const generateOAuthURL = () => {
     }
     return original_url.toString() || oauth_url;
 };
+
+const readBuildEnv = (key: string): string => {
+    const value = typeof process.env[key] === 'string' ? process.env[key].trim() : '';
+    return value;
+};
+
+/** Deriv Sites / App Builder deploy — redirect URI is always injected at build time. */
+export const isBotStudioDeploy = (): boolean => Boolean(readBuildEnv('DERIV_OAUTH_REDIRECT_URI'));
+
+/** True when Bot Studio injected OAuth client, redirect URI, and token exchange URL at build time. */
+export const hasBotStudioOAuthConfig = (): boolean =>
+    Boolean(
+        readBuildEnv('DERIV_OAUTH_CLIENT_ID') &&
+        readBuildEnv('DERIV_OAUTH_REDIRECT_URI') &&
+        readBuildEnv('DERIV_TOKEN_EXCHANGE_URL')
+    );
+
+/** OAuth `client_id` for PKCE login (Bot Studio build or env override). */
+export const getDerivOAuthClientId = (): string => readBuildEnv('DERIV_OAUTH_CLIENT_ID');
+
+/** Numeric WS `app_id` for OAuth authorize + legacy WS. */
+export const getDenaraOidNumericAppId = (): string => {
+    const fromEnv = readBuildEnv('DERIV_WS_APP_ID') || readBuildEnv('DERIV_OIDC_APP_ID');
+    if (fromEnv) return fromEnv;
+    if (isBotStudioDeploy()) return '';
+    return String(getAppId());
+};
+
+/** Bot Studio token exchange endpoint. */
+const DERIV_SITES_TOKEN_EXCHANGE_PATH = '/api/auth/token-exchange';
+
+/** Preview Deriv Sites deploy URLs must not be used at runtime — route to production host. */
+function normalizeBakedTokenExchangeUrl(url: string): string {
+    try {
+        const parsed = new URL(url);
+        if (
+            parsed.pathname === DERIV_SITES_TOKEN_EXCHANGE_PATH &&
+            /^denara-sites-[a-z0-9]+\.vercel\.app$/i.test(parsed.hostname)
+        ) {
+            return `https://denara-sites.vercel.app${DERIV_SITES_TOKEN_EXCHANGE_PATH}`;
+        }
+    } catch {
+        // ignore
+    }
+    return url;
+}
+
+export const getDerivTokenExchangeUrl = (): string => {
+    const fromEnv = readBuildEnv('DERIV_TOKEN_EXCHANGE_URL');
+    if (!fromEnv) return '';
+    return normalizeBakedTokenExchangeUrl(fromEnv);
+};
+
+/** Registered OAuth redirect URI (must match Deriv dashboard). */
+export const getDerivOidcRedirectCallbackUri = (): string => {
+    const fromEnv = readBuildEnv('DERIV_OAUTH_REDIRECT_URI');
+    if (fromEnv) return fromEnv;
+    return window.location.origin;
+};
+
+/** White-label Trader's Hub / main platform URL (Options users leave bot via account switcher). */
+export const getWhiteLabelTradersHubUrl = (): string => 'https://www.denarapro.com';
+
+/** App ids for Options REST (`GET /trading/v1/options/accounts`). */
+export const getDerivOptionsRestAppIds = (): string[] => {
+    const clientId = getDerivOAuthClientId();
+    return clientId ? [clientId] : [];
+};

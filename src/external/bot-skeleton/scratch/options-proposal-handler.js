@@ -1,4 +1,5 @@
 import { CONTRACT_TYPES } from '@/components/shared';
+import { patchProposalPayloadForSession } from '@/components/shared/utils/trading/options-session-proposal';
 
 export const DEFAULT_OPTIONS_PROPOSAL_REQUEST = {
     amount: undefined,
@@ -14,7 +15,7 @@ export const DEFAULT_OPTIONS_PROPOSAL_REQUEST = {
 export const requestOptionsProposalForQS = (input_values, ws) => {
     const { amount, currency, symbol, contract_type, duration, duration_unit, basis } = input_values;
 
-    const proposal_request = {
+    const proposal_request = patchProposalPayloadForSession({
         ...DEFAULT_OPTIONS_PROPOSAL_REQUEST,
         amount,
         currency,
@@ -23,7 +24,7 @@ export const requestOptionsProposalForQS = (input_values, ws) => {
         duration,
         duration_unit,
         basis,
-    };
+    });
 
     // Add barrier value of 5 only for specific digit contract types
     const digit_contracts = [

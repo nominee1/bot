@@ -8,6 +8,7 @@ import ChunkLoader from '@/components/loader/chunk-loader';
 import MigrationModal from '@/components/migration-modal';
 import PWAInstallModal from '@/components/pwa-install-modal';
 import { getUrlBase } from '@/components/shared';
+import { isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
 import TncStatusUpdateModal from '@/components/tnc-status-update-modal';
 import TransactionDetailsModal from '@/components/transaction-details';
 import { api_base, ApiHelpers, ServerTime } from '@/external/bot-skeleton';
@@ -47,7 +48,7 @@ const AppContent = observer(() => {
     const { recovered_transactions, recoverPendingContracts } = transactions;
     const is_subscribed_to_msg_listener = React.useRef(false);
     const msg_listener = React.useRef(null);
-    const { connectionStatus } = useApiBase();
+    const { connectionStatus, isAuthorizing, isAuthorized, activeLoginid } = useApiBase();
     const { initTrackJS } = useTrackjs();
 
     initTrackJS(client.loginid);
@@ -78,10 +79,15 @@ const AppContent = observer(() => {
                 clearTimeout(offline_timeout);
                 setOfflineTimeout(null);
             }
+        } else if (!isAuthorizing && !isAuthorized) {
+            // Expired Options OAuth or logged-out classic session — socket never opens; still show dashboard.
+            common.setSocketOpened(false);
+            setIsApiInitialized(true);
+            setIsLoading(false);
         } else if (connectionStatus !== CONNECTION_STATUS.OPENED) {
             common.setSocketOpened(false);
         }
-    }, [common, connectionStatus, offline_timeout]);
+    }, [common, connectionStatus, offline_timeout, isAuthorizing, isAuthorized]);
 
     // Handle offline scenarios - don't wait indefinitely for API
     useEffect(() => {
@@ -162,10 +168,10 @@ const AppContent = observer(() => {
     }, []);
 
     React.useEffect(() => {
-        // Check if api is initialized and then subscribe to the api messages
-        // Also we should only subscribe to the messages once user is logged in
-        // And is not already subscribed to the messages
-        if (!is_subscribed_to_msg_listener.current && client.is_logged_in && is_api_initialized && api_base?.api) {
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const sessionLoggedIn = client.is_logged_in || (optionsOAuth && Boolean(activeLoginid));
+
+        if (!is_subscribed_to_msg_listener.current && sessionLoggedIn && is_api_initialized && api_base?.api) {
             is_subscribed_to_msg_listener.current = true;
             msg_listener.current = api_base.api.onMessage()?.subscribe(handleMessage);
         }
@@ -175,7 +181,7 @@ const AppContent = observer(() => {
                 msg_listener.current.unsubscribe?.();
             }
         };
-    }, [is_api_initialized, client.is_logged_in, client.loginid, handleMessage, connectionStatus]);
+    }, [activeLoginid, is_api_initialized, client.is_logged_in, client.loginid, handleMessage, connectionStatus]);
 
     React.useEffect(() => {
         showDigitalOptionsMaltainvestError(client, common);
@@ -194,74 +200,83 @@ const AppContent = observer(() => {
     const changeActiveSymbolLoadingState = () => {
         init();
 
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const LOADER_CAP_MS = optionsOAuth ? 10000 : 0;
+        let loaderCapTimer = null;
+
+        const finishLoading = () => {
+            if (loaderCapTimer) {
+                clearTimeout(loaderCapTimer);
+                loaderCapTimer = null;
+            }
+            setIsLoading(false);
+        };
+
+        if (LOADER_CAP_MS > 0) {
+            loaderCapTimer = setTimeout(finishLoading, LOADER_CAP_MS);
+        }
+
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
 
-            // Handle offline scenario
             if (!isOnline) {
-                console.log('[Offline] Skipping active symbols retrieval, showing dashboard');
-                setIsLoading(false);
+                finishLoading();
                 return;
             }
 
-            active_symbols
-                .retrieveActiveSymbols(true)
-                .then(() => {
-                    setIsLoading(false);
-                })
-                .catch(error => {
-                    console.error('[API] Failed to retrieve active symbols:', error);
-                    // Don't stay in loading state if API fails
-                    setIsLoading(false);
-                });
+            active_symbols.retrieveActiveSymbols(true).then(finishLoading).catch(finishLoading);
         };
 
         if (ApiHelpers?.instance?.active_symbols) {
             retrieveActiveSymbols();
         } else {
-            // This is a workaround to fix the issue where the active symbols are not loaded immediately
-            // when the API is initialized. Should be replaced with RxJS pubsub
             const intervalId = setInterval(() => {
                 if (ApiHelpers?.instance?.active_symbols) {
                     clearInterval(intervalId);
                     retrieveActiveSymbols();
                 } else if (!isOnline) {
-                    // If offline, don't wait indefinitely
                     clearInterval(intervalId);
-                    console.log('[Offline] Stopping active symbols wait, showing dashboard');
-                    setIsLoading(false);
+                    finishLoading();
                 }
             }, 1000);
 
-            // Set a maximum timeout to prevent infinite loading
             setTimeout(() => {
                 clearInterval(intervalId);
                 if (is_loading) {
-                    console.log('[Timeout] Active symbols loading timeout, showing dashboard');
-                    setIsLoading(false);
+                    finishLoading();
                 }
-            }, 10000); // 10 second timeout
+            }, 10000);
         }
     };
 
     React.useEffect(() => {
-        if (is_api_initialized) {
-            init();
-            setIsLoading(true);
-            if (!client.is_logged_in) {
+        if (!is_api_initialized) return;
+        init();
+
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const sessionLoggedIn = client.is_logged_in || (optionsOAuth && Boolean(activeLoginid));
+
+        if (!sessionLoggedIn) {
+            if (isAuthorizing && !optionsOAuth) {
+                setIsLoading(true);
+            } else {
                 changeActiveSymbolLoadingState();
             }
+            return;
         }
+        setIsLoading(true);
+        changeActiveSymbolLoadingState();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [is_api_initialized]);
+    }, [activeLoginid, client.is_logged_in, isAuthorizing, is_api_initialized]);
 
-    // use is_landing_company_loaded to know got details of accounts to identify should show an error or not
     React.useEffect(() => {
-        if (client.is_logged_in && client.is_landing_company_loaded && is_api_initialized) {
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        const sessionLoggedIn = client.is_logged_in || (optionsOAuth && Boolean(activeLoginid));
+        if (sessionLoggedIn && client.is_landing_company_loaded && is_api_initialized) {
             changeActiveSymbolLoadingState();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client.is_landing_company_loaded, is_api_initialized, client.loginid]);
+    }, [activeLoginid, client.is_landing_company_loaded, client.is_logged_in, is_api_initialized, client.loginid]);
 
     useEffect(() => {
         initDatadog(true);
@@ -276,6 +291,7 @@ const AppContent = observer(() => {
     const getLoadingMessage = () => {
         if (is_eu_error_loading) return '';
         if (!isOnline) return localize('Loading offline dashboard...');
+        if (isDerivOptionsOAuthSession()) return localize('Setting up your account, please hold on…');
         return localize('Initializing Deriv Bot account...');
     };
 

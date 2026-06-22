@@ -1,3 +1,7 @@
+import {
+    getDerivOAuthAccessToken,
+    isDerivOptionsOAuthSession,
+} from '@/components/shared/utils/login/deriv-oauth-storage';
 import { generateDerivApiInstance, V2GetActiveToken } from './appId';
 
 class ChartAPI {
@@ -30,6 +34,9 @@ class ChartAPI {
     authorizeChartConnection = async () => {
         // If already authorized, don't authorize again
         if (this.is_authorized) return;
+
+        const optionsOAuth = isDerivOptionsOAuthSession() && Boolean(getDerivOAuthAccessToken());
+        if (optionsOAuth) return;
 
         const token = V2GetActiveToken();
         if (!token || !this.api) return;

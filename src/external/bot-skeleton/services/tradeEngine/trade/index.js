@@ -1,5 +1,7 @@
 import { applyMiddleware, createStore } from 'redux';
 import { thunk } from 'redux-thunk';
+import { isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
+import { resolveTradableDigitMarket } from '@/components/shared/utils/trading/deriv-session-markets';
 import { localize } from '@deriv-com/translations';
 import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
@@ -97,7 +99,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
 
         const validated_trade_options = this.validateTradeOptions(tradeOptions);
 
-        this.tradeOptions = { ...validated_trade_options, symbol: this.options.symbol };
+        const symbol = resolveTradableDigitMarket(this.options.symbol);
+        this.tradeOptions = { ...validated_trade_options, symbol };
         this.store.dispatch(start());
         this.checkLimits(validated_trade_options);
 
@@ -153,10 +156,11 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
 
     makeDirectPurchaseDecision() {
         const { has_payout_block, is_basis_payout } = checkBlocksForProposalRequest();
-        this.is_proposal_subscription_required = has_payout_block || is_basis_payout;
+        const optionsOAuth = isDerivOptionsOAuthSession();
+        this.is_proposal_subscription_required = optionsOAuth || has_payout_block || is_basis_payout;
 
         if (this.is_proposal_subscription_required) {
-            this.makeProposals({ ...this.options, ...this.tradeOptions });
+            this.makeProposals({ ...this.options, ...this.tradeOptions, symbol: this.tradeOptions.symbol });
             this.checkProposalReady();
         } else {
             this.store.dispatch(proposalsReady());

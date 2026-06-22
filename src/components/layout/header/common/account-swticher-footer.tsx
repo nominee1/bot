@@ -1,6 +1,7 @@
 import React from 'react';
 import classNames from 'classnames';
 import { standalone_routes } from '@/components/shared';
+import { getWhiteLabelTradersHubUrl, hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import Button from '@/components/shared_ui/button';
 import { useFirebaseCountriesConfig } from '@/hooks/firebase/useFirebaseCountriesConfig';
 import useStoreWalletAccountsList from '@/hooks/useStoreWalletAccountsList';
@@ -41,19 +42,21 @@ const AccountSwitcherFooter = ({ loginid, residence, type }: TAccountSwitcherFoo
     const redirect_url_str = handleTraderHubRedirect(redirectParams) || standalone_routes.traders_hub;
 
     // Add the account parameter to the URL
-    let final_url_str = redirect_url_str;
-    try {
-        const redirect_url = new URL(redirect_url_str);
-        if (is_virtual) {
-            // For demo accounts, set the account parameter to 'demo'
-            redirect_url.searchParams.set('account', 'demo');
-        } else if (account_currency) {
-            // For real accounts, set the account parameter to the currency
-            redirect_url.searchParams.set('account', account_currency);
+    let final_url_str = hasBotStudioOAuthConfig() ? getWhiteLabelTradersHubUrl() : redirect_url_str;
+    if (!hasBotStudioOAuthConfig()) {
+        try {
+            const redirect_url = new URL(redirect_url_str);
+            if (is_virtual) {
+                // For demo accounts, set the account parameter to 'demo'
+                redirect_url.searchParams.set('account', 'demo');
+            } else if (account_currency) {
+                // For real accounts, set the account parameter to the currency
+                redirect_url.searchParams.set('account', account_currency);
+            }
+            final_url_str = redirect_url.toString();
+        } catch (error) {
+            console.error('Error parsing redirect URL:', error);
         }
-        final_url_str = redirect_url.toString();
-    } catch (error) {
-        console.error('Error parsing redirect URL:', error);
     }
 
     const is_virtual_tab = type === 'demo';

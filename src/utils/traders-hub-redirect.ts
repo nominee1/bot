@@ -1,10 +1,15 @@
 import { standalone_routes } from '@/components/shared';
+import { getWhiteLabelTradersHubUrl, hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 
 /**
  * Gets the base Trader's Hub URL based on the current environment
  * @returns The base Trader's Hub URL
  */
 export const getBaseTraderHubUrl = (): string => {
+    if (hasBotStudioOAuthConfig()) {
+        return getWhiteLabelTradersHubUrl();
+    }
+
     const hostname = window.location.hostname;
 
     const domain = 'deriv.com';
@@ -26,6 +31,10 @@ export const getBaseTraderHubUrl = (): string => {
  * @returns The URL to redirect to
  */
 export const getTraderHubUrl = (product_type: 'tradershub' | 'cfds' | 'reports' | 'cashier'): string => {
+    if (hasBotStudioOAuthConfig()) {
+        return getWhiteLabelTradersHubUrl();
+    }
+
     const base_url = getBaseTraderHubUrl();
 
     // Map product_type to redirect_to parameter
@@ -51,6 +60,10 @@ export const getTraderHubUrl = (product_type: 'tradershub' | 'cfds' | 'reports' 
  * @returns The URL for the wallet page
  */
 export const getWalletUrl = (is_virtual?: boolean, currency?: string): string => {
+    if (hasBotStudioOAuthConfig()) {
+        return getWhiteLabelTradersHubUrl();
+    }
+
     const base_url = getBaseTraderHubUrl();
     const url = `${base_url}/tradershub/redirect?action=redirect_to&redirect_to=wallet`;
 
@@ -112,6 +125,10 @@ export const handleTraderHubRedirect = ({
     residence?: string;
     hubEnabledCountryList?: string[];
 }): string | null => {
+    if (hasBotStudioOAuthConfig()) {
+        return getWhiteLabelTradersHubUrl();
+    }
+
     if (shouldRedirectToTraderHub(has_wallet, residence, hubEnabledCountryList)) {
         return getTraderHubUrl(product_type);
     }

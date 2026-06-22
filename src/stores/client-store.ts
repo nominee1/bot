@@ -1,6 +1,7 @@
 import { action, computed, makeObservable, observable } from 'mobx';
 import { ContentFlag, isEmptyObject } from '@/components/shared';
 import { isEuCountry, isMultipliersOnly, isOptionsBlocked } from '@/components/shared/common/utility';
+import { clearDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
 import { removeCookies } from '@/components/shared/utils/storage/storage';
 import { api_base } from '@/external/bot-skeleton';
 import {
@@ -82,6 +83,8 @@ export default class ClientStore {
             setIsLoggedIn: action,
             setIsLoggingOut: action,
             setLandingCompany: action,
+            setOptionsOAuthSessionReady: action,
+            resetAfterOptionsAuthExpiry: action,
             setLoginId: action,
             setWebsiteStatus: action,
             setUpgradeableLandingCompanies: action,
@@ -324,6 +327,23 @@ export default class ClientStore {
         this.is_landing_company_loaded = true;
     }
 
+    /** Options OAuth users skip classic WS landing_company — unblock dashboard loading. */
+    setOptionsOAuthSessionReady() {
+        this.is_landing_company_loaded = true;
+    }
+
+    /** Drop logged-in header state after Options OAuth expiry (no Hydra logout redirect). */
+    resetAfterOptionsAuthExpiry() {
+        this.account_list = [];
+        this.accounts = {};
+        this.is_logged_in = false;
+        this.loginid = '';
+        this.balance = '0';
+        this.currency = 'USD';
+        this.is_landing_company_loaded = false;
+        this.all_accounts_balance = null;
+    }
+
     setUpgradeableLandingCompanies = (upgradeable_landing_companies: string[]) => {
         this.upgradeable_landing_companies = upgradeable_landing_companies;
     };
@@ -351,6 +371,9 @@ export default class ClientStore {
         this.is_landing_company_loaded = false;
 
         this.all_accounts_balance = null;
+
+        clearDerivOptionsOAuthSession();
+        api_base.clearOptionsAccountsCache?.();
 
         localStorage.removeItem('active_loginid');
         localStorage.removeItem('accountsList');

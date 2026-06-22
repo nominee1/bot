@@ -3,6 +3,8 @@ import clsx from 'clsx';
 import { observer } from 'mobx-react-lite';
 import PWAInstallButton from '@/components/pwa-install-button';
 import { generateOAuthURL, standalone_routes } from '@/components/shared';
+import { hasBotStudioOAuthConfig, isBotStudioDeploy } from '@/components/shared/utils/config/config';
+import { requestDerivOAuthAuthentication } from '@/components/shared/utils/login/login';
 import Button from '@/components/shared_ui/button';
 import useActiveAccount from '@/hooks/api/account/useActiveAccount';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
@@ -21,7 +23,6 @@ import AccountsInfoLoader from './account-info-loader';
 import AccountSwitcher from './account-switcher';
 import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
-import PlatformSwitcher from './platform-switcher';
 import './header.scss';
 
 type TAppHeaderProps = {
@@ -46,6 +47,9 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
     const { onRenderTMBCheck, isTmbEnabled } = useTMB();
     const is_tmb_enabled = isTmbEnabled() || window.is_tmb_enabled === true;
     // No need for additional state management here since we're handling it in the layout component
+
+    const is_white_label = hasBotStudioOAuthConfig();
+    const use_pkce_login = isBotStudioDeploy();
 
     const renderAccountSection = useCallback(() => {
         // Show loader during authentication processes
@@ -138,6 +142,11 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                     <Button
                         tertiary
                         onClick={async () => {
+                            if (use_pkce_login) {
+                                clearAuthData(false);
+                                await requestDerivOAuthAuthentication();
+                                return;
+                            }
                             clearAuthData(false);
                             const getQueryParams = new URLSearchParams(window.location.search);
                             const currency = getQueryParams.get('account') ?? '';
@@ -202,6 +211,7 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
         is_virtual,
         onRenderTMBCheck,
         is_tmb_enabled,
+        is_white_label,
     ]);
 
     if (client?.should_hide_header) return null;
@@ -215,9 +225,8 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
             <Wrapper variant='left'>
                 <AppLogo />
                 <MobileMenu />
-                {isDesktop && <MenuItems.TradershubLink />}
+                {!is_white_label && isDesktop && <MenuItems.TradershubLink />}
                 {isDesktop && <MenuItems />}
-                {isDesktop && <PlatformSwitcher />}
             </Wrapper>
             <Wrapper variant='right'>
                 {!isDesktop && <PWAInstallButton variant='primary' size='medium' />}

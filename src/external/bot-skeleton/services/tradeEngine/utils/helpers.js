@@ -1,4 +1,6 @@
 import { findValueByKeyRecursively, formatTime, getRoundedNumber, isEmptyObject } from '@/components/shared';
+import { applyDerivSessionMarketField } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
+import { resolveTradableDigitMarket } from '@/components/shared/utils/trading/deriv-session-markets';
 import { config } from '@/external/bot-skeleton/constants';
 import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
@@ -6,6 +8,7 @@ import { error as logError } from './broadcast';
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
+        const market = resolveTradableDigitMarket(trade_option.symbol);
         const proposal = {
             amount: trade_option.amount,
             basis: trade_option.basis,
@@ -19,8 +22,8 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
                 purchase_reference,
             },
             proposal: 1,
-            symbol: trade_option.symbol,
         };
+        applyDerivSessionMarketField(proposal, market);
         if (trade_option.prediction !== undefined) {
             proposal.selected_tick = trade_option.prediction;
         }

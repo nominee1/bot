@@ -2,6 +2,7 @@ import { ComponentProps, ReactNode, useMemo } from 'react';
 import Livechat from '@/components/chat/Livechat';
 import useIsLiveChatWidgetAvailable from '@/components/chat/useIsLiveChatWidgetAvailable';
 import { standalone_routes } from '@/components/shared';
+import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import { useFirebaseCountriesConfig } from '@/hooks/firebase/useFirebaseCountriesConfig';
 import useRemoteConfig from '@/hooks/growthbook/useRemoteConfig';
 import { useIsIntercomAvailable } from '@/hooks/useIntercom';
@@ -44,6 +45,7 @@ type TMenuConfig = {
 const useMobileMenuConfig = (client?: RootStore['client']) => {
     const { localize } = useTranslations();
     const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
+    const is_white_label = hasBotStudioOAuthConfig();
 
     const { data } = useRemoteConfig(true);
     const { cs_chat_whatsapp } = data;
@@ -98,8 +100,21 @@ const useMobileMenuConfig = (client?: RootStore['client']) => {
         return getAccountUrl(standalone_routes.personal_details);
     };
 
-    const menuConfig = useMemo(
-        (): TMenuConfig[] => [
+    const menuConfig = useMemo((): TMenuConfig[] => {
+        if (is_white_label) {
+            return [
+                [
+                    {
+                        as: 'button',
+                        label: localize('Dark theme'),
+                        LeftComponent: LegacyTheme1pxIcon,
+                        RightComponent: <ToggleSwitch value={is_dark_mode_on} onChange={toggleTheme} />,
+                    },
+                ],
+            ];
+        }
+
+        return [
             [
                 {
                     as: 'a',
@@ -188,9 +203,23 @@ const useMobileMenuConfig = (client?: RootStore['client']) => {
             ].filter(Boolean) as TMenuConfig,
             // Logout button removed from mobile interface as per acceptance criteria
             [],
-        ],
-        [is_virtual, currency, is_logged_in, client_residence, is_tmb_enabled]
-    );
+        ];
+    }, [
+        is_white_label,
+        is_dark_mode_on,
+        toggleTheme,
+        is_virtual,
+        currency,
+        is_logged_in,
+        client_residence,
+        is_tmb_enabled,
+        localize,
+        cs_chat_whatsapp,
+        is_livechat_available,
+        icAvailable,
+        has_wallet,
+        is_hub_enabled_country,
+    ]);
 
     return {
         config: menuConfig,

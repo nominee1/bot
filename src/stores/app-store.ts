@@ -7,6 +7,7 @@ import {
     showDigitalOptionsUnavailableError,
     standalone_routes,
 } from '@/components/shared';
+import { getWhiteLabelTradersHubUrl, hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import { api_base, ApiHelpers, DBot, runIrreversibleEvents } from '@/external/bot-skeleton';
 import { setCurrency } from '@/external/bot-skeleton/scratch/utils';
 import { TApiHelpersStore } from '@/types/stores.types';
@@ -60,7 +61,7 @@ export default class AppStore {
                 ? localize(`Deriv Bot is not available for ${country || 'EU'} clients`)
                 : localize(`Deriv Bot is unavailable in ${country || 'the EU'}`),
             link: is_logged_in ? localize("Back to Trader's Hub") : localize('Refresh'),
-            route: standalone_routes.traders_hub,
+            route: hasBotStudioOAuthConfig() ? getWhiteLabelTradersHubUrl() : standalone_routes.traders_hub,
         };
     };
 

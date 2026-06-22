@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { observer } from 'mobx-react-lite';
+import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import { useStore } from '@/hooks/useStore';
 import { LegacyChevronRight1pxIcon } from '@deriv/quill-icons/Legacy';
 import { MenuItem, Text, useDevice } from '@deriv-com/ui';
@@ -15,12 +16,15 @@ const MenuContent = observer(({ onOpenSubmenu }: TMenuContentProps) => {
     const { client } = useStore();
     const textSize = isDesktop ? 'sm' : 'md';
     const { config } = useMobileMenuConfig(client);
+    const is_white_label = hasBotStudioOAuthConfig();
 
     return (
         <div className='mobile-menu__content'>
-            <div className='mobile-menu__content__platform'>
-                <PlatformSwitcher />
-            </div>
+            {!is_white_label ? (
+                <div className='mobile-menu__content__platform'>
+                    <PlatformSwitcher />
+                </div>
+            ) : null}
 
             <div className='mobile-menu__content__items'>
                 {config.map((item, index) => {

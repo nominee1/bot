@@ -1,3 +1,4 @@
+import { patchProposalPayloadForSession } from '@/components/shared/utils/trading/options-session-proposal';
 import { api_base } from '../services/api';
 import DBotStore from './dbot-store';
 
@@ -28,13 +29,13 @@ export const handleProposalRequestForAccumulators = instance => {
     const currency = DBotStore.instance.client.currency;
     const growth_rate = instance?.getFieldValue('GROWTHRATE_LIST') || 0.01;
     const amount = instance?.childBlocks_?.[0]?.getField('NUM')?.getValue() || 0;
-    const proposal_request = {
+    const proposal_request = patchProposalPayloadForSession({
         ...DEFAULT_PROPOSAL_REQUEST,
         amount,
         currency,
         symbol,
         growth_rate,
-    };
+    });
     window.Blockly.accumulators_request = proposal_request;
 };
 
@@ -42,7 +43,7 @@ export const requestProposalForQS = (input_values, ws) => {
     const { amount, currency, symbol, growth_rate, limit_order } = input_values;
     const { take_profit } = limit_order;
 
-    const proposal_request = {
+    const proposal_request = patchProposalPayloadForSession({
         ...DEFAULT_PROPOSAL_REQUEST,
         amount,
         currency,
@@ -52,7 +53,7 @@ export const requestProposalForQS = (input_values, ws) => {
         limit_order: {
             take_profit,
         },
-    };
+    });
 
     return ws
         ?.send(proposal_request)

@@ -1,6 +1,7 @@
 import React from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
+import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import Text from '@/components/shared_ui/text';
 import { useStore } from '@/hooks/useStore';
 import { localize } from '@deriv-com/translations';
@@ -20,6 +21,7 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
     const { active_tab, active_tour } = dashboard;
     const has_dashboard_strategies = !!dashboard_strategies?.length;
     const { isDesktop, isTablet } = useDevice();
+    const is_white_label = hasBotStudioOAuthConfig();
 
     return (
         <React.Fragment>
@@ -66,8 +68,8 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
                     </div>
                 </div>
             </div>
-            <InfoPanel />
-            {active_tab === 0 && <OnboardTourHandler is_mobile={!isDesktop} />}
+            {!is_white_label ? <InfoPanel /> : null}
+            {!is_white_label && active_tab === 0 ? <OnboardTourHandler is_mobile={!isDesktop} /> : null}
         </React.Fragment>
     );
 });

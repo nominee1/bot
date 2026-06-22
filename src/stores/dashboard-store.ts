@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify';
 import { action, makeObservable, observable, reaction } from 'mobx';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message, NOTIFICATION_TYPE } from '@/components/bot-notification/bot-notification-utils';
+import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import { TStores } from '@deriv/stores/types';
 import * as strategy_description from '../constants/quick-strategies';
 import { TDescriptionItem } from '../pages/bot-builder/quick-strategy/types';
@@ -301,6 +302,7 @@ export default class DashboardStore implements IDashboardStore {
     };
 
     initInfoPanel() {
+        if (hasBotStudioOAuthConfig()) return;
         if (!localStorage.getItem('dbot_should_show_info')) this.is_info_panel_visible = true;
     }
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import useModalManager from '@/hooks/useModalManager';
 import { getActiveTabUrl } from '@/utils/getActiveTabUrl';
 import { LANGUAGES } from '@/utils/languages';
@@ -19,6 +20,7 @@ const MobileMenu = () => {
     const { currentLang = 'EN', localize, switchLanguage } = useTranslations();
     const { hideModal, isModalOpenFor, showModal } = useModalManager();
     const { isDesktop } = useDevice();
+    const is_white_label = hasBotStudioOAuthConfig();
 
     const openDrawer = () => setIsDrawerOpen(true);
     const closeDrawer = () => {
@@ -42,7 +44,7 @@ const MobileMenu = () => {
             <Drawer isOpen={isDrawerOpen} onCloseDrawer={closeDrawer} width='29.5rem'>
                 <Drawer.Header onCloseDrawer={closeDrawer}>
                     <MenuHeader
-                        hideLanguageSetting={isLanguageSettingVisible}
+                        hideLanguageSetting={isLanguageSettingVisible || is_white_label}
                         openLanguageSetting={openLanguageSetting}
                     />
                 </Drawer.Header>
@@ -79,10 +81,12 @@ const MobileMenu = () => {
                     )}
                 </Drawer.Content>
 
-                <Drawer.Footer className='mobile-menu__footer'>
-                    <ServerTime />
-                    <NetworkStatus />
-                </Drawer.Footer>
+                {!is_white_label ? (
+                    <Drawer.Footer className='mobile-menu__footer'>
+                        <ServerTime />
+                        <NetworkStatus />
+                    </Drawer.Footer>
+                ) : null}
             </Drawer>
         </div>
     );
