@@ -61,6 +61,7 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                     {/* <CustomNotifications /> */}
 
                     {isDesktop &&
+                        !is_white_label &&
                         (has_wallet ? (
                             <Button
                                 className='manage-funds-button'
@@ -226,7 +227,7 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                 <AppLogo />
                 <MobileMenu />
                 {!is_white_label && isDesktop && <MenuItems.TradershubLink />}
-                {isDesktop && <MenuItems />}
+                {isDesktop && !is_white_label && <MenuItems />}
             </Wrapper>
             <Wrapper variant='right'>
                 {!isDesktop && <PWAInstallButton variant='primary' size='medium' />}

@@ -3,9 +3,11 @@
         padding-inline-start: 1.2rem;
         padding-inline-end: 2rem;
         border-inline-end: 1px solid var(--general-section-1);
-        height: 32px;
+        min-height: 32px;
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.1rem;
         text-decoration: none;
         color: inherit;
 
@@ -15,9 +17,20 @@
     }
 
     &__logo-text {
-        font-size: 1.4rem;
+        font-size: 1.25rem;
         font-weight: 700;
         letter-spacing: 0.02em;
         white-space: nowrap;
+        line-height: 1.2;
+    }
+
+    &__logo-powered {
+        font-size: 0.65rem;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-less-prominent);
+        white-space: nowrap;
+        line-height: 1;
     }
 }
