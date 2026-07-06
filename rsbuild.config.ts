@@ -48,6 +48,8 @@ export default defineConfig({
                 DERIV_OAUTH_REDIRECT_URI: JSON.stringify(process.env.DERIV_OAUTH_REDIRECT_URI),
                 DERIV_TOKEN_EXCHANGE_URL: JSON.stringify(process.env.DERIV_TOKEN_EXCHANGE_URL),
                 DERIV_WS_APP_ID: JSON.stringify(process.env.DERIV_WS_APP_ID),
+                PA_API_BASE_URL: JSON.stringify(process.env.PA_API_BASE_URL ?? ''),
+                BOT_STUDIO_AFFILIATE_CODE: JSON.stringify(process.env.BOT_STUDIO_AFFILIATE_CODE ?? ''),
             },
         },
         alias: {
