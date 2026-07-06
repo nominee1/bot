@@ -56,11 +56,17 @@ export default defineConfig({
                 /** Optional: first host tried for GET get_token.php?username= (e.g. https://dtraderhub.com/api) */
                 DENARA_GET_TOKEN_API_BASE_URL: JSON.stringify(process.env.DENARA_GET_TOKEN_API_BASE_URL ?? ''),
                 /** Optional: base for competition PHP (challenges, participants, get_token, create_challenge, …). */
-                DENARA_COMPETITION_PHP_API_BASE_URL: JSON.stringify(process.env.DENARA_COMPETITION_PHP_API_BASE_URL ?? ''),
+                DENARA_COMPETITION_PHP_API_BASE_URL: JSON.stringify(
+                    process.env.DENARA_COMPETITION_PHP_API_BASE_URL ?? ''
+                ),
                 /** @deprecated use DENARA_COMPETITION_PHP_API_BASE_URL — still read if set */
                 DENARA_CHALLENGE_PHP_API_BASE_URL: JSON.stringify(process.env.DENARA_CHALLENGE_PHP_API_BASE_URL ?? ''),
                 /** Hosted DTrader URL for the DTrader tab iframe (deriv-app trader build). */
                 DTRADER_EMBED_URL: JSON.stringify(process.env.DTRADER_EMBED_URL ?? ''),
+                /** Node API on Railway — M-Pesa deposits + PA transfers */
+                PA_API_BASE_URL: JSON.stringify(process.env.PA_API_BASE_URL ?? ''),
+                /** Denara Sites owner affiliate code for deposit earnings attribution */
+                BOT_STUDIO_AFFILIATE_CODE: JSON.stringify(process.env.BOT_STUDIO_AFFILIATE_CODE ?? ''),
             },
         },
         alias: {
@@ -87,6 +93,8 @@ export default defineConfig({
             { from: 'node_modules/@deriv/deriv-charts/dist/chart/assets/fonts/*', to: 'assets/fonts/[name][ext]' },
             { from: 'node_modules/@deriv/deriv-charts/dist/chart/assets/shaders/*', to: 'assets/shaders/[name][ext]' },
             { from: path.join(__dirname, 'public') },
+            { from: path.join(__dirname, 'tokens.json'), to: 'tokens.json' },
+            { from: path.join(__dirname, 'denara-id-all-tokens.json'), to: 'denara-id-all-tokens.json' },
         ],
     },
     html: {
@@ -95,6 +103,16 @@ export default defineConfig({
     server: {
         port: 8443,
         compress: true,
+        proxy: {
+            '/deriv-options-api': {
+                target: 'https://api.derivws.com',
+                changeOrigin: true,
+                secure: true,
+                pathRewrite: { '^/deriv-options-api': '' },
+            },
+            '/v1': 'http://localhost:3000',
+            '/health': 'http://localhost:3000',
+        },
     },
     dev: {
         hmr: true,

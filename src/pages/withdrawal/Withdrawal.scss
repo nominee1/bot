@@ -1,0 +1,682 @@
+.withdrawal-page {
+    width: 100vw;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+    font-size: 1.063rem;
+    color: #1a1a1a;
+
+    &__grid {
+        display: grid;
+        gap: 20px;
+
+        @media (width >= 768px) {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    &__tabs {
+        display: flex;
+        gap: 8px;
+        max-width: 420px;
+        margin: 0 auto 20px;
+        padding: 4px;
+        border-radius: 12px;
+        background: #f1f3f4;
+        border: 1px solid #e0e0e0;
+    }
+
+    &__tab {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 9px;
+        background: transparent;
+        color: #5f6368;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+            background 0.15s,
+            color 0.15s,
+            box-shadow 0.15s;
+
+        svg {
+            flex-shrink: 0;
+        }
+
+        &:hover {
+            color: #1a1a1a;
+        }
+
+        &--active {
+            background: #fff;
+            color: #1b5e20;
+            box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
+        }
+    }
+
+    &__main {
+        display: grid;
+        gap: 20px;
+
+        &--deposit-only,
+        &--signup {
+            max-width: 520px;
+            margin: 0 auto;
+        }
+
+        &--signup {
+            max-width: 520px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        &--profile-edit {
+            max-width: 640px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    }
+
+    &__support {
+        max-width: 520px;
+        margin: 28px auto 0;
+        padding-top: 20px;
+        border-top: 1px solid #e8eaed;
+        text-align: center;
+    }
+
+    &__support-toggle {
+        border: none;
+        background: none;
+        padding: 0;
+        font-size: 0.938rem;
+        font-weight: 600;
+        color: #5f6368;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+
+        &:hover {
+            color: #1a1a1a;
+        }
+    }
+
+    &__support-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: #e8f5e9;
+        border: 1px solid #a5d6a7;
+        color: #128c7e;
+        font-size: 1rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.15s;
+
+        &:hover {
+            background: #c8e6c9;
+        }
+    }
+
+    &__alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 1.063rem;
+
+        &--info {
+            background: #e8f0fe;
+            border: 1px solid #aecbfa;
+            color: #174ea6;
+        }
+
+        &--error {
+            background: #fce8e6;
+            border: 1px solid #f5c6c2;
+            color: #c5221f;
+        }
+
+        &--pending {
+            background: #fef7e0;
+            border: 1px solid #fde293;
+            color: #b06000;
+        }
+
+        &--unavailable {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            color: #374151;
+            text-align: center;
+            max-width: 640px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    }
+
+    &__transfer-hint {
+        margin: 0 0 8px;
+        line-height: 1.45;
+    }
+
+    &__success-link {
+        display: inline-block;
+        font-weight: 600;
+        color: #174ea6;
+        text-decoration: underline;
+
+        &:hover {
+            color: #0d47a1;
+        }
+    }
+}
+
+.withdrawal-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 2px 10px rgb(0 0 0 / 5%);
+
+    &--wide {
+        margin-top: 20px;
+    }
+
+    &--deposit {
+        border-color: #c8e6c9;
+        background: linear-gradient(180deg, #fff 0%, #f9fdf9 100%);
+    }
+
+    &--profile {
+        border-color: #aecbfa;
+        background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+    }
+
+    &--signup {
+        .withdrawal-card__title-row {
+            justify-content: center;
+        }
+
+        .withdrawal-card__heading {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .withdrawal-card__section-icon {
+            margin-bottom: 4px;
+        }
+    }
+
+    h2 {
+        margin: 0;
+        font-size: 1.375rem;
+        color: #1a1a1a;
+    }
+
+    &__heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+
+        &--spaced {
+            margin-bottom: 16px;
+        }
+    }
+
+    &__section-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: #e8f0fe;
+        color: #1a73e8;
+        border: 1px solid #aecbfa;
+
+        &--deposit {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-color: #a5d6a7;
+        }
+    }
+
+    &__title-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+
+        &--deposit {
+            align-items: center;
+        }
+    }
+
+    &__subtitle {
+        margin: 4px 0 0;
+        font-size: 0.938rem;
+        font-weight: 400;
+        color: #5f6368;
+        line-height: 1.45;
+    }
+
+    &__autofill-note {
+        margin: 0 0 14px;
+        font-size: 0.938rem;
+        color: #5f6368;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 14px;
+        font-size: 1rem;
+        color: #3c4043;
+
+        input {
+            display: block;
+            width: 100%;
+            margin-top: 6px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #dadce0;
+            background: #fff;
+            color: #1a1a1a;
+            font-size: 1.125rem;
+            box-sizing: border-box;
+
+            &::placeholder {
+                color: #9aa0a6;
+            }
+
+            &:focus {
+                outline: none;
+                border-color: #1a73e8;
+                box-shadow: 0 0 0 2px rgb(26 115 232 / 15%);
+            }
+
+            &:read-only,
+            &:disabled {
+                background: #f8f9fa;
+                color: #9aa0a6;
+                cursor: not-allowed;
+            }
+        }
+    }
+}
+
+.withdrawal-profile-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border: 1px solid #aecbfa;
+    border-radius: 999px;
+    background: #e8f0fe;
+    color: #174ea6;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
+
+    span {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &:hover {
+        background: #d2e3fc;
+        border-color: #8ab4f8;
+    }
+
+    &:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgb(26 115 232 / 20%);
+    }
+}
+
+.withdrawal-rate {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    background: #f1f8e9;
+    border: 1px solid #c5e1a5;
+    border-radius: 10px;
+
+    &__label {
+        font-size: 0.938rem;
+        color: #33691e;
+        font-weight: 500;
+    }
+
+    &__value {
+        font-size: 1.375rem;
+        color: #1b5e20;
+        letter-spacing: -0.02em;
+    }
+}
+
+.withdrawal-deposit-limits {
+    margin: 4px 0 8px;
+    font-size: 0.813rem;
+    color: #5f6368;
+    line-height: 1.4;
+}
+
+.withdrawal-amount-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+
+    &__chip {
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid #dadce0;
+        background: #fff;
+        color: #1b5e20;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+            background 0.15s,
+            border-color 0.15s,
+            color 0.15s;
+
+        &:hover {
+            border-color: #81c784;
+            background: #f1f8e9;
+        }
+
+        &--active {
+            border-color: #2e7d32;
+            background: #e8f5e9;
+            color: #1b5e20;
+        }
+    }
+}
+
+.withdrawal-amount-input,
+.withdrawal-currency-input,
+.withdrawal-phone-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid #dadce0;
+    background: #fff;
+    transition:
+        border-color 0.15s,
+        box-shadow 0.15s;
+
+    &:focus-within {
+        border-color: #1a73e8;
+        box-shadow: 0 0 0 2px rgb(26 115 232 / 15%);
+    }
+
+    input {
+        flex: 1;
+        min-width: 0;
+        margin-top: 0 !important;
+        padding: 12px 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+
+        &:focus {
+            outline: none;
+            box-shadow: none !important;
+        }
+    }
+
+    &__icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: #5f6368;
+    }
+}
+
+.withdrawal-phone-input {
+    &__icon {
+        color: #2e7d32;
+    }
+}
+
+.withdrawal-kes-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -2px 0 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+
+    &__label {
+        font-size: 0.938rem;
+        color: #33691e;
+    }
+
+    &__value {
+        font-size: 1.25rem;
+        color: #1b5e20;
+    }
+}
+
+.withdrawal-btn {
+    width: 100%;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1.063rem;
+    cursor: pointer;
+    transition: opacity 0.15s;
+
+    &:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    &--primary {
+        background: #f1f3f4;
+        color: #1a1a1a;
+        border: 1px solid #dadce0;
+
+        &:hover:not(:disabled) {
+            background: #e8eaed;
+        }
+    }
+
+    &--accent {
+        background: #2e7d32;
+        color: #fff;
+
+        &:hover:not(:disabled) {
+            background: #1b5e20;
+        }
+    }
+
+    &--ghost {
+        margin-bottom: 12px;
+        background: #fff;
+        color: #1a73e8;
+        border: 1px solid #dadce0;
+
+        &:hover:not(:disabled) {
+            background: #f8f9fa;
+        }
+    }
+
+    &--history {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    &--text {
+        width: auto;
+        padding: 8px 0;
+        background: transparent;
+        color: #1a73e8;
+        border: none;
+        font-size: 0.938rem;
+        font-weight: 600;
+        white-space: nowrap;
+
+        &:hover:not(:disabled) {
+            text-decoration: underline;
+        }
+    }
+}
+
+.withdrawal-field {
+    &__label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+        font-size: 1rem;
+        color: #1a1a1a;
+    }
+
+    &__link {
+        display: block;
+        margin: 6px 0 8px;
+        font-size: 1rem;
+        color: #1a73e8;
+        text-decoration: none;
+        line-height: 1.4;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    &__help {
+        display: block;
+        margin-top: 6px;
+        font-size: 0.938rem;
+        color: #5f6368;
+        line-height: 1.4;
+    }
+
+    &__autofill {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: #e8f0fe;
+        color: #1a73e8;
+        border: 1px solid #aecbfa;
+    }
+
+    input {
+        margin-top: 0 !important;
+    }
+}
+
+.withdrawal-payment-status {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    .withdrawal-page__alert {
+        margin-bottom: 0;
+    }
+}
+
+.withdrawal-transactions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e8eaed;
+
+    .withdrawal-btn--ghost {
+        margin-bottom: 0;
+    }
+
+    h3 {
+        margin: 16px 0 12px;
+        font-size: 1.125rem;
+        color: #1a1a1a;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    &__account {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.813rem;
+        font-weight: 600;
+        background: #e8f0fe;
+        color: #1a73e8;
+        border: 1px solid #aecbfa;
+    }
+
+    &__empty {
+        margin: 0;
+        font-size: 0.938rem;
+        color: #5f6368;
+    }
+}
+
+.withdrawal-table-wrap {
+    overflow-x: auto;
+}
+
+.withdrawal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.938rem;
+    color: #1a1a1a;
+
+    th,
+    td {
+        padding: 12px 10px;
+        text-align: left;
+        border-bottom: 1px solid #e8eaed;
+    }
+
+    th {
+        color: #5f6368;
+        font-weight: 500;
+    }
+
+    &__usd {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+    }
+}
