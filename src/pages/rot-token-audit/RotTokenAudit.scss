@@ -1,0 +1,291 @@
+.rot-token-audit-page {
+    width: 97vw;
+    min-height: 100%;
+    background: linear-gradient(165deg, #e8ecf5 0%, #dfe7f2 40%, #e5eaf5 100%);
+    box-sizing: border-box;
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+.rot-token-audit {
+    max-width: min(1400px, 100%);
+    margin: 0 auto;
+    padding: 20px 18px 3rem;
+    color: #0f172a;
+
+    &__header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+
+    &__title {
+        margin: 0 0 6px;
+        font-size: 1.45rem;
+        font-weight: 800;
+    }
+
+    &__subtitle {
+        margin: 0;
+        max-width: 44rem;
+        color: #475569;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    &__meta {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    &__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+
+    &__btn {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #0f172a;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        &--primary {
+            background: #4f46e5;
+            border-color: #4f46e5;
+            color: #fff;
+        }
+
+        &--arm {
+            background: #059669;
+            border-color: #059669;
+            color: #fff;
+        }
+    }
+
+    &__stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    &__stat {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px 14px;
+    }
+
+    &__stat-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #64748b;
+    }
+
+    &__stat-value {
+        display: block;
+        margin-top: 4px;
+        font-size: 1.2rem;
+        font-weight: 800;
+    }
+
+    &__progress {
+        margin-bottom: 14px;
+        font-size: 13px;
+        color: #334155;
+    }
+
+    &__toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 12px;
+        align-items: center;
+    }
+
+    &__search {
+        flex: 1 1 220px;
+        min-width: 180px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+
+    &__filter {
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        background: #fff;
+    }
+
+    &__table-wrap {
+        overflow: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: #fff;
+    }
+
+    &__table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+
+        th,
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #f8fafc;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #64748b;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+    }
+
+    &__mono {
+        font-family: ui-monospace, 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+        font-size: 12px;
+    }
+
+    &__badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+
+        &--ok {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        &--error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        &--empty {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        &--loading {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        &--pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+    }
+
+    &__error {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #fee2e2;
+        color: #991b1b;
+        font-size: 13px;
+    }
+
+    &__ok {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #dcfce7;
+        color: #166534;
+        font-size: 13px;
+    }
+
+    &__row--armed {
+        background: #f0fdf4;
+    }
+
+    &__armed-badge {
+        display: inline-flex;
+        margin-left: 6px;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 10px;
+        font-weight: 700;
+        background: #bbf7d0;
+        color: #166534;
+        vertical-align: middle;
+    }
+
+    &__error-cell {
+        max-width: 28rem;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #991b1b;
+        word-break: break-word;
+        white-space: pre-wrap;
+    }
+
+    &__rank {
+        font-weight: 700;
+        color: #059669;
+        white-space: nowrap;
+    }
+
+    &__trader {
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    &__trader-head {
+        margin-bottom: 14px;
+    }
+
+    &__trader-title {
+        margin: 0 0 6px;
+        font-size: 1.15rem;
+        font-weight: 800;
+    }
+
+    &__trader-hint {
+        margin: 0;
+        font-size: 13px;
+        color: #475569;
+        line-height: 1.45;
+    }
+
+    &__trader-loading {
+        padding: 24px;
+        text-align: center;
+        color: #64748b;
+        font-size: 14px;
+    }
+}

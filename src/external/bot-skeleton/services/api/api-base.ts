@@ -1,25 +1,37 @@
-import CommonStore from '@/stores/common-store';
-import { TAuthData } from '@/types/api-types';
-import { observer as globalObserver } from '../../utils/observer';
-import { doUntilDone, socket_state } from '../tradeEngine/utils/helpers';
-import { clearMirrorContractRegistry } from '@/components/shared/utils/trading/dual-account-contract-registry';
-import { clearCopierContractRegistry } from '@/utils/parallel-copiers/parallel-copiers-contract-registry';
 import {
-    getCopierToken,
-    getParallelCopiersForMirror,
-    isParallelCopyTradeEnabled,
-} from '@/utils/parallel-copiers/parallel-copiers-storage';
-import { isOptionsOAuthSessionLoginid, isOptionsOAuthSessionToken } from '@/utils/parallel-copiers/parallel-session-accounts';
+    fetchDerivOptionsAccountOtpMeta,
+    getDerivOAuthAccessToken,
+    isDerivOptionsBearerToken,
+    isDerivOptionsOAuthSession,
+} from '@/components/shared/utils/login/deriv-oauth-storage';
+import {
+    emitSessionExpired,
+    extractDerivApiErrorCode,
+    isDerivSessionAuthError,
+} from '@/components/shared/utils/login/session-expiry';
+import { clearMirrorContractRegistry } from '@/components/shared/utils/trading/dual-account-contract-registry';
 import { wrapApiSendForDualTrade } from '@/components/shared/utils/trading/dual-account-mirror';
 import {
     getMirrorLoginidForActive,
     isDualAccountTradeEnabled,
 } from '@/components/shared/utils/trading/dual-account-trade';
+import CommonStore from '@/stores/common-store';
+import { TAuthData } from '@/types/api-types';
+import { isMoonVirtualLeadAccount } from '@/utils/crVirtualBalanceShadow';
+import { clearCopierContractRegistry } from '@/utils/parallel-copiers/parallel-copiers-contract-registry';
 import {
-    fetchDerivOptionsAccountOtpUrl,
-    getDerivOAuthAccessToken,
-    isDerivOptionsOAuthSession,
-} from '@/components/shared/utils/login/deriv-oauth-storage';
+    getCopierDerivAppId,
+    getCopierToken,
+    getParallelCopiersForMirror,
+    isParallelCopyTradeEnabled,
+    resolveOptionsDerivAppIdForLoginid,
+} from '@/utils/parallel-copiers/parallel-copiers-storage';
+import {
+    isOptionsOAuthSessionLoginid,
+    isOptionsOAuthSessionToken,
+} from '@/utils/parallel-copiers/parallel-session-accounts';
+import { observer as globalObserver } from '../../utils/observer';
+import { doUntilDone, socket_state } from '../tradeEngine/utils/helpers';
 import {
     authData$,
     bumpTradingSocketGeneration,
@@ -144,7 +156,7 @@ class APIBase {
             }
         }
         this.copier_apis.delete(loginid);
-    };
+    }
 
     async getCopierTradingApi(loginid: string): Promise<TApiBaseApi | null> {
         if (!isParallelCopyTradeEnabled() || !loginid || loginid === this.account_id) {
@@ -156,15 +168,29 @@ class APIBase {
             return cached;
         }
 
-        if (isDerivOptionsOAuthSession() && getDerivOAuthAccessToken() && isOptionsOAuthSessionLoginid(loginid)) {
-            const api = await this.ensureOptionsApiForAccount(loginid);
+        const token = getCopierToken(loginid);
+        if (token === 'MOON_VIRTUAL' || token === 'MOON_LEAD_VIRTUAL') {
+            return null;
+        }
+        const trimmedToken = token?.trim() ?? '';
+
+        if (trimmedToken && isDerivOptionsBearerToken(trimmedToken)) {
+            const derivAppId = getCopierDerivAppId(loginid) ?? resolveOptionsDerivAppIdForLoginid(loginid) ?? undefined;
+            const api = await this.ensureOptionsApiForAccount(loginid, trimmedToken, null, derivAppId);
             if (!api) return null;
-            wrapApiSendForDualTrade(api);
+            wrapApiSendForDualTrade(api, { suppressMirrors: true });
             this.copier_apis.set(loginid, api);
             return api;
         }
 
-        const token = getCopierToken(loginid);
+        if (isDerivOptionsOAuthSession() && getDerivOAuthAccessToken() && isOptionsOAuthSessionLoginid(loginid)) {
+            const api = await this.ensureOptionsApiForAccount(loginid);
+            if (!api) return null;
+            wrapApiSendForDualTrade(api, { suppressMirrors: true });
+            this.copier_apis.set(loginid, api);
+            return api;
+        }
+
         if (!token || isOptionsOAuthSessionToken(token)) return null;
 
         const api = generateDerivApiInstance() as TApiBaseApi;
@@ -178,7 +204,7 @@ class APIBase {
             }
             return null;
         }
-        wrapApiSendForDualTrade(api);
+        wrapApiSendForDualTrade(api, { suppressMirrors: true });
         this.copier_apis.set(loginid, api);
         return api;
     }
@@ -233,7 +259,7 @@ class APIBase {
         }
         this.legacy_mirror_apis.set(mirrorLoginid, api);
         return api;
-    };
+    }
 
     /**
      * Forget stream subscriptions created during `subscribe()`.
@@ -251,7 +277,14 @@ class APIBase {
             });
         });
         this.current_auth_subscriptions = [];
-    };
+    }
+
+    /** True when this loginid has an open Options OTP trading WebSocket (not classic `websockets/v3`). */
+    isAccountOnOptionsTradingSocket(loginid: string): boolean {
+        if (!loginid?.trim()) return false;
+        const cached = this.options_accounts_apis.get(loginid);
+        return Boolean(cached && cached.connection.readyState === 1);
+    }
 
     /** Assign `this.api` and notify listeners when the WebSocket instance changes. */
     private adoptTradingApi(next: TApiBaseApi | null) {
@@ -260,6 +293,9 @@ class APIBase {
         wrapApiSendForDualTrade(next);
         this.api = next;
         bumpTradingSocketGeneration();
+        if (next.connection.readyState === 1) {
+            setConnectionStatus(CONNECTION_STATUS.OPENED);
+        }
     }
 
     onsocketopen() {
@@ -302,17 +338,31 @@ class APIBase {
         api.connection.addEventListener('close', this.onsocketclose.bind(this));
     }
 
-    private async ensureOptionsApiForAccount(accountId: string): Promise<TApiBaseApi | null> {
+    private async ensureOptionsApiForAccount(
+        accountId: string,
+        accessTokenOverride?: string | null,
+        wsUrlOverride?: string | null,
+        derivAppIdOverride?: string | null
+    ): Promise<TApiBaseApi | null> {
         const cached = this.options_accounts_apis.get(accountId);
         if (cached && cached.connection.readyState === 1) {
             return cached;
         }
 
-        const accessToken = getDerivOAuthAccessToken();
+        const accessToken = (accessTokenOverride?.trim() || getDerivOAuthAccessToken()) ?? '';
         if (!accessToken) return null;
 
-        const wsUrl = await fetchDerivOptionsAccountOtpUrl(accessToken, accountId);
-        if (!wsUrl) return null;
+        let wsUrl = wsUrlOverride?.trim() || '';
+        if (!wsUrl) {
+            const derivAppId =
+                derivAppIdOverride?.trim() ||
+                resolveOptionsDerivAppIdForLoginid(accountId) ||
+                getCopierDerivAppId(accountId) ||
+                undefined;
+            const otpMeta = await fetchDerivOptionsAccountOtpMeta(accessToken, accountId, derivAppId);
+            if (!otpMeta.url) return null;
+            wsUrl = otpMeta.url;
+        }
 
         const api = generateDerivApiInstanceFromUrl(wsUrl) as TApiBaseApi;
         this.attachOptionsApiListeners(api);
@@ -365,6 +415,7 @@ class APIBase {
             await this.subscribe();
             this.toggleRunButton(false);
             this.prefetchMirrorTradingApi();
+            this.prefetchCopierTradingApis();
         } catch (e) {
             globalObserver.emit('Error', e);
         }
@@ -383,9 +434,18 @@ class APIBase {
         }
 
         try {
-            const nextApi = await this.ensureOptionsApiForAccount(accountId);
-            if (!nextApi) {
+            const derivAppId = resolveOptionsDerivAppIdForLoginid(accountId) || undefined;
+            const otpMeta = await fetchDerivOptionsAccountOtpMeta(accessToken, accountId, derivAppId);
+            if (!otpMeta.url) {
+                if (otpMeta.unauthorized) {
+                    emitSessionExpired();
+                }
                 throw new Error('Could not obtain Options trading WebSocket URL (OTP)');
+            }
+
+            const nextApi = await this.ensureOptionsApiForAccount(accountId, accessToken, otpMeta.url);
+            if (!nextApi) {
+                throw new Error('Could not open Options trading WebSocket');
             }
 
             this.adoptTradingApi(nextApi);
@@ -413,6 +473,7 @@ class APIBase {
             const otherIds = authData.account_list.map(a => a.loginid).filter(Boolean);
             this.prefetchOptionsAccountConnections(otherIds, accountId);
             this.prefetchMirrorTradingApi();
+            this.prefetchCopierTradingApis();
         } catch (e) {
             this.is_authorized = false;
             setIsAuthorized(false);
@@ -519,13 +580,21 @@ class APIBase {
         const token = V2GetActiveToken();
         if (token) {
             this.token = token;
-                this.account_id = getLoginId() ?? V2GetActiveClientId() ?? '';
+            this.account_id = getLoginId() ?? V2GetActiveClientId() ?? '';
 
             if (!this.api) return;
 
             try {
                 const { authorize, error } = await this.api.authorize(this.token);
-                if (error) return error;
+                if (error) {
+                    this.is_authorized = false;
+                    setIsAuthorized(false);
+                    const code = extractDerivApiErrorCode(error);
+                    if (isDerivSessionAuthError(code)) {
+                        emitSessionExpired();
+                    }
+                    return error;
+                }
 
                 if (this.has_active_symbols) {
                     this.toggleRunButton(false);
@@ -542,6 +611,9 @@ class APIBase {
                 bumpTradingSocketGeneration();
                 this.getSelfExclusion();
                 this.prefetchMirrorTradingApi();
+                if (!isMoonVirtualLeadAccount(this.account_id)) {
+                    this.prefetchCopierTradingApis();
+                }
             } catch (e) {
                 this.is_authorized = false;
                 setIsAuthorized(false);

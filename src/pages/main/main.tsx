@@ -1,14 +1,17 @@
-import React, { lazy, Suspense, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
+import FloatingRiskDisclaimer from '@/components/floating-risk-disclaimer/floating-risk-disclaimer';
+import { AutoStrategyHeartIcon } from '@/components/icons/auto-strategy-heart-icon';
+import { SpeedBotTabIcon } from '@/components/icons/speed-bot-tab-icon';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import DesktopWrapper from '@/components/shared_ui/desktop-wrapper';
 import Dialog from '@/components/shared_ui/dialog';
 import MobileWrapper from '@/components/shared_ui/mobile-wrapper';
 import Tabs from '@/components/shared_ui/tabs/tabs';
 import TradingViewModal from '@/components/trading-view-chart/trading-view-modal';
-import { DBOT_TABS, TAB_IDS } from '@/constants/bot-contents';
+import { DBOT_TABS, MAIN_APP_TAB_INDEX } from '@/constants/bot-contents';
 import { api_base, updateWorkspaceName } from '@/external/bot-skeleton';
 import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
@@ -16,338 +19,405 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
-
-import FloatingRiskDisclaimer from '@/components/floating-risk-disclaimer/floating-risk-disclaimer';
 import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
-import Strategy from '../autotrade';
-import DepositTwo from '../aadeposittwo';
-
-
+// Deposit tab — re-enable when deposit flow is updated
+// import DepositTwo from '../aadeposittwo';
 
 // Lazy modules
 const AviatorR = lazy(() => import('../aaviatorR/AviatorR'));
 const ViewToggle = lazy(() => import('../aaa/ViewToggle'));
+const BulkTrader = lazy(() => import('../bulk-trader'));
 // Rise Fall tab hidden until feature is complete — component kept in src/pages/rise-fall-manual/
 const ViewPercentage = lazy(() => import('../aaad/ViewPercentage'));
 const RiskCalculator = lazy(() => import('../risk-calculator/RiskCalculator'));
 const ParallelCopyTrading = lazy(() => import('../parallel-copy-trading/ParallelCopyTrading'));
-// DTrader tab — re-enable when /dtrader deploy is ready
-// const DTrader = lazy(() => import('../dtrader/DTrader'));
+const DTrader = lazy(() => import('../dtrader/DTrader'));
 const Ready = lazy(() => import('../aaaReadyStrategy/ready'));
 const DigitBarReady = lazy(() => import('../aaaDigitBarReady/DigitBarReady'));
 const Multi = lazy(() => import('../aaabc/multi'));
-const Deposit = lazy(() => import('../Rcompetition/Rcompetition'));
+// Copytraders — re-enable when ready
+// const Copytraders = lazy(() => import('../copytraders'));
+const RotTokenAudit = lazy(() => import('../rot-token-audit'));
 const ManualTrader = lazy(() => import('../manualtrader/ManualTrader'));
+const SpeedBot = lazy(() => import('../aaaspeed/Speed'));
+// Free Bots tab — re-enable when catalog is ready (see src/pages/aaabots/)
+// const FreeBots = lazy(() => import('../aaabots'));
+// Deposit tab — re-enable when deposit flow is updated
+// const Withdrawal = lazy(() => import('../withdrawal'));
 
 // Simple emoji component for consistent a11y/sizing
 const Emoji: React.FC<{ symbol: string; label?: string; size?: number }> = ({ symbol, label, size = 24 }) => (
-  <span
-    className="emoji"
-    role="img"
-    aria-label={label || ''}
-    aria-hidden={label ? 'false' : 'true'}
-    style={{ fontSize: `${size}px`, lineHeight: 1, display: 'inline-block' }}
-  >
-    {symbol}
-  </span>
+    <span
+        className='emoji'
+        role='img'
+        aria-label={label || ''}
+        aria-hidden={label ? 'false' : 'true'}
+        style={{ fontSize: `${size}px`, lineHeight: 1, display: 'inline-block' }}
+    >
+        {symbol}
+    </span>
 );
 
 const AppWrapper = observer(() => {
-  const { connectionStatus } = useApiBase();
-  const { dashboard, load_modal, run_panel, quick_strategy, summary_card, ready_strategy_panel } = useStore();
-  const {
-    active_tab,
-    active_tour,
-    is_chart_modal_visible,
-    is_trading_view_modal_visible,
-    setActiveTab,
-    setWebSocketState,
-    setActiveTour,
-    setTourDialogVisibility,
-  } = dashboard;
-  const { onEntered, dashboard_strategies } = load_modal;
-  const {
-    is_dialog_open,
-    is_drawer_open,
-    dialog_options,
-    onCancelButtonClick,
-    onCloseDialog,
-    onOkButtonClick,
-    stopBot,
-  } = run_panel;
-  const { is_open } = quick_strategy;
-  const { cancel_button_text, ok_button_text, title, message } = dialog_options as { [key: string]: string };
-  const { clear } = summary_card;
-  const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
+    const { connectionStatus } = useApiBase();
+    const { dashboard, load_modal, run_panel, quick_strategy, summary_card } = useStore();
+    const {
+        active_tab,
+        active_tour,
+        is_chart_modal_visible,
+        is_trading_view_modal_visible,
+        setActiveTab,
+        setWebSocketState,
+        setActiveTour,
+        setTourDialogVisibility,
+    } = dashboard;
+    const { onEntered, dashboard_strategies } = load_modal;
+    const {
+        is_dialog_open,
+        is_drawer_open,
+        dialog_options,
+        onCancelButtonClick,
+        onCloseDialog,
+        onOkButtonClick,
+        stopBot,
+        toggleDrawer,
+    } = run_panel;
+    const { is_open } = quick_strategy;
+    const { cancel_button_text, ok_button_text, title, message } = dialog_options as { [key: string]: string };
+    const { clear } = summary_card;
+    const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
 
-  const init_render = useRef(true);
-  const hash = [
-    'dashboard',
-    'bot_builder',
-    'Instant Fill',
-    'Smart Trader',
-    'Pro Aviator',
-    'Manual Trader',
-    'Ready Strategies',
-    'Double Double',
-    'Auto Strategy',
-    'Risk Calculator',
-    'Parallel Copy',
-    'Challenge',
-    // 'DTrader', // re-enable with DTrader tab below
-    'Oracle Live Trades',
-];
-  const { isDesktop } = useDevice();
-  const location = useLocation();
-  const navigate = useNavigate();
+    const init_render = useRef(true);
+    const hash = [
+        'dashboard',
+        'bot_builder',
+        'Instant Fill',
+        'DTrader',
+        'Bulk Trader',
+        'Auto Strategy',
+        'Manual Trader',
+        'Speed Bot',
+        'Ready Strategies',
+        'Double Double',
+        'Smart Trader',
+        'Pro Aviator',
+        'Risk Calculator',
+        'Parallel Copy',
+        // 'Copytraders',
+        'ROT Tokens',
+        // 'Freebots',
+        // 'Oracle Live Trades',
+        // 'Deposit',
+    ];
+    const { isDesktop } = useDevice();
+    const location = useLocation();
+    const navigate = useNavigate();
 
-  let tab_value: number | string = active_tab;
-  const GetHashedValue = (tab: number) => {
-    tab_value = location.hash?.split('#')[1];
-    if (!tab_value) return tab;
-    return Number(hash.indexOf(String(tab_value)));
-  };
-  const active_hash_tab = GetHashedValue(active_tab);
+    let tab_value: number | string = active_tab;
+    const GetHashedValue = (tab: number) => {
+        tab_value = location.hash?.split('#')[1];
+        if (!tab_value) return tab;
+        if (tab_value === 'Bulk Buy') return hash.indexOf('Bulk Trader');
+        return Number(hash.indexOf(String(tab_value)));
+    };
+    const active_hash_tab = GetHashedValue(active_tab);
 
-  // Connection guard: stop bot when WS drops
-  useEffect(() => {
-    if (connectionStatus !== CONNECTION_STATUS.OPENED) {
-      const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
-      const is_ready_running =
-        document.getElementById('db-ready-strategy__stop-button') !== null ||
-        ready_strategy_panel.is_strategy_running;
-      if (is_ready_running) {
-        ready_strategy_panel.invokeStopStrategy();
-      }
-      if (is_bot_running || is_ready_running) {
+    // Connection guard: Blockly bot only. Ready strategies (Flipaa, Double Double, Manual Trader)
+    // manage their own reconnect via tradingSocketGeneration — do not hard-stop them here.
+    useEffect(() => {
+        if (connectionStatus === CONNECTION_STATUS.OPENED) {
+            setWebSocketState(true);
+            return;
+        }
+
+        if (connectionStatus !== CONNECTION_STATUS.CLOSED) {
+            return;
+        }
+
+        const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
+        if (!is_bot_running) {
+            return;
+        }
+
         clear();
         stopBot();
         api_base.setIsRunning(false);
         setWebSocketState(false);
-      }
-    }
-  }, [clear, connectionStatus, ready_strategy_panel, setWebSocketState, stopBot]);
+    }, [clear, connectionStatus, setWebSocketState, stopBot]);
 
-  // Hash/tab sync
-  useEffect(() => {
-    if (is_open) {
-      setTourDialogVisibility(false);
-    }
-
-    if (init_render.current) {
-      setActiveTab(Number(active_hash_tab));
-      if (!isDesktop) handleTabChange(Number(active_hash_tab));
-      init_render.current = false;
-    } else {
-      navigate(`#${hash[active_tab] || hash[0]}`);
-    }
-    if (active_tour !== '') {
-      setActiveTour('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active_tab]);
-
-  // Blockly trashcan positioning
-  useEffect(() => {
-    const trashcan_init_id = setTimeout(() => {
-      if ((active_tab === BOT_BUILDER) && (window as any)?.Blockly?.derivWorkspace?.trashcan) {
-        const trashcanY = window.innerHeight - 250;
-        let trashcanX;
-        if (is_drawer_open) {
-          trashcanX = isDbotRTL() ? 380 : window.innerWidth - 460;
-        } else {
-          trashcanX = isDbotRTL() ? 20 : window.innerWidth - 100;
+    // Instant Fill / Auto Strategy / Smart Trader / Manual Trader / Home: minimize side run panel; opens on Run.
+    useEffect(() => {
+        if (!isDesktop) return;
+        const minimize_run_panel = (
+            [
+                MAIN_APP_TAB_INDEX.DASHBOARD,
+                MAIN_APP_TAB_INDEX.INSTANT_FILL,
+                MAIN_APP_TAB_INDEX.BULK_TRADER,
+                MAIN_APP_TAB_INDEX.AUTO_STRATEGY,
+                MAIN_APP_TAB_INDEX.SMART_TRADER_WORKSPACE,
+                MAIN_APP_TAB_INDEX.MANUAL_TRADER,
+                MAIN_APP_TAB_INDEX.SPEED_BOT,
+            ] as number[]
+        ).includes(active_tab);
+        if (minimize_run_panel) {
+            toggleDrawer(false);
         }
-        (window as any)?.Blockly?.derivWorkspace?.trashcan?.setTrashcanPosition(trashcanX, trashcanY);
-      }
-    }, 100);
+    }, [active_tab, isDesktop, toggleDrawer]);
 
-    return () => {
-      clearTimeout(trashcan_init_id);
-    };
-    //eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active_tab, is_drawer_open]);
+    // Hash/tab sync
+    useEffect(() => {
+        if (is_open) {
+            setTourDialogVisibility(false);
+        }
 
-  // Update workspace name when strategies list changes
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (dashboard_strategies.length > 0) {
-      timer = setTimeout(() => {
-        updateWorkspaceName();
-      });
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [dashboard_strategies, active_tab]);
+        if (init_render.current) {
+            setActiveTab(Number(active_hash_tab));
+            init_render.current = false;
+        } else {
+            navigate(`#${hash[active_tab] || hash[0]}`);
+        }
+        if (active_tour !== '') {
+            setActiveTour('');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [active_tab]);
 
-  const handleTabChange = useCallback(
-    (tab_index: number) => {
-      setActiveTab(tab_index);
-      const el_id = TAB_IDS[tab_index];
-      if (el_id) {
-        const el_tab = document.getElementById(el_id);
-        setTimeout(() => {
-          el_tab?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-        }, 10);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [active_tab]
-  );
+    // Blockly trashcan positioning
+    useEffect(() => {
+        const trashcan_init_id = setTimeout(() => {
+            if (active_tab === BOT_BUILDER && (window as any)?.Blockly?.derivWorkspace?.trashcan) {
+                const trashcanY = window.innerHeight - 250;
+                let trashcanX;
+                if (is_drawer_open) {
+                    trashcanX = isDbotRTL() ? 380 : window.innerWidth - 460;
+                } else {
+                    trashcanX = isDbotRTL() ? 20 : window.innerWidth - 100;
+                }
+                (window as any)?.Blockly?.derivWorkspace?.trashcan?.setTrashcanPosition(trashcanX, trashcanY);
+            }
+        }, 100);
 
-  return (
-    <React.Fragment>
-      <div className='main'>
-        <div
-          className={classNames('main__container', {
-            'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
-          })}
-        >
-          <FloatingRiskDisclaimer />
+        return () => {
+            clearTimeout(trashcan_init_id);
+        };
+        //eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [active_tab, is_drawer_open]);
 
-          <Tabs
-            active_index={active_tab}
-            className='main__tabs'
-            is_scrollable
-            onTabItemChange={onEntered}
-            onTabItemClick={handleTabChange}
-            top
-          >
-            <div
-              label={
-                <>
-                  <Emoji symbol="🛖" size={24} />
-                  <Localize i18n_default_text='Home' />
-                </>
-              }
-              id='id-dbot-dashboard'
-            >
-              <Dashboard handleTabChange={handleTabChange} />
-            </div>
+    // Update workspace name when strategies list changes
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout>;
+        if (dashboard_strategies.length > 0) {
+            timer = setTimeout(() => {
+                updateWorkspaceName();
+            });
+        }
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [dashboard_strategies, active_tab]);
 
-            <div
-              label={
-                <>
-                  <Emoji symbol="🤖 " size={24} />
-                  <Localize i18n_default_text='Bot Settings' />
-                </>
-              }
-              id='id-bot-builder'
-            />
+    const handleTabChange = useCallback(
+        (tab_index: number) => {
+            setActiveTab(tab_index);
+        },
+        [setActiveTab]
+    );
 
-            <div
-              label={
-                <span className="tab-label tab-label--instant-fill">
-                  <Emoji symbol="⏱️" size={24} />
-                  <Localize i18n_default_text="Instant Fill" />
-                </span>
-              }
-              id={
-                is_chart_modal_visible || is_trading_view_modal_visible
-                  ? 'id-charts--disabled'
-                  : 'id-charts'
-              }
-            >
-              <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Instant Fill...')} />}>
-                <ViewToggle />
-              </Suspense>
-            </div>
-
-            <div
-              label={
-                <span className="tab-label tab-label--smart-trader">
-                  <Emoji symbol="🧠" size={19} />
-                  <Localize i18n_default_text="Smart Trader" />
-                </span>
-              }
-              id={
-                is_chart_modal_visible || is_trading_view_modal_visible
-                  ? 'id-charts--disabled'
-                  : 'id-charts'
-              }
-            >
-              <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Smart Trader...')} />}>
-                <ViewPercentage />
-              </Suspense>
-            </div>
-
-
-            <div
-              label={
-                <>
-                  <Emoji symbol="📡" size={16} />
-                  <Localize i18n_default_text='Pro Aviator' />
-                </>
-              }
-              id='id-tutorials'
-            >
-              <div className='tutorials-wrapper tutorials-wrapper--aviator'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Pro Aviator...')} />}
+    return (
+        <React.Fragment>
+            <div className='main'>
+                <div
+                    className={classNames('main__container', {
+                        'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
+                    })}
                 >
-                  <AviatorR />
-                </Suspense>
-              </div>
-            </div>
+                    <FloatingRiskDisclaimer />
 
-            <div
-              label={
-                <>
-                  <Emoji symbol="✍️ " size={16} />
-                  <Localize i18n_default_text='Manual Trader' />
-                </>
-              }
-              id='id-tutorials'
-            >
-              <div className='tutorials-wrapper tutorials-wrapper--manual-trader'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Manual Trader...')} />}
-                >
-                  <ManualTrader />
-                </Suspense>
-              </div>
-            </div>
+                    <Tabs
+                        active_index={active_tab}
+                        className='main__tabs'
+                        is_scrollable
+                        onTabItemChange={onEntered}
+                        onTabItemClick={handleTabChange}
+                        top
+                    >
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🛖' size={24} />
+                                    <Localize i18n_default_text='Home' />
+                                </>
+                            }
+                            id='id-dbot-dashboard'
+                        >
+                            <Dashboard handleTabChange={handleTabChange} />
+                        </div>
 
-            <div
-              label={
-                <>
-                  <Emoji symbol="🎯" size={18} />
-                  <Localize i18n_default_text='Strategies' />
-                </>
-              }
-              id='id-tutorials'
-            >
-              <div className='tutorials-wrapper'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Strategies...')} />}
-                >
-                  <Ready />
-                </Suspense>
-              </div>
-            </div>
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🤖 ' size={24} />
+                                    <Localize i18n_default_text='Bot Settings' />
+                                </>
+                            }
+                            id='id-bot-builder'
+                        />
 
-            <div
-              label={
-                <>
-                  <Emoji symbol="2️⃣2️⃣" size={16} />
-                  <Localize i18n_default_text='Double Double' />
-                </>
-              }
-              id='id-tutorials'
-            >
-              <div className='tutorials-wrapper'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Double Double...')} />}
-                >
-                  <Multi />
-                </Suspense>
-              </div>
-            </div>
-            {/* <div
+                        <div
+                            label={
+                                <span className='tab-label tab-label--instant-fill'>
+                                    <Emoji symbol='⏱️' size={24} />
+                                    <Localize i18n_default_text='Instant Fill' />
+                                </span>
+                            }
+                            id={
+                                is_chart_modal_visible || is_trading_view_modal_visible
+                                    ? 'id-charts--disabled'
+                                    : 'id-charts'
+                            }
+                        >
+                            <Suspense
+                                fallback={<ChunkLoader message={localize('Please wait, loading Instant Fill...')} />}
+                            >
+                                <ViewToggle />
+                            </Suspense>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🪙' size={24} />
+                                    <Localize i18n_default_text='DTrader' />
+                                </>
+                            }
+                            id='id-dtrader'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--dtrader'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}
+                                >
+                                    <DTrader />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <span className='tab-label tab-label--bulk-trader'>
+                                    <Emoji symbol='🛒' size={22} />
+                                    <Localize i18n_default_text='Bulk Trader' />
+                                </span>
+                            }
+                            id='id-bulk-trader'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--bulk-trader'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Bulk Trader...')} />}
+                                >
+                                    <BulkTrader />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <span className='tab-label tab-label--auto-strategy'>
+                                    <AutoStrategyHeartIcon size={18} animated />
+                                    <Localize i18n_default_text='Auto Strategy' />
+                                </span>
+                            }
+                            id='id-digit-bar-ready'
+                        >
+                            <div className='tutorials-wrapper'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading Auto Strategy...')} />
+                                    }
+                                >
+                                    <DigitBarReady />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='✍️ ' size={16} />
+                                    <Localize i18n_default_text='Manual Trader' />
+                                </>
+                            }
+                            id='id-tutorials'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--manual-trader'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading Manual Trader...')} />
+                                    }
+                                >
+                                    <ManualTrader />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <span className='tab-label tab-label--speed-bot'>
+                                    <SpeedBotTabIcon size={18} animated />
+                                    <Localize i18n_default_text='Speed Bot' />
+                                </span>
+                            }
+                            id='id-speed-bot'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--speed-bot'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Speed Bot...')} />}
+                                >
+                                    <SpeedBot sideRunPanel />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🎯' size={18} />
+                                    <Localize i18n_default_text='Strategies' />
+                                </>
+                            }
+                            id='id-tutorials'
+                        >
+                            <div className='tutorials-wrapper'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Strategies...')} />}
+                                >
+                                    <Ready />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='2️⃣2️⃣' size={16} />
+                                    <Localize i18n_default_text='Double Double' />
+                                </>
+                            }
+                            id='id-tutorials'
+                        >
+                            <div className='tutorials-wrapper'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading Double Double...')} />
+                                    }
+                                >
+                                    <Multi />
+                                </Suspense>
+                            </div>
+                        </div>
+                        {/* <div
               label={
                 <>
                   <Emoji symbol="🪖" size={16} />
@@ -364,112 +434,190 @@ const AppWrapper = observer(() => {
                 </Suspense>
               </div>
             </div>  */}
-            <div
+                        <div
+                            label={
+                                <span className='tab-label tab-label--smart-trader'>
+                                    <Emoji symbol='🧠' size={19} />
+                                    <Localize i18n_default_text='Smart Trader' />
+                                </span>
+                            }
+                            id={
+                                is_chart_modal_visible || is_trading_view_modal_visible
+                                    ? 'id-charts--disabled'
+                                    : 'id-charts'
+                            }
+                        >
+                            <Suspense
+                                fallback={<ChunkLoader message={localize('Please wait, loading Smart Trader...')} />}
+                            >
+                                <ViewPercentage />
+                            </Suspense>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🚀' size={16} />
+                                    <Localize i18n_default_text='Pro Aviator' />
+                                </>
+                            }
+                            id='id-tutorials'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--aviator'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Pro Aviator...')} />}
+                                >
+                                    <AviatorR />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='📐' size={18} />
+                                    <Localize i18n_default_text='Risk Calculator' />
+                                </>
+                            }
+                            id='id-risk-calculator'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--risk-calculator'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading Risk Calculator...')} />
+                                    }
+                                >
+                                    <RiskCalculator />
+                                </Suspense>
+                            </div>
+                        </div>
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='📝' size={16} />
+                                    <Localize i18n_default_text='Copytrading' />
+                                </>
+                            }
+                            id='id-parallel-copy'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--parallel-copy'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading Parallel Copy...')} />
+                                    }
+                                >
+                                    <ParallelCopyTrading />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        {/* Free Bots tab — re-enable when catalog is ready (see src/pages/aaabots/) */}
+                        {/* <div
               label={
                 <>
-                  <Emoji symbol="💚" size={18} />
-                  <Localize i18n_default_text='Auto Strategy' />
+                  <Emoji symbol="🎁" size={22} />
+                  <Localize i18n_default_text='Free Bots' />
                 </>
               }
-              id='id-digit-bar-ready'
+              id='id-free-bots'
             >
-              <div className='tutorials-wrapper'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Auto Strategy...')} />}
-                >
-                  <DigitBarReady />
+              <div className='tutorials-wrapper tutorials-wrapper--free-bots'>
+                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Free Bots...')} />}>
+                  <FreeBots />
                 </Suspense>
               </div>
-            </div>
-            <div
+            </div> */}
+
+                        {/* Copytraders — re-enable when ready */}
+                        {/* <div
               label={
                 <>
-                  <Emoji symbol="📐" size={18} />
-                  <Localize i18n_default_text='Risk Calculator' />
+                  <Emoji symbol="👥" size={16} />
+                  <Localize i18n_default_text='Copytraders' />
                 </>
               }
-              id='id-risk-calculator'
+              id='id-copytraders'
             >
-              <div className='tutorials-wrapper tutorials-wrapper--risk-calculator'>
+              <div className='tutorials-wrapper tutorials-wrapper--copytraders'>
                 <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Risk Calculator...')} />}
+                  fallback={<ChunkLoader message={localize('Please wait, loading Copytraders...')} />}
                 >
-                  <RiskCalculator />
+                  <Copytraders />
                 </Suspense>
               </div>
-            </div>
-            <div
+            </div> */}
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🔐' size={16} />
+                                    <Localize i18n_default_text='ROT Tokens' />
+                                </>
+                            }
+                            id='id-rot-token-audit'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--rot-token-audit'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading ROT token audit...')} />
+                                    }
+                                >
+                                    <RotTokenAudit />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        {/* Deposit tab — re-enable when deposit flow is updated */}
+                        {/* <div
               label={
                 <>
-                  <Emoji symbol="📝" size={16} />
-                  <Localize i18n_default_text='Copytrading' />
+                  <Emoji symbol="⏳" size={18} />
+                  <Localize i18n_default_text='Deposit' />
                 </>
               }
-              id='id-parallel-copy'
+              id='id-deposit'
             >
-              <div className='tutorials-wrapper tutorials-wrapper--parallel-copy'>
+              <div className='tutorials-wrapper tutorials-wrapper--withdrawal'>
                 <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Parallel Copy...')} />}
+                  fallback={<ChunkLoader message={localize('Please wait, loading Deposit...')} />}
                 >
-                  <ParallelCopyTrading />
+                  <Withdrawal />
                 </Suspense>
               </div>
+            </div> */}
+                    </Tabs>
+                </div>
             </div>
 
-            <div
-              label={
-                <>
-                  <Emoji symbol="🌍" size={16} />
-                  <Localize i18n_default_text='Challenge' />
-                </>
-              }
-              id='id-tutorials'
+            <DesktopWrapper>
+                <div className='main__run-strategy-wrapper'>
+                    <RunStrategy />
+                    <RunPanel />
+                </div>
+                <ChartModal />
+                <TradingViewModal />
+            </DesktopWrapper>
+
+            <MobileWrapper>{!is_open && <RunPanel />}</MobileWrapper>
+
+            {/* Existing global dialog */}
+            <Dialog
+                cancel_button_text={cancel_button_text || localize('Cancel')}
+                className='dc-dialog__wrapper--fixed'
+                confirm_button_text={ok_button_text || localize('Ok')}
+                has_close_icon
+                is_mobile_full_width={false}
+                is_visible={is_dialog_open}
+                onCancel={onCancelButtonClick}
+                onClose={onCloseDialog}
+                onConfirm={onOkButtonClick || onCloseDialog}
+                portal_element_id='modal_root'
+                title={title}
             >
-              <div className='tutorials-wrapper tutorials-wrapper--manual-trader'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Challenge...')} />}
-                >
-                  <Deposit />
-                </Suspense>
-              </div>
-            </div>
-
-            {/* DTrader tab — re-enable when /dtrader deploy is ready (see lazy import above) */}
-
-          </Tabs>
-        </div>
-      </div>
-
-      <DesktopWrapper>
-        <div className='main__run-strategy-wrapper'>
-          <RunStrategy />
-          <RunPanel />
-        </div>
-        <ChartModal />
-        <TradingViewModal />
-      </DesktopWrapper>
-
-      <MobileWrapper>{!is_open && <RunPanel />}</MobileWrapper>
-
-      {/* Existing global dialog */}
-      <Dialog
-        cancel_button_text={cancel_button_text || localize('Cancel')}
-        className='dc-dialog__wrapper--fixed'
-        confirm_button_text={ok_button_text || localize('Ok')}
-        has_close_icon
-        is_mobile_full_width={false}
-        is_visible={is_dialog_open}
-        onCancel={onCancelButtonClick}
-        onClose={onCloseDialog}
-        onConfirm={onOkButtonClick || onCloseDialog}
-        portal_element_id='modal_root'
-        title={title}
-      >
-        {message}
-      </Dialog>
-
-    </React.Fragment>
-  );
+                {message}
+            </Dialog>
+        </React.Fragment>
+    );
 });
 
 export default AppWrapper;

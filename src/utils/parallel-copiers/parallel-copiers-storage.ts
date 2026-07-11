@@ -1,6 +1,13 @@
+import {
+    getDerivOAuthAccessToken,
+    isDerivOptionsOAuthSession,
+} from '@/components/shared/utils/login/deriv-oauth-storage';
 import { isVirtualLoginid } from '@/components/shared/utils/login/pick-default-account';
-import { resolveLoginidCurrency } from '@/utils/parallel-copiers/resolve-loginid-currency';
-import { readSessionAccountMap } from '@/utils/parallel-copiers/parallel-session-accounts';
+import {
+    isOptionsOAuthSessionLoginid,
+    isOptionsOAuthSessionToken,
+    readSessionAccountMap,
+} from '@/utils/parallel-copiers/parallel-session-accounts';
 
 export const PARALLEL_COPIERS_STORAGE_KEY = 'parallel_copiers_v1';
 export const PARALLEL_COPIERS_PERSONAL_KEY = 'parallel_copiers_personal_v1';
@@ -9,6 +16,7 @@ export const PARALLEL_COPY_TRADE_ENABLED_KEY = 'parallel_copy_trade_enabled';
 export const PARALLEL_COPY_PERSONAL_ENABLED_KEY = 'parallel_copy_personal_enabled';
 export const PARALLEL_COPY_CLIENT_ENABLED_KEY = 'parallel_copy_client_enabled';
 export const PARALLEL_CLIENT_MAIN_LOGINID_KEY = 'parallel_client_main_loginid';
+export const PARALLEL_CLIENT_DERIV_APP_ID_KEY = 'parallel_client_deriv_app_id';
 export const PARALLEL_PERSONAL_MAIN_LOGINID_KEY = 'parallel_personal_main_loginid';
 export const PARALLEL_PERSONAL_ACTIVE_COPIERS_KEY = 'parallel_personal_active_copiers_v1';
 
@@ -26,6 +34,8 @@ export type TParallelCopier = {
     scope: TParallelCopyScope;
     /** Client only: when true, trades mirror to this account. */
     copying?: boolean;
+    /** Options REST / OTP Deriv-App-ID when token is not the session lead OAuth token. */
+    deriv_app_id?: string;
 };
 
 const listeners = new Set<() => void>();
@@ -118,10 +128,7 @@ export function setParallelCopyClientEnabled(enabled: boolean): void {
 
 /** True when personal copy is on or at least one client card is copying. */
 export function isParallelCopyTradeEnabled(): boolean {
-    return (
-        isParallelCopyPersonalEnabled() ||
-        readParallelCopiers('client').some(c => c.copying === true)
-    );
+    return isParallelCopyPersonalEnabled() || readParallelCopiers('client').some(c => c.copying === true);
 }
 
 /** @deprecated Use scope-specific enable flags. */
@@ -156,11 +163,46 @@ export function setClientMainLoginid(loginid: string | null): void {
             localStorage.setItem(PARALLEL_CLIENT_MAIN_LOGINID_KEY, loginid);
         } else {
             localStorage.removeItem(PARALLEL_CLIENT_MAIN_LOGINID_KEY);
+            localStorage.removeItem(PARALLEL_CLIENT_DERIV_APP_ID_KEY);
         }
     } catch {
         /* noop */
     }
     notify();
+}
+
+/** Deriv-App-ID for the client lead (e.g. ROT parallel copy app id from rot-token-audit). */
+export function getClientMainDerivAppId(): string | null {
+    try {
+        const id = localStorage.getItem(PARALLEL_CLIENT_DERIV_APP_ID_KEY);
+        return id?.trim() ? id.trim() : null;
+    } catch {
+        return null;
+    }
+}
+
+export function setClientMainDerivAppId(appId: string | null): void {
+    try {
+        if (appId?.trim()) {
+            localStorage.setItem(PARALLEL_CLIENT_DERIV_APP_ID_KEY, appId.trim());
+        } else {
+            localStorage.removeItem(PARALLEL_CLIENT_DERIV_APP_ID_KEY);
+        }
+    } catch {
+        /* noop */
+    }
+    notify();
+}
+
+/** Options REST / OTP app id — copier row first, then client lead override. */
+export function resolveOptionsDerivAppIdForLoginid(loginid: string): string | null {
+    const fromCopier = getCopierDerivAppId(loginid);
+    if (fromCopier) return fromCopier;
+    const main = getClientMainLoginid();
+    if (main && main === loginid.trim()) {
+        return getClientMainDerivAppId();
+    }
+    return null;
 }
 
 export function setPersonalMainLoginid(loginid: string | null): void {
@@ -246,9 +288,7 @@ export function readParallelCopiers(scope: TParallelCopyScope): TParallelCopier[
         const raw = localStorage.getItem(storageKeyForScope(scope));
         if (!raw) return [];
         const parsed = JSON.parse(raw) as TParallelCopier[];
-        return Array.isArray(parsed)
-            ? parsed.map(c => ({ ...c, scope, copying: c.copying ?? false }))
-            : [];
+        return Array.isArray(parsed) ? parsed.map(c => ({ ...c, scope, copying: c.copying ?? false })) : [];
     } catch {
         return [];
     }
@@ -313,7 +353,10 @@ export function updateCopierBalance(loginid: string, balance: number, currency?:
 
 export function addParallelCopier(
     scope: TParallelCopyScope,
-    entry: Omit<TParallelCopier, 'id' | 'label' | 'added_at' | 'scope' | 'copying'> & { copying?: boolean }
+    entry: Omit<TParallelCopier, 'id' | 'label' | 'added_at' | 'scope' | 'copying'> & {
+        copying?: boolean;
+        label?: string;
+    }
 ): TParallelCopier {
     if (scope === 'personal') {
         togglePersonalActiveCopier(entry.loginid);
@@ -327,7 +370,7 @@ export function addParallelCopier(
         scope,
         copying: entry.copying ?? false,
         id: `${scope}_${Date.now()}_${next_index}`,
-        label: `Client ${next_index}`,
+        label: entry.label?.trim() || `Client ${next_index}`,
         added_at: Date.now(),
         is_virtual: entry.is_virtual ?? isVirtualLoginid(entry.loginid),
     };
@@ -335,6 +378,48 @@ export function addParallelCopier(
     writeParallelCopiers('client', next);
     syncScopeToAccountsList('client');
     return copier;
+}
+
+/** Add or update a client copier by loginid (used when arming Oracle copytraders). */
+export function upsertClientCopier(
+    entry: Omit<TParallelCopier, 'id' | 'added_at' | 'scope'> & { scope?: never }
+): TParallelCopier {
+    const copiers = readParallelCopiers('client');
+    const idx = copiers.findIndex(c => c.loginid === entry.loginid);
+    if (idx >= 0) {
+        copiers[idx] = {
+            ...copiers[idx],
+            token: entry.token,
+            currency: entry.currency,
+            balance: entry.balance,
+            is_virtual: entry.is_virtual,
+            label: entry.label ?? copiers[idx].label,
+            copying: entry.copying ?? true,
+            deriv_app_id: entry.deriv_app_id ?? copiers[idx].deriv_app_id,
+        };
+        writeParallelCopiers('client', copiers);
+        syncCopiersToAccountsList(copiers);
+        return copiers[idx];
+    }
+    return addParallelCopier('client', {
+        loginid: entry.loginid,
+        token: entry.token,
+        currency: entry.currency,
+        balance: entry.balance,
+        is_virtual: entry.is_virtual,
+        copying: entry.copying ?? true,
+        label: entry.label,
+        deriv_app_id: entry.deriv_app_id,
+    });
+}
+
+export function findClientCopierByLoginid(loginid: string): TParallelCopier | undefined {
+    return readParallelCopiers('client').find(c => c.loginid === loginid);
+}
+
+export function findClientCopierByLabel(label: string): TParallelCopier | undefined {
+    const norm = label.trim().toLowerCase();
+    return readParallelCopiers('client').find(c => c.label.trim().toLowerCase() === norm);
 }
 
 export function removeParallelCopier(scope: TParallelCopyScope, id: string): void {
@@ -396,4 +481,23 @@ export function getCopierToken(loginid: string): string | null {
     if (session?.token) return session.token;
     const found = readParallelCopiers('client').find(c => c.loginid === loginid);
     return found?.token ?? null;
+}
+
+export function getCopierDerivAppId(loginid: string): string | null {
+    const found = readParallelCopiers('client').find(c => c.loginid === loginid);
+    return found?.deriv_app_id?.trim() || null;
+}
+
+/** True when this copier trades on classic `websockets/v3` (a1- PAT), not Options OTP/PAT. */
+export function isLegacyParallelCopierLoginid(loginid: string): boolean {
+    if (!loginid?.trim()) return false;
+    const token = getCopierToken(loginid);
+    if (!token || token === 'MOON_VIRTUAL' || token === 'MOON_LEAD_VIRTUAL') return false;
+    const trimmed = token.trim();
+    if (/^\s*(pat_|eyJ|ory_at_)/i.test(trimmed)) return false;
+    if (isOptionsOAuthSessionToken(token)) return false;
+    if (isDerivOptionsOAuthSession() && getDerivOAuthAccessToken() && isOptionsOAuthSessionLoginid(loginid)) {
+        return false;
+    }
+    return true;
 }
