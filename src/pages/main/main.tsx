@@ -23,9 +23,6 @@ import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
-// Deposit tab — re-enable when deposit flow is updated
-// import DepositTwo from '../aadeposittwo';
-
 // Lazy modules
 const AviatorR = lazy(() => import('../aaviatorR/AviatorR'));
 const ViewToggle = lazy(() => import('../aaa/ViewToggle'));
@@ -35,18 +32,18 @@ const ViewPercentage = lazy(() => import('../aaad/ViewPercentage'));
 const RiskCalculator = lazy(() => import('../risk-calculator/RiskCalculator'));
 const ParallelCopyTrading = lazy(() => import('../parallel-copy-trading/ParallelCopyTrading'));
 const DTrader = lazy(() => import('../dtrader/DTrader'));
+const SmartTrader = lazy(() => import('../smarttrader/SmartTrader'));
 const Ready = lazy(() => import('../aaaReadyStrategy/ready'));
 const DigitBarReady = lazy(() => import('../aaaDigitBarReady/DigitBarReady'));
 const Multi = lazy(() => import('../aaabc/multi'));
 // Copytraders — re-enable when ready
 // const Copytraders = lazy(() => import('../copytraders'));
-const RotTokenAudit = lazy(() => import('../rot-token-audit'));
+// const RotTokenAudit = lazy(() => import('../rot-token-audit'));
 const ManualTrader = lazy(() => import('../manualtrader/ManualTrader'));
 const SpeedBot = lazy(() => import('../aaaspeed/Speed'));
 // Free Bots tab — re-enable when catalog is ready (see src/pages/aaabots/)
 // const FreeBots = lazy(() => import('../aaabots'));
-// Deposit tab — re-enable when deposit flow is updated
-// const Withdrawal = lazy(() => import('../withdrawal'));
+const Withdrawal = lazy(() => import('../withdrawal'));
 
 // Simple emoji component for consistent a11y/sizing
 const Emoji: React.FC<{ symbol: string; label?: string; size?: number }> = ({ symbol, label, size = 24 }) => (
@@ -96,6 +93,7 @@ const AppWrapper = observer(() => {
         'bot_builder',
         'Instant Fill',
         'DTrader',
+        'Asians',
         'Bulk Trader',
         'Auto Strategy',
         'Manual Trader',
@@ -107,10 +105,10 @@ const AppWrapper = observer(() => {
         'Risk Calculator',
         'Parallel Copy',
         // 'Copytraders',
-        'ROT Tokens',
+        // 'ROT Tokens',
         // 'Freebots',
         // 'Oracle Live Trades',
-        // 'Deposit',
+        'Deposit',
     ];
     const { isDesktop } = useDevice();
     const location = useLocation();
@@ -300,6 +298,24 @@ const AppWrapper = observer(() => {
                                     fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}
                                 >
                                     <DTrader />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='🎁' size={22} />
+                                    <Localize i18n_default_text='Asians' />
+                                </>
+                            }
+                            id='id-smarttrader'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--dtrader tutorials-wrapper--smarttrader'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Asians...')} />}
+                                >
+                                    <SmartTrader />
                                 </Suspense>
                             </div>
                         </div>
@@ -547,7 +563,8 @@ const AppWrapper = observer(() => {
               </div>
             </div> */}
 
-                        <div
+                        {/* ROT Tokens — re-enable when audit tooling is needed */}
+                        {/* <div
                             label={
                                 <>
                                     <Emoji symbol='🔐' size={16} />
@@ -565,26 +582,25 @@ const AppWrapper = observer(() => {
                                     <RotTokenAudit />
                                 </Suspense>
                             </div>
-                        </div>
+                        </div> */}
 
-                        {/* Deposit tab — re-enable when deposit flow is updated */}
-                        {/* <div
-              label={
-                <>
-                  <Emoji symbol="⏳" size={18} />
-                  <Localize i18n_default_text='Deposit' />
-                </>
-              }
-              id='id-deposit'
-            >
-              <div className='tutorials-wrapper tutorials-wrapper--withdrawal'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Deposit...')} />}
-                >
-                  <Withdrawal />
-                </Suspense>
-              </div>
-            </div> */}
+                        <div
+                            label={
+                                <>
+                                    <Emoji symbol='⏳' size={18} />
+                                    <Localize i18n_default_text='Deposit' />
+                                </>
+                            }
+                            id='id-deposit'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--withdrawal'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Deposit...')} />}
+                                >
+                                    <Withdrawal />
+                                </Suspense>
+                            </div>
+                        </div>
                     </Tabs>
                 </div>
             </div>

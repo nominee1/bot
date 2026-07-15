@@ -1,14 +1,8 @@
-import {
-    getDenaraOidNumericAppId,
-    getDerivOAuthClientId,
-    getDerivOidcRedirectCallbackUri,
-} from '../config/config';
+import { getWhiteLabelCookieDomain } from '@/utils/site-brand';
+import { getDenaraOidNumericAppId, getDerivOAuthClientId, getDerivOidcRedirectCallbackUri } from '../config/config';
 import { isStorageSupported } from '../storage/storage';
 import { getStaticUrl } from '../url';
-import {
-    clearLegacySessionBeforeOAuth,
-    ensureOAuthCanonicalOriginBeforeLogin,
-} from './oauth-login-flow';
+import { clearLegacySessionBeforeOAuth, ensureOAuthCanonicalOriginBeforeLogin } from './oauth-login-flow';
 
 /**
  * New Deriv OAuth2 PKCE login redirect.
@@ -16,7 +10,8 @@ import {
  */
 const PKCE_VERIFIER_KEY = 'pkce_code_verifier';
 const OAUTH_STATE_KEY = 'oauth_state';
-const DERIV_SCOPE = 'trade account_manage';
+/** Include `payment` so deposit/withdraw (payment agent) works after login. */
+const DERIV_SCOPE = 'trade account_manage payment';
 
 const COOKIE_VERIFIER = 'deriv_pkce_verifier';
 const COOKIE_STATE = 'deriv_oauth_state';
@@ -81,6 +76,11 @@ const setPkceBridgeCookies = (codeVerifier: string, state: string) => {
         document.cookie = `${COOKIE_VERIFIER}=${encV}; ${base}`;
         document.cookie = `${COOKIE_STATE}=${encS}; ${base}`;
     }
+    const whiteLabelDomain = getWhiteLabelCookieDomain();
+    if (whiteLabelDomain && host.endsWith(whiteLabelDomain.replace(/^\./, ''))) {
+        document.cookie = `${COOKIE_VERIFIER}=${encV}; ${base}; Domain=${whiteLabelDomain}`;
+        document.cookie = `${COOKIE_STATE}=${encS}; ${base}; Domain=${whiteLabelDomain}`;
+    }
 };
 
 const readCookie = (name: string): string | null => {
@@ -107,6 +107,11 @@ const clearPkceBridgeCookies = () => {
         document.cookie = `${COOKIE_VERIFIER}=; ${base}`;
         document.cookie = `${COOKIE_STATE}=; ${base}`;
     }
+    const whiteLabelDomain = getWhiteLabelCookieDomain();
+    if (whiteLabelDomain && host.endsWith(whiteLabelDomain.replace(/^\./, ''))) {
+        document.cookie = `${COOKIE_VERIFIER}=; ${base}; Domain=${whiteLabelDomain}`;
+        document.cookie = `${COOKIE_STATE}=; ${base}; Domain=${whiteLabelDomain}`;
+    }
 };
 
 const generateCodeVerifier = () => {
@@ -130,10 +135,7 @@ const base64UrlEncode = (arrayBuffer: ArrayBuffer) => {
     bytes.forEach(byte => {
         binary += String.fromCharCode(byte);
     });
-    return btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
 const createCodeChallenge = async (codeVerifier: string) => {
@@ -201,12 +203,7 @@ export const requestDerivOAuthAuthentication = async () => {
     window.location.assign(`https://auth.deriv.com/oauth2/auth?${params.toString()}`);
 };
 
-export const redirectToLogin = (
-    is_logged_in: boolean,
-    _language: string,
-    has_params = true,
-    redirect_delay = 0
-) => {
+export const redirectToLogin = (is_logged_in: boolean, _language: string, has_params = true, redirect_delay = 0) => {
     if (!is_logged_in && isStorageSupported(sessionStorage)) {
         const l = window.location;
         const redirect_url = has_params ? window.location.href : `${l.protocol}//${l.host}${l.pathname}`;

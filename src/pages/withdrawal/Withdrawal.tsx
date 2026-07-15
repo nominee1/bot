@@ -6,8 +6,15 @@ import {
     resolveDepositProfileLookupLoginid,
     type TWithdrawalFormAutofill,
 } from '@/components/shared/utils/login/deriv-oauth-storage';
+import { getDerivOAuthAccessToken } from '@/components/shared/utils/login/deriv-oauth-storage';
 import { useStore } from '@/hooks/useStore';
 import { formatPaApiFetchError, getPaApiBaseUrl, getSiteAffiliateCode, sanitizePaApiError } from '@/utils/pa-api-base';
+import {
+    checkPaClientWithdrawEnabled,
+    getPaymentAgentAgentId,
+    requestPaWithdrawVerificationCode,
+    submitPaWithdraw,
+} from '@/utils/pa-withdraw';
 import './Withdrawal.scss';
 
 const API_BASE = getPaApiBaseUrl();
@@ -15,7 +22,9 @@ const API_BASE = getPaApiBaseUrl();
 const DEPOSITS_UNAVAILABLE_MESSAGE = 'Deposits are not available at the moment. We are updating our site.';
 
 const DEPOSIT_AMOUNT_SUGGESTIONS = [2, 5, 10, 50, 100] as const;
+const WITHDRAW_AMOUNT_SUGGESTIONS = [2, 5, 10, 50, 100] as const;
 const MIN_DEPOSIT_USD = 2;
+const MIN_WITHDRAW_USD = 2;
 const MAX_DEPOSIT_KES = 150_000;
 
 const DERIV_PA_DEPOSIT_URL = 'https://home.deriv.com/dashboard/deposit/payment-agent';
@@ -47,6 +56,18 @@ const DepositSectionIcon: React.FC = () => (
     <svg width='22' height='22' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
         <rect x='3' y='6' width='18' height='14' rx='2' stroke='currentColor' strokeWidth='1.75' />
         <path d='M3 10h18M8 15h2' stroke='currentColor' strokeWidth='1.75' strokeLinecap='round' />
+    </svg>
+);
+
+const WithdrawSectionIcon: React.FC = () => (
+    <svg width='22' height='22' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
+        <path
+            d='M12 3v12M8 11l4 4 4-4M5 21h14'
+            stroke='currentColor'
+            strokeWidth='1.75'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+        />
     </svg>
 );
 
@@ -126,7 +147,7 @@ const STATUS_LABELS: Record<string, string> = {
     pa_failed: 'Deriv transfer failed',
 };
 
-type PageView = 'deposit' | 'profile';
+type PageView = 'deposit' | 'withdraw' | 'profile';
 
 const Withdrawal: React.FC = () => {
     const { client } = useStore() ?? {};
@@ -136,6 +157,13 @@ const Withdrawal: React.FC = () => {
     const [optionsLoginid, setOptionsLoginid] = useState('');
     const [autofillSource, setAutofillSource] = useState<Partial<Record<keyof TWithdrawalFormAutofill, boolean>>>({});
     const [amountUsd, setAmountUsd] = useState('');
+    const [withdrawAmountUsd, setWithdrawAmountUsd] = useState('');
+    const [withdrawOtp, setWithdrawOtp] = useState('');
+    const [withdrawOtpSent, setWithdrawOtpSent] = useState(false);
+    const [withdrawBusy, setWithdrawBusy] = useState(false);
+    const [withdrawMessage, setWithdrawMessage] = useState<string | null>(null);
+    const [withdrawError, setWithdrawError] = useState<string | null>(null);
+    const [withdrawStatus, setWithdrawStatus] = useState<string | null>(null);
     const [mpesaPhone, setMpesaPhone] = useState('');
     const [quote, setQuote] = useState<ExchangeQuote | null>(null);
     const [amountKes, setAmountKes] = useState<number | null>(null);
@@ -162,6 +190,7 @@ const Withdrawal: React.FC = () => {
     const isLoggedIn = Boolean(client?.loginid?.trim());
 
     const showDepositView = profileSaved && pageView === 'deposit';
+    const showWithdrawView = profileSaved && pageView === 'withdraw';
     const showProfileView = !profileSaved || pageView === 'profile';
 
     const openProfile = () => {
@@ -175,6 +204,15 @@ const Withdrawal: React.FC = () => {
         setProfileError(null);
         setPageView('deposit');
     };
+
+    const openWithdraw = () => {
+        setWithdrawError(null);
+        setWithdrawMessage(null);
+        setPageView('withdraw');
+    };
+
+    const withdrawUsdNumber = Number(withdrawAmountUsd);
+    const withdrawAmountValid = Number.isFinite(withdrawUsdNumber) && withdrawUsdNumber >= MIN_WITHDRAW_USD;
 
     const checkDepositsAvailability = useCallback(async (): Promise<boolean> => {
         setDepositsStatusBusy(true);
@@ -564,6 +602,80 @@ const Withdrawal: React.FC = () => {
         }
     };
 
+    const requestWithdrawOtp = async () => {
+        setWithdrawError(null);
+        setWithdrawMessage(null);
+        setWithdrawStatus(null);
+
+        if (!getDerivOAuthAccessToken()) {
+            setWithdrawError('Log in with Deriv first (Payments permission required).');
+            return;
+        }
+        if (!withdrawAmountValid) {
+            setWithdrawError(`Enter an amount of at least $${MIN_WITHDRAW_USD}.`);
+            return;
+        }
+
+        setWithdrawBusy(true);
+        try {
+            const permission = await checkPaClientWithdrawEnabled();
+            if (!permission.ok) {
+                throw new Error(permission.message ?? 'Could not verify payment permissions.');
+            }
+            if (!permission.withdrawEnabled) {
+                throw new Error(permission.message ?? 'Withdrawals are disabled on your Deriv account.');
+            }
+
+            await requestPaWithdrawVerificationCode({
+                amountUsd: withdrawUsdNumber,
+                agentId: getPaymentAgentAgentId(),
+            });
+            setWithdrawOtpSent(true);
+            setWithdrawOtp('');
+            setWithdrawMessage('Verification code sent to your Deriv email/phone. Enter it below.');
+        } catch (err) {
+            setWithdrawError(err instanceof Error ? err.message : 'Could not send verification code.');
+            setWithdrawOtpSent(false);
+        } finally {
+            setWithdrawBusy(false);
+        }
+    };
+
+    const confirmWithdraw = async () => {
+        setWithdrawError(null);
+        setWithdrawMessage(null);
+
+        if (!withdrawAmountValid) {
+            setWithdrawError(`Enter an amount of at least $${MIN_WITHDRAW_USD}.`);
+            return;
+        }
+        if (!/^\d{6}$/.test(withdrawOtp.trim())) {
+            setWithdrawError('Enter the 6-digit verification code.');
+            return;
+        }
+
+        setWithdrawBusy(true);
+        try {
+            const result = await submitPaWithdraw({
+                amountUsd: withdrawUsdNumber,
+                verificationCode: withdrawOtp.trim(),
+                agentId: getPaymentAgentAgentId(),
+            });
+            setWithdrawStatus(result.status);
+            setWithdrawMessage(
+                result.status === 'complete'
+                    ? `Withdrawal complete${result.transactionId ? ` · tx ${result.transactionId}` : ''}. M-Pesa payout coming next.`
+                    : `Withdrawal ${result.status}. Funds move to the payment agent — M-Pesa payout coming next.`
+            );
+            setWithdrawOtp('');
+            setWithdrawOtpSent(false);
+        } catch (err) {
+            setWithdrawError(err instanceof Error ? err.message : 'Withdrawal failed.');
+        } finally {
+            setWithdrawBusy(false);
+        }
+    };
+
     return (
         <div className='withdrawal-page'>
             {profileSaved && (
@@ -578,6 +690,14 @@ const Withdrawal: React.FC = () => {
                     </button>
                     <button
                         type='button'
+                        className={`withdrawal-page__tab${showWithdrawView ? ' withdrawal-page__tab--active' : ''}`}
+                        onClick={openWithdraw}
+                    >
+                        <WithdrawSectionIcon />
+                        Withdraw
+                    </button>
+                    <button
+                        type='button'
                         className={`withdrawal-page__tab${showProfileView ? ' withdrawal-page__tab--active' : ''}`}
                         onClick={openProfile}
                     >
@@ -589,7 +709,7 @@ const Withdrawal: React.FC = () => {
 
             <div
                 className={`withdrawal-page__main${
-                    showDepositView ? ' withdrawal-page__main--deposit-only' : ''
+                    showDepositView || showWithdrawView ? ' withdrawal-page__main--deposit-only' : ''
                 }${!profileSaved && showProfileView ? ' withdrawal-page__main--signup' : ''}${
                     profileSaved && showProfileView ? ' withdrawal-page__main--profile-edit' : ''
                 }`}
@@ -952,6 +1072,152 @@ const Withdrawal: React.FC = () => {
                                 </>
                             )}
                         </div>
+                    </section>
+                )}
+
+                {showWithdrawView && (
+                    <section className='withdrawal-card withdrawal-card--deposit'>
+                        <div className='withdrawal-card__title-row withdrawal-card__title-row--deposit'>
+                            <div className='withdrawal-card__heading'>
+                                <span
+                                    className='withdrawal-card__section-icon withdrawal-card__section-icon--deposit'
+                                    aria-hidden='true'
+                                >
+                                    <WithdrawSectionIcon />
+                                </span>
+                                <div>
+                                    <h2>Withdraw to payment agent</h2>
+                                    <p className='withdrawal-card__subtitle'>
+                                        Sends USD from your Deriv wallet to our payment agent. M-Pesa cash-out comes
+                                        next.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type='button'
+                                className='withdrawal-profile-chip'
+                                onClick={openProfile}
+                                title='View or update your profile'
+                            >
+                                <ProfileSectionIcon />
+                                <span>{profileChipLabel}</span>
+                            </button>
+                        </div>
+
+                        {!getDerivOAuthAccessToken() && (
+                            <div className='withdrawal-page__alert withdrawal-page__alert--error' role='status'>
+                                Log in with Deriv first. Your session needs Payments permission — log out and log in
+                                again if withdraw fails with a scope error.
+                            </div>
+                        )}
+
+                        <label>
+                            Amount (USD)
+                            <p className='withdrawal-deposit-limits'>Min withdraw ${MIN_WITHDRAW_USD}</p>
+                            <div className='withdrawal-amount-input'>
+                                <input
+                                    type='number'
+                                    min={MIN_WITHDRAW_USD}
+                                    step='0.01'
+                                    value={withdrawAmountUsd}
+                                    onChange={e => {
+                                        setWithdrawAmountUsd(e.target.value);
+                                        setWithdrawOtpSent(false);
+                                        setWithdrawOtp('');
+                                    }}
+                                    placeholder='Enter withdrawal amount'
+                                />
+                            </div>
+                            <div
+                                className='withdrawal-amount-suggestions'
+                                role='group'
+                                aria-label='Suggested withdrawal amounts'
+                            >
+                                {WITHDRAW_AMOUNT_SUGGESTIONS.map(value => (
+                                    <button
+                                        key={value}
+                                        type='button'
+                                        className={`withdrawal-amount-suggestions__chip${
+                                            Number(withdrawAmountUsd) === value
+                                                ? ' withdrawal-amount-suggestions__chip--active'
+                                                : ''
+                                        }`}
+                                        onClick={() => {
+                                            setWithdrawAmountUsd(String(value));
+                                            setWithdrawOtpSent(false);
+                                            setWithdrawOtp('');
+                                        }}
+                                    >
+                                        ${value}
+                                    </button>
+                                ))}
+                            </div>
+                        </label>
+
+                        {withdrawOtpSent && (
+                            <label>
+                                Verification code
+                                <input
+                                    type='text'
+                                    inputMode='numeric'
+                                    autoComplete='one-time-code'
+                                    maxLength={6}
+                                    value={withdrawOtp}
+                                    onChange={e => setWithdrawOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    placeholder='6-digit code'
+                                />
+                            </label>
+                        )}
+
+                        {!withdrawOtpSent ? (
+                            <button
+                                type='button'
+                                className='withdrawal-btn withdrawal-btn--accent'
+                                disabled={withdrawBusy || !withdrawAmountValid || !getDerivOAuthAccessToken()}
+                                onClick={requestWithdrawOtp}
+                            >
+                                {withdrawBusy ? 'Sending code…' : 'Send verification code'}
+                            </button>
+                        ) : (
+                            <div className='withdrawal-page__withdraw-actions'>
+                                <button
+                                    type='button'
+                                    className='withdrawal-btn withdrawal-btn--accent'
+                                    disabled={withdrawBusy || !/^\d{6}$/.test(withdrawOtp.trim())}
+                                    onClick={confirmWithdraw}
+                                >
+                                    {withdrawBusy ? 'Withdrawing…' : 'Confirm withdrawal'}
+                                </button>
+                                <button
+                                    type='button'
+                                    className='withdrawal-btn withdrawal-btn--ghost'
+                                    disabled={withdrawBusy}
+                                    onClick={requestWithdrawOtp}
+                                >
+                                    Resend code
+                                </button>
+                            </div>
+                        )}
+
+                        {(withdrawMessage || withdrawError || withdrawStatus) && (
+                            <div className='withdrawal-payment-status'>
+                                {withdrawMessage && (
+                                    <div className='withdrawal-page__alert withdrawal-page__alert--info'>
+                                        {withdrawMessage}
+                                    </div>
+                                )}
+                                {withdrawError && (
+                                    <div className='withdrawal-page__alert withdrawal-page__alert--error'>
+                                        {withdrawError}
+                                    </div>
+                                )}
+                                {withdrawStatus && (
+                                    <div className='withdrawal-page__alert withdrawal-page__alert--info'>
+                                        Status: {withdrawStatus}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </section>
                 )}
             </div>
