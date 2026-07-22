@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
 import FloatingRiskDisclaimer from '@/components/floating-risk-disclaimer/floating-risk-disclaimer';
 import { AutoStrategyHeartIcon } from '@/components/icons/auto-strategy-heart-icon';
+import { DepositSectionIcon } from '@/components/icons/deposit-section-icon';
 import { SpeedBotTabIcon } from '@/components/icons/speed-bot-tab-icon';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import DesktopWrapper from '@/components/shared_ui/desktop-wrapper';
@@ -30,14 +31,15 @@ const BulkTrader = lazy(() => import('../bulk-trader'));
 // Rise Fall tab hidden until feature is complete — component kept in src/pages/rise-fall-manual/
 const ViewPercentage = lazy(() => import('../aaad/ViewPercentage'));
 const RiskCalculator = lazy(() => import('../risk-calculator/RiskCalculator'));
+// Asians Path Lab tab hidden until feature is complete — page kept in src/pages/asians-analysis/
 const ParallelCopyTrading = lazy(() => import('../parallel-copy-trading/ParallelCopyTrading'));
 const DTrader = lazy(() => import('../dtrader/DTrader'));
 const SmartTrader = lazy(() => import('../smarttrader/SmartTrader'));
 const Ready = lazy(() => import('../aaaReadyStrategy/ready'));
 const DigitBarReady = lazy(() => import('../aaaDigitBarReady/DigitBarReady'));
 const Multi = lazy(() => import('../aaabc/multi'));
-// Copytraders — re-enable when ready
 // const Copytraders = lazy(() => import('../copytraders'));
+// ROT Tokens tab hidden until needed — page kept in src/pages/rot-token-audit/
 // const RotTokenAudit = lazy(() => import('../rot-token-audit'));
 const ManualTrader = lazy(() => import('../manualtrader/ManualTrader'));
 const SpeedBot = lazy(() => import('../aaaspeed/Speed'));
@@ -103,12 +105,8 @@ const AppWrapper = observer(() => {
         'Smart Trader',
         'Pro Aviator',
         'Risk Calculator',
-        'Parallel Copy',
-        // 'Copytraders',
-        // 'ROT Tokens',
-        // 'Freebots',
-        // 'Oracle Live Trades',
         'Deposit',
+        'Parallel Copy',
     ];
     const { isDesktop } = useDevice();
     const location = useLocation();
@@ -507,6 +505,24 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
                         </div>
+
+                        <div
+                            label={
+                                <>
+                                    <DepositSectionIcon size={18} />
+                                    <Localize i18n_default_text='Deposit' />
+                                </>
+                            }
+                            id='id-deposit'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--withdrawal'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Deposit...')} />}
+                                >
+                                    <Withdrawal />
+                                </Suspense>
+                            </div>
+                        </div>
                         <div
                             label={
                                 <>
@@ -544,26 +560,28 @@ const AppWrapper = observer(() => {
               </div>
             </div> */}
 
-                        {/* Copytraders — re-enable when ready */}
+                        {/* Copytraders — re-enable when Oracle arming is ready again */}
                         {/* <div
-              label={
-                <>
-                  <Emoji symbol="👥" size={16} />
-                  <Localize i18n_default_text='Copytraders' />
-                </>
-              }
-              id='id-copytraders'
-            >
-              <div className='tutorials-wrapper tutorials-wrapper--copytraders'>
-                <Suspense
-                  fallback={<ChunkLoader message={localize('Please wait, loading Copytraders...')} />}
-                >
-                  <Copytraders />
-                </Suspense>
-              </div>
-            </div> */}
+                            label={
+                                <>
+                                    <Emoji symbol='👥' size={16} />
+                                    <Localize i18n_default_text='Copytraders' />
+                                </>
+                            }
+                            id='id-copytraders'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--copytraders'>
+                                <Suspense
+                                    fallback={
+                                        <ChunkLoader message={localize('Please wait, loading Copytraders...')} />
+                                    }
+                                >
+                                    <Copytraders />
+                                </Suspense>
+                            </div>
+                        </div> */}
 
-                        {/* ROT Tokens — re-enable when audit tooling is needed */}
+                        {/* ROT Tokens — re-enable when audit tooling is needed again */}
                         {/* <div
                             label={
                                 <>
@@ -583,24 +601,6 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
                         </div> */}
-
-                        <div
-                            label={
-                                <>
-                                    <Emoji symbol='⏳' size={18} />
-                                    <Localize i18n_default_text='Deposit' />
-                                </>
-                            }
-                            id='id-deposit'
-                        >
-                            <div className='tutorials-wrapper tutorials-wrapper--withdrawal'>
-                                <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading Deposit...')} />}
-                                >
-                                    <Withdrawal />
-                                </Suspense>
-                            </div>
-                        </div>
                     </Tabs>
                 </div>
             </div>
