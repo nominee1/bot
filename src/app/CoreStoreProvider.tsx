@@ -25,7 +25,12 @@ import { useStore } from '@/hooks/useStore';
 import { subscribeMoonTrader } from '@/pages/copytraders/copytraders-moon-trader';
 import type ClientStore from '@/stores/client-store';
 import { TLandingCompany, TSocketResponseData } from '@/types/api-types';
-import { shouldSuppressDerivBalanceForServerManaged } from '@/utils/applyServerManagedBalance';
+import {
+    applyServerManagedBalance,
+    isRailwayManagedOptionsLoginid,
+    reapplyCachedServerManagedBalance,
+    shouldSuppressDerivBalanceForServerManaged,
+} from '@/utils/applyServerManagedBalance';
 import {
     crShadowBroadcastMatchesWallet,
     crShadowChannel,
@@ -36,6 +41,7 @@ import {
     isMoonLeadVirtualTradeLoginid,
     isShadowDisplayManagedLoginid,
     MOON_COPY_LEAD_LOGINID,
+    OPTIONS_VIRTUAL_SHADOW_LOGINID,
     patchOneAccountBalance,
     resolveVirtualShadowLedgerKey,
     seedCrShadowLedgerIfAbsent,
@@ -45,6 +51,7 @@ import {
     syncMoonVirtLedgerToHeaderIfNeeded,
     VBAL_SHADOW_KEY,
 } from '@/utils/crVirtualBalanceShadow';
+import { getPaApiBaseUrl } from '@/utils/pa-api-base';
 import {
     getParallelCopiersForMirror,
     isParallelCopyTradeEnabled,
@@ -54,15 +61,17 @@ import { useTranslations } from '@deriv-com/translations';
 
 /** Block live Deriv balance merges for virtual shadow wallets — keep header on shared ledger. */
 function mergeOneAccountBalance(client: ClientStore, loginid: string, amount: number, currency: string): void {
+    // Railway-managed ROT (ROT90381442): prefer backend ledger — same idea as CR7557018 local shadow.
+    if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
+        reapplyCachedServerManagedBalance(client, loginid);
+        return;
+    }
     if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
         syncCrShadowBalanceIfNeeded(client, loginid, amount);
         return;
     }
     if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
         syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
-        return;
-    }
-    if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
         return;
     }
     patchOneAccountBalance(client, loginid, amount, currency);
@@ -76,15 +85,16 @@ function mergeOptionsAccountBalances(
     accounts.forEach(account => {
         const loginid = String(account.loginid ?? '');
         if (!allowedLoginids.has(loginid)) return;
+        if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
+            reapplyCachedServerManagedBalance(client, loginid);
+            return;
+        }
         if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
             syncCrShadowBalanceIfNeeded(client, loginid, Number(account.balance ?? 0));
             return;
         }
         if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
             syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
-            return;
-        }
-        if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
             return;
         }
         mergeOneAccountBalance(client, loginid, Number(account.balance ?? 0), account.currency || 'USD');
@@ -96,21 +106,22 @@ function mergeAllAccountsBalancePayload(client: ClientStore, incoming: Balance):
     const incomingAccounts: Record<string, NonNullable<Balance['accounts']>[string]> = {
         ...incomingAccountsRaw,
     };
-    const shadowIds = Object.keys(incomingAccounts).filter(loginid =>
-        shouldSuppressDerivBalanceForVirtualShadow(loginid)
-    );
     const managedIds = Object.keys(incomingAccounts).filter(loginid =>
         shouldSuppressDerivBalanceForServerManaged(loginid)
     );
+    const shadowIds = Object.keys(incomingAccounts).filter(
+        loginid =>
+            shouldSuppressDerivBalanceForVirtualShadow(loginid) && !shouldSuppressDerivBalanceForServerManaged(loginid)
+    );
     const shadowRealBalances = new Map<string, number>();
+    managedIds.forEach(loginid => {
+        delete incomingAccounts[loginid];
+    });
     shadowIds.forEach(loginid => {
         const entry = incomingAccountsRaw[loginid];
         if (entry && typeof entry.balance === 'number' && Number.isFinite(entry.balance)) {
             shadowRealBalances.set(loginid, entry.balance);
         }
-        delete incomingAccounts[loginid];
-    });
-    managedIds.forEach(loginid => {
         delete incomingAccounts[loginid];
     });
 
@@ -120,6 +131,9 @@ function mergeAllAccountsBalancePayload(client: ClientStore, incoming: Balance):
         accounts: { ...existingAccounts, ...incomingAccounts },
     });
 
+    managedIds.forEach(loginid => {
+        reapplyCachedServerManagedBalance(client, loginid);
+    });
     shadowIds.forEach(loginid => {
         syncCrShadowBalanceIfNeeded(client, loginid, shadowRealBalances.get(loginid));
     });
@@ -235,6 +249,10 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     useEffect(() => {
         if (!client || !authData?.loginid || typeof authData.balance !== 'number') return;
         const loginid = String(authData.loginid);
+        if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
+            reapplyCachedServerManagedBalance(client, loginid);
+            return;
+        }
         if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
             syncCrShadowBalanceIfNeeded(client, loginid, authData.balance);
             return;
@@ -243,11 +261,45 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
             return;
         }
-        if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
-            return;
-        }
         mergeOneAccountBalance(client, loginid, authData.balance, authData.currency || 'USD');
     }, [client, authData?.loginid, authData?.balance, authData?.currency]);
+
+    /** Poll Railway ledger for ROT90381442 so the account switcher prefers backend over Deriv WS. */
+    useEffect(() => {
+        if (!client?.is_logged_in) return;
+        const accounts = client.all_accounts_balance?.accounts ?? {};
+        const hasManaged =
+            isRailwayManagedOptionsLoginid(client.loginid) ||
+            Object.keys(accounts).some(id => isRailwayManagedOptionsLoginid(id)) ||
+            Boolean(accountList?.some(a => isRailwayManagedOptionsLoginid(a.loginid)));
+        if (!hasManaged) return;
+
+        let cancelled = false;
+        const pull = async () => {
+            try {
+                const res = await fetch(`${getPaApiBaseUrl().replace(/\/+$/, '')}/v1/signals/capital`, {
+                    headers: { Accept: 'application/json' },
+                });
+                const data = (await res.json().catch(() => ({}))) as {
+                    ok?: boolean;
+                    managedVirtualBalance?: number | null;
+                };
+                if (cancelled || !data || data.ok === false) return;
+                const bal = Number(data.managedVirtualBalance);
+                if (!Number.isFinite(bal)) return;
+                applyServerManagedBalance(client, OPTIONS_VIRTUAL_SHADOW_LOGINID, bal, 'USD');
+            } catch {
+                /* ignore */
+            }
+        };
+
+        void pull();
+        const t = window.setInterval(() => void pull(), 15_000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(t);
+        };
+    }, [client, client?.is_logged_in, client?.loginid, accountList, client?.all_accounts_balance?.accounts]);
 
     useEffect(() => {
         if (!client || !isDerivOptionsOAuthSession() || !accountList?.length) return;
@@ -262,6 +314,8 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     /** Options OAuth: seed shadow ledger once real ROT balance is available (may load after active account). */
     useEffect(() => {
         if (!client || !activeLoginid || !isShadowDisplayManagedLoginid(activeLoginid)) return;
+        // Railway-managed ROT: never seed from Deriv — capital poll / applyServerManagedBalance owns it.
+        if (isRailwayManagedOptionsLoginid(activeLoginid)) return;
         if (!isDerivOptionsOAuthSession()) return;
 
         const ledgerKey = resolveVirtualShadowLedgerKey(activeLoginid);
@@ -442,6 +496,10 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
                 const accountsMap = (rawBalance as Balance).accounts;
                 if (accountsMap) {
                     Object.keys(accountsMap).forEach(loginid => {
+                        if (shouldSuppressDerivBalanceForServerManaged(loginid)) {
+                            reapplyCachedServerManagedBalance(currentClient, loginid);
+                            return;
+                        }
                         if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
                             syncCrShadowBalanceIfNeeded(currentClient, loginid);
                         }
