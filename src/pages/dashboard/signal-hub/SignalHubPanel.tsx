@@ -13,6 +13,7 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { useDisplayCurrencyStore } from '@/hooks/useDisplayCurrencyStore';
 import { useStore } from '@/hooks/useStore';
 import { readAccountBalanceEntry } from '@/utils/account-balance-display';
+import { applyServerManagedBalance } from '@/utils/applyServerManagedBalance';
 import {
     ensureSignalsRunning,
     fetchMySignalSubscription,
@@ -167,9 +168,21 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
     const tpHit = Boolean(subscription?.tpHitAt);
     const tpAmount = Number(subscription?.sessionTakeProfit ?? 4);
 
-    // Same live balance source as the header account switcher (`client.all_accounts_balance`).
+    // Prefer Railway-managed balance when server says so (same source as header switcher patch).
     const balanceLoginid = subscription?.loginid || realLoginid || activeLoginid || null;
-    const { balance: uiBalance, currency: uiCurrency } = readAccountBalanceEntry(client, balanceLoginid);
+    const liveEntry = readAccountBalanceEntry(client, balanceLoginid);
+    const useServerBal =
+        Boolean(subscription?.serverBalance) &&
+        subscription?.balance != null &&
+        Number.isFinite(Number(subscription.balance)) &&
+        String(subscription.loginid ?? '')
+            .trim()
+            .toUpperCase() ===
+            String(balanceLoginid ?? '')
+                .trim()
+                .toUpperCase();
+    const uiBalance = useServerBal ? Number(subscription!.balance) : liveEntry.balance;
+    const uiCurrency = useServerBal ? subscription?.balanceCurrency || liveEntry.currency || 'USD' : liveEntry.currency;
     const balanceLabel = balanceLoginid ? display_currency.formatCommaBalance(uiBalance, uiCurrency) : null;
     const recoveryLine = useMemo(() => formatEngineRecoveryLine(snapshot), [snapshot]);
 
@@ -215,10 +228,23 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                 setContinueAfterTp(me.subscriber.continueAfterTp);
                 writeContinueAfterTpPref(me.subscriber.continueAfterTp);
             }
+            if (
+                me.subscriber?.serverBalance &&
+                me.subscriber.loginid &&
+                me.subscriber.balance != null &&
+                Number.isFinite(Number(me.subscriber.balance))
+            ) {
+                applyServerManagedBalance(
+                    client,
+                    me.subscriber.loginid,
+                    Number(me.subscriber.balance),
+                    me.subscriber.balanceCurrency ?? 'USD'
+                );
+            }
         } catch {
             /* feed poll still works */
         }
-    }, [loggedIn]);
+    }, [loggedIn, client]);
 
     const loadFeed = useCallback(async () => {
         try {
@@ -472,14 +498,32 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                         {executions.slice(0, 6).map((ex, i) => {
                             const staleBulk = typeof ex.error === 'string' && /bulk response/i.test(ex.error);
                             const isOk = ex.status === 'ok';
+                            const outcome =
+                                isOk && ex.won === true
+                                    ? 'Won'
+                                    : isOk && ex.won === false
+                                      ? 'Lost'
+                                      : isOk
+                                        ? 'Open'
+                                        : null;
+                            const outcomeClass =
+                                ex.won === true
+                                    ? ' signal-hub-panel__outcome--won'
+                                    : ex.won === false
+                                      ? ' signal-hub-panel__outcome--lost'
+                                      : '';
                             return (
                                 <div key={`${ex.at}-${i}`} className='signal-hub-panel__row'>
                                     <div className='signal-hub-panel__row-main'>
                                         <span className='signal-hub-panel__badge signal-hub-panel__badge--with-status'>
                                             <span>{String(ex.contractType ?? 'BUY')}</span>
-                                            {isOk ? (
-                                                <span className='signal-hub-panel__tick' title='ok' aria-label='ok'>
-                                                    ✓
+                                            {outcome ? (
+                                                <span
+                                                    className={`signal-hub-panel__outcome${outcomeClass}`}
+                                                    title={outcome}
+                                                    aria-label={outcome}
+                                                >
+                                                    {outcome}
                                                 </span>
                                             ) : (
                                                 <span className='signal-hub-panel__status-text'>
@@ -488,9 +532,16 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                                                 </span>
                                             )}
                                         </span>
-                                        <span className='signal-hub-panel__meta'>
+                                        <span className={`signal-hub-panel__meta${outcomeClass}`}>
                                             {isOk
-                                                ? `contract #${ex.contractId ?? '—'}`
+                                                ? [
+                                                      ex.stake != null ? `$${Number(ex.stake).toFixed(2)}` : null,
+                                                      ex.pnl != null && ex.won != null
+                                                          ? `${ex.pnl >= 0 ? '+' : ''}$${Number(ex.pnl).toFixed(2)}`
+                                                          : null,
+                                                  ]
+                                                      .filter(Boolean)
+                                                      .join(' · ') || '—'
                                                 : staleBulk
                                                   ? 'Stale bulk-path error — ignore after redeploy'
                                                   : ex.error || 'no detail'}
