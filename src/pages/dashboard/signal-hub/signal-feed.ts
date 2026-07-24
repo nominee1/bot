@@ -23,6 +23,9 @@ export type TSignalsFeedResponse = {
     ok: boolean;
     error?: string;
     items?: TPublicFlipaaSignal[];
+    /** Server count of feed signals in the last feedTradeWindowHours. */
+    feedTradeCount?: number;
+    feedTradeWindowHours?: number;
     enabled?: boolean;
     started?: boolean;
     running?: boolean;
@@ -139,8 +142,18 @@ async function parseJsonResponse<T extends { ok?: boolean; error?: string }>(res
     }
 }
 
-export async function fetchPublicSignalsFeed(limit = 30): Promise<TSignalsFeedResponse> {
-    const url = `${signalsBaseUrl()}/v1/signals/recent?limit=${Math.min(100, Math.max(1, limit))}`;
+/** Max window the Railway `/recent` count accepts (hours). */
+export const FEED_TRADE_WINDOW_HOURS_MAX = 168;
+
+export async function fetchPublicSignalsFeed(
+    limit = 30,
+    feedHours = FEED_TRADE_WINDOW_HOURS_MAX
+): Promise<TSignalsFeedResponse> {
+    const hours = Math.min(
+        FEED_TRADE_WINDOW_HOURS_MAX,
+        Math.max(1, Math.floor(Number(feedHours) || FEED_TRADE_WINDOW_HOURS_MAX))
+    );
+    const url = `${signalsBaseUrl()}/v1/signals/recent?limit=${Math.min(100, Math.max(1, limit))}&feedHours=${hours}`;
     const res = await fetch(url);
     const data = await parseJsonResponse<TSignalsFeedResponse>(res);
     if (!res.ok || !data.ok) {
@@ -313,8 +326,16 @@ export function formatSignalLabel(signal: TPublicFlipaaSignal): string {
     const type = String(signal.contract_type || '').toUpperCase();
     if (type === 'CALL') return 'RISE';
     if (type === 'PUT') return 'FALL';
+    if (type === 'CALLE') return 'RISE =';
+    if (type === 'PUTE') return 'FALL =';
+    if (type === 'RUNHIGH') return 'ONLY UPS';
+    if (type === 'RUNLOW') return 'ONLY DOWNS';
     if (type === 'RANGE') return 'STAYS BETWEEN';
     if (type === 'UPORDOWN') return 'GOES OUTSIDE';
+    if (type === 'DIGITMATCH') {
+        const barrier = signal.barrier != null && String(signal.barrier).length ? ` ${signal.barrier}` : '';
+        return `MATCH${barrier}`.trim();
+    }
     const barrier = signal.barrier != null && String(signal.barrier).length ? ` ${signal.barrier}` : '';
     return `${type.replace(/^DIGIT/, '')}${barrier}`.trim();
 }

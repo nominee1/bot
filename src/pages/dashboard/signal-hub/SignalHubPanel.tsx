@@ -18,7 +18,6 @@ import {
     ensureSignalsRunning,
     fetchMySignalSubscription,
     fetchPublicSignalsFeed,
-    formatEngineRecoveryLine,
     formatEngineStrategyLine,
     formatSignalLabel,
     isSignalsAuthenticated,
@@ -148,6 +147,8 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
     const display_currency = useDisplayCurrencyStore();
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [signals, setSignals] = useState<TPublicFlipaaSignal[]>([]);
+    const [feedTradeCount, setFeedTradeCount] = useState(0);
+    const [feedTradeWindowHours, setFeedTradeWindowHours] = useState(168);
     const [running, setRunning] = useState(false);
     const [feedError, setFeedError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -184,7 +185,17 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
     const uiBalance = useServerBal ? Number(subscription!.balance) : liveEntry.balance;
     const uiCurrency = useServerBal ? subscription?.balanceCurrency || liveEntry.currency || 'USD' : liveEntry.currency;
     const balanceLabel = balanceLoginid ? display_currency.formatCommaBalance(uiBalance, uiCurrency) : null;
-    const recoveryLine = useMemo(() => formatEngineRecoveryLine(snapshot), [snapshot]);
+    const recoveryStats = useMemo(() => {
+        const rc = Number(snapshot?.rcCapital);
+        const maxLosses = Number(snapshot?.maxSessionLossStreak);
+        return {
+            capital: Number.isFinite(rc) ? rc : 0,
+            consecutiveLosses: Number.isFinite(maxLosses) && maxLosses > 0 ? Math.floor(maxLosses) : 0,
+            totalTrades: feedTradeCount,
+        };
+    }, [snapshot, feedTradeCount]);
+
+    const showRecoveryStats = Boolean(snapshot) || feedTradeCount > 0;
 
     const openDenaraLogin = useCallback(() => {
         onClose?.();
@@ -254,7 +265,14 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                 return;
             }
             setFeedError(null);
-            setSignals(data.items ?? []);
+            const items = data.items ?? [];
+            setSignals(items);
+            if (typeof data.feedTradeCount === 'number' && Number.isFinite(data.feedTradeCount)) {
+                setFeedTradeCount(Math.max(0, Math.floor(data.feedTradeCount)));
+            }
+            if (typeof data.feedTradeWindowHours === 'number' && Number.isFinite(data.feedTradeWindowHours)) {
+                setFeedTradeWindowHours(Math.max(1, Math.floor(data.feedTradeWindowHours)));
+            }
             setRunning(Boolean(data.running));
             if (data.snapshot && typeof data.snapshot === 'object') {
                 setSnapshot(data.snapshot as TEngineSnapshot);
@@ -513,24 +531,13 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                                       ? ' signal-hub-panel__outcome--lost'
                                       : '';
                             return (
-                                <div key={`${ex.at}-${i}`} className='signal-hub-panel__row'>
+                                <div
+                                    key={`${ex.at}-${i}`}
+                                    className='signal-hub-panel__row signal-hub-panel__row--exec'
+                                >
                                     <div className='signal-hub-panel__row-main'>
-                                        <span className='signal-hub-panel__badge signal-hub-panel__badge--with-status'>
-                                            <span>{String(ex.contractType ?? 'BUY')}</span>
-                                            {outcome ? (
-                                                <span
-                                                    className={`signal-hub-panel__outcome${outcomeClass}`}
-                                                    title={outcome}
-                                                    aria-label={outcome}
-                                                >
-                                                    {outcome}
-                                                </span>
-                                            ) : (
-                                                <span className='signal-hub-panel__status-text'>
-                                                    · {ex.status}
-                                                    {staleBulk ? ' (old)' : ''}
-                                                </span>
-                                            )}
+                                        <span className='signal-hub-panel__badge'>
+                                            {String(ex.contractType ?? 'BUY')}
                                         </span>
                                         <span className={`signal-hub-panel__meta${outcomeClass}`}>
                                             {isOk
@@ -547,6 +554,20 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                                                   : ex.error || 'no detail'}
                                         </span>
                                     </div>
+                                    {outcome ? (
+                                        <span
+                                            className={`signal-hub-panel__outcome${outcomeClass}`}
+                                            title={outcome}
+                                            aria-label={outcome}
+                                        >
+                                            {outcome}
+                                        </span>
+                                    ) : (
+                                        <span className='signal-hub-panel__status-text'>
+                                            {ex.status}
+                                            {staleBulk ? ' (old)' : ''}
+                                        </span>
+                                    )}
                                 </div>
                             );
                         })}
@@ -561,14 +582,26 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                         {formatEngineStrategyLine(snapshot)}
                     </span>
                 </div>
-                {recoveryLine ? (
-                    <div className='signal-hub-panel__strategy signal-hub-panel__strategy--rc'>
-                        <span className='signal-hub-panel__strategy-label'>Capital</span>
-                        <span
-                            className='signal-hub-panel__strategy-value'
-                            title='Minimum balance to cover the longest martingale losing streak'
-                        >
-                            {recoveryLine}
+                {showRecoveryStats ? (
+                    <div
+                        className='signal-hub-panel__strategy signal-hub-panel__strategy--rc'
+                        title={`Recommended capital covers the longest martingale losing streak. Total trades = feed signals in the last ${feedTradeWindowHours}h. Consecutive losses is the longest loss streak this session.`}
+                    >
+                        <span className='signal-hub-panel__rc-stat'>
+                            <span className='signal-hub-panel__strategy-label'>Rc</span>
+                            <span className='signal-hub-panel__strategy-value'>
+                                ${recoveryStats.capital.toFixed(2)}
+                            </span>
+                        </span>
+                        <span className='signal-hub-panel__rc-stat'>
+                            <span className='signal-hub-panel__strategy-label'>
+                                Total trades ({feedTradeWindowHours}h)
+                            </span>
+                            <span className='signal-hub-panel__strategy-value'>{recoveryStats.totalTrades}</span>
+                        </span>
+                        <span className='signal-hub-panel__rc-stat'>
+                            <span className='signal-hub-panel__strategy-label'>Consec. losses</span>
+                            <span className='signal-hub-panel__strategy-value'>{recoveryStats.consecutiveLosses}</span>
                         </span>
                     </div>
                 ) : null}
@@ -591,10 +624,6 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                             <div className='signal-hub-panel__row-main'>
                                 <span className='signal-hub-panel__badge'>{formatSignalLabel(signal)}</span>
                                 <span className='signal-hub-panel__meta'>
-                                    {signal.blend_label
-                                        ? `${signal.blend_label}${signal.blend_risk ? ` · ${signal.blend_risk}` : ''}`
-                                        : 'Fury AI'}
-                                    {' · '}
                                     {signal.market} · {signal.duration}t · ${Number(signal.stake).toFixed(2)}
                                     {signal.martingale_multiplier != null && Number(signal.martingale_multiplier) > 1
                                         ? ` · ×${Number(signal.martingale_multiplier).toFixed(2)}`
