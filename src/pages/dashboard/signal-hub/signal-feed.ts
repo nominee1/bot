@@ -323,21 +323,74 @@ export async function ensureSignalsRunning(): Promise<TSignalsFeedResponse> {
 }
 
 export function formatSignalLabel(signal: TPublicFlipaaSignal): string {
+    const key = String(signal.strategy_key || '')
+        .trim()
+        .toLowerCase();
+    const barrier = signal.barrier != null && String(signal.barrier).length ? ` ${signal.barrier}` : '';
+    const duration = Number(signal.duration);
+
+    // Prefer strategy_key — CALL/PUT are shared by Rise/Fall and Higher/Lower.
+    switch (key) {
+        case 'only_up':
+            return 'ONLY UPS';
+        case 'only_down':
+            return 'ONLY DOWNS';
+        case 'rise':
+            return 'RISE';
+        case 'fall':
+            return 'FALL';
+        case 'rise_equals':
+            return 'RISE =';
+        case 'fall_equals':
+            return 'FALL =';
+        case 'higher':
+            return Number.isFinite(duration) && duration > 0 ? `HIGHER ${duration}t` : 'HIGHER';
+        case 'lower':
+            return Number.isFinite(duration) && duration > 0 ? `LOWER ${duration}t` : 'LOWER';
+        case 'match':
+            return `MATCHES${barrier}`.trim();
+        case 'over':
+            return `OVER${barrier}`.trim();
+        case 'under':
+            return `UNDER${barrier}`.trim();
+        case 'even':
+            return 'EVEN';
+        case 'odd':
+            return 'ODD';
+        case 'touch':
+            return 'TOUCH';
+        case 'notouch':
+            return 'NO TOUCH';
+        case 'stays_between':
+            return 'STAYS BETWEEN';
+        case 'goes_outside':
+            return 'GOES OUTSIDE';
+        default:
+            break;
+    }
+
     const type = String(signal.contract_type || '').toUpperCase();
-    if (type === 'CALL') return 'RISE';
-    if (type === 'PUT') return 'FALL';
-    if (type === 'CALLE') return 'RISE =';
-    if (type === 'PUTE') return 'FALL =';
     if (type === 'RUNHIGH') return 'ONLY UPS';
     if (type === 'RUNLOW') return 'ONLY DOWNS';
+    if (type === 'CALLE') return 'RISE =';
+    if (type === 'PUTE') return 'FALL =';
+    if (type === 'ONETOUCH') return 'TOUCH';
+    if (type === 'NOTOUCH') return 'NO TOUCH';
     if (type === 'RANGE') return 'STAYS BETWEEN';
     if (type === 'UPORDOWN') return 'GOES OUTSIDE';
-    if (type === 'DIGITMATCH') {
-        const barrier = signal.barrier != null && String(signal.barrier).length ? ` ${signal.barrier}` : '';
-        return `MATCH${barrier}`.trim();
+    if (type === 'DIGITMATCH') return `MATCHES${barrier}`.trim();
+    if (type === 'DIGITOVER') return `OVER${barrier}`.trim();
+    if (type === 'DIGITUNDER') return `UNDER${barrier}`.trim();
+    if (type === 'DIGITEVEN') return 'EVEN';
+    if (type === 'DIGITODD') return 'ODD';
+    // Higher/Lower also use CALL/PUT — prefer Higher when duration ≥ 5 ticks.
+    if (type === 'CALL') {
+        return Number.isFinite(duration) && duration >= 5 ? `HIGHER ${duration}t` : 'RISE';
     }
-    const barrier = signal.barrier != null && String(signal.barrier).length ? ` ${signal.barrier}` : '';
-    return `${type.replace(/^DIGIT/, '')}${barrier}`.trim();
+    if (type === 'PUT') {
+        return Number.isFinite(duration) && duration >= 5 ? `LOWER ${duration}t` : 'FALL';
+    }
+    return `${type.replace(/^DIGIT/, '')}${barrier}`.trim() || 'SIGNAL';
 }
 
 export function formatEngineStrategyLine(
