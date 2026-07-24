@@ -148,7 +148,6 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [signals, setSignals] = useState<TPublicFlipaaSignal[]>([]);
     const [feedTradeCount, setFeedTradeCount] = useState(0);
-    const [feedTradeWindowHours, setFeedTradeWindowHours] = useState(168);
     const [running, setRunning] = useState(false);
     const [feedError, setFeedError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -269,9 +268,6 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
             setSignals(items);
             if (typeof data.feedTradeCount === 'number' && Number.isFinite(data.feedTradeCount)) {
                 setFeedTradeCount(Math.max(0, Math.floor(data.feedTradeCount)));
-            }
-            if (typeof data.feedTradeWindowHours === 'number' && Number.isFinite(data.feedTradeWindowHours)) {
-                setFeedTradeWindowHours(Math.max(1, Math.floor(data.feedTradeWindowHours)));
             }
             setRunning(Boolean(data.running));
             if (data.snapshot && typeof data.snapshot === 'object') {
@@ -585,7 +581,7 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                 {showRecoveryStats ? (
                     <div
                         className='signal-hub-panel__strategy signal-hub-panel__strategy--rc'
-                        title={`Recommended capital covers the longest martingale losing streak. Total trades = feed signals in the last ${feedTradeWindowHours}h. Consecutive losses is the longest loss streak this session.`}
+                        title={`Recommended capital covers the longest martingale losing streak. Total trades includes live feed signals plus history archived before the 48h purge. Consecutive losses is the longest loss streak this session.`}
                     >
                         <span className='signal-hub-panel__rc-stat'>
                             <span className='signal-hub-panel__strategy-label'>Rc</span>
@@ -594,9 +590,7 @@ export default observer(function SignalHubPanel({ onClose }: Props) {
                             </span>
                         </span>
                         <span className='signal-hub-panel__rc-stat'>
-                            <span className='signal-hub-panel__strategy-label'>
-                                Total trades ({feedTradeWindowHours}h)
-                            </span>
+                            <span className='signal-hub-panel__strategy-label'>Total trades</span>
                             <span className='signal-hub-panel__strategy-value'>{recoveryStats.totalTrades}</span>
                         </span>
                         <span className='signal-hub-panel__rc-stat'>
