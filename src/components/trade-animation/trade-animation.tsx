@@ -5,7 +5,7 @@ import ContractResultOverlay from '@/components/contract-result-overlay';
 import { contract_stages } from '@/constants/contract-stage';
 import { useStore } from '@/hooks/useStore';
 import { LabelPairedPlayLgFillIcon, LabelPairedSquareLgFillIcon } from '@deriv/quill-icons/LabelPaired';
-import { Localize } from '@deriv-com/translations';
+import { Localize, localize } from '@deriv-com/translations';
 import { rudderStackSendRunBotEvent } from '../../analytics/rudderstack-common-events';
 import Button from '../shared_ui/button';
 import CircularWrapper from './circular-wrapper';
@@ -17,7 +17,7 @@ type TTradeAnimation = {
 };
 
 const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnimation) => {
-    const { dashboard, run_panel, summary_card, ready_strategy_panel } = useStore();
+    const { dashboard, run_panel, summary_card, ready_strategy_panel, ui } = useStore();
     const { client } = useStore();
     const { active_tab } = dashboard;
     const { is_contract_completed, profit } = summary_card;
@@ -33,6 +33,8 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     const cashier_validation = account_status?.cashier_validation;
     const [shouldDisable, setShouldDisable] = React.useState(false);
     const is_unavailable_for_payment_agent = cashier_validation?.includes('WithdrawServiceUnavailableForPA');
+    // Read from store instance during render so MobX tracks the observable reliably.
+    const is_fast = ui.trade_execution_mode === 'fast';
 
     // perform self-exclusion checks which will be stored under the self-exclusion-store
     React.useEffect(() => {
@@ -87,9 +89,18 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
         };
     }, [is_stop_button_visible]);
     const show_overlay = should_show_overlay && is_contract_completed;
+    // Only swap to progress while the bot is actually running / has an open contract.
+    // Using contract_stage > 0 hid the toggle after runs when stage stayed stale.
+    const show_progress = is_stop_button_visible;
 
     const TAB_NAMES = ['dashboard', 'bot_builder', 'charts', 'dtrader'] as const;
     const getTabName = (index: number) => TAB_NAMES[index];
+
+    const onToggleExecutionMode = (event: React.MouseEvent | React.KeyboardEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        ui.toggleTradeExecutionMode();
+    };
 
     return (
         <div className={classNames('animation__wrapper', className)}>
@@ -101,7 +112,11 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                 onClick={() => {
                     setShouldDisable(true);
                     if (is_stop_button_visible) {
-                        onStopBotClick();
+                        if (ready_strategy_panel.is_strategy_running && ready_strategy_panel.stop_strategy_fn) {
+                            ready_strategy_panel.invokeStopStrategy();
+                        } else {
+                            onStopBotClick();
+                        }
                         return;
                     }
                     if (ready_strategy_panel.start_strategy_fn) {
@@ -117,25 +132,60 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
             >
                 {button_props.text}
             </Button>
-            <div
-                className={classNames('animation__container', className, {
-                    'animation--running': contract_stage > 0,
-                    'animation--completed': show_overlay,
-                })}
-            >
-                {show_overlay && <ContractResultOverlay profit={profit} />}
-                <span className='animation__text'>
-                    <ContractStageText contract_stage={contract_stage} />
-                </span>
-                <div className='animation__progress'>
-                    <div className='animation__progress-line'>
-                        <div className={`animation__progress-bar animation__progress-${contract_stage}`} />
+            {show_progress ? (
+                <div
+                    className={classNames('animation__container', className, {
+                        'animation--running': contract_stage > 0,
+                        'animation--completed': show_overlay,
+                    })}
+                >
+                    {show_overlay && <ContractResultOverlay profit={profit} />}
+                    <span className='animation__text'>
+                        <ContractStageText contract_stage={contract_stage} />
+                    </span>
+                    <div className='animation__progress'>
+                        <div className='animation__progress-line'>
+                            <div className={`animation__progress-bar animation__progress-${contract_stage}`} />
+                        </div>
+                        {status_classes.map((status_class, i) => (
+                            <CircularWrapper key={`status_class-${status_class}-${i}`} className={status_class} />
+                        ))}
                     </div>
-                    {status_classes.map((status_class, i) => (
-                        <CircularWrapper key={`status_class-${status_class}-${i}`} className={status_class} />
-                    ))}
                 </div>
-            </div>
+            ) : (
+                <button
+                    type='button'
+                    className={classNames('animation__execution', {
+                        'animation__execution--fast': is_fast,
+                        'animation__execution--normal': !is_fast,
+                    })}
+                    onClick={onToggleExecutionMode}
+                    aria-pressed={is_fast}
+                    aria-label={localize('Toggle fast execution mode')}
+                    title={
+                        is_fast
+                            ? localize('Fast: minimal delays between bot actions')
+                            : localize('Normal: paced execution with short delays')
+                    }
+                >
+                    <div className='animation__execution-copy'>
+                        <span className='animation__execution-label'>
+                            <Localize i18n_default_text='Execution' />
+                        </span>
+                        <span className='animation__execution-mode'>
+                            {is_fast ? localize('FAST') : localize('NORMAL')}
+                        </span>
+                    </div>
+                    <span
+                        className={classNames('animation__execution-toggle', {
+                            'animation__execution-toggle--on': is_fast,
+                        })}
+                        aria-hidden
+                    >
+                        <span className='animation__execution-toggle-thumb' />
+                    </span>
+                </button>
+            )}
         </div>
     );
 });

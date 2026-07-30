@@ -1,5 +1,6 @@
 import { applyMiddleware, createStore } from 'redux';
 import { thunk } from 'redux-thunk';
+import { isFastTradeExecution } from '@/utils/trade-execution-mode';
 import { localize } from '@deriv-com/translations';
 import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
@@ -37,28 +38,67 @@ const watchDuring = store =>
  * which leads to the same problem we try to solve. So prevTick is isolated
  */
 let prevTick;
+/** Allows one same-tick pass after a cycle ends (sell → next buy) without busy-looping. */
+let allowSameTickPass = false;
+
+/**
+ * Fast: skip tick gating (react to proposalsReady / openContract / sell immediately).
+ * Normal: one evaluation per market tick.
+ * Matches binarytool / mkorean watchScope behavior.
+ */
 const watchScope = ({ store, stopScope, passScope, passFlag }) => {
     // in case watch is called after stop is fired
     if (store.getState().scope === stopScope) {
+        allowSameTickPass = true;
         return Promise.resolve(false);
     }
+
     return new Promise(resolve => {
+        let settled = false;
+        const finish = result => {
+            if (settled) return;
+            settled = true;
+            unsubscribe();
+            if (result === false) {
+                allowSameTickPass = true;
+            } else {
+                allowSameTickPass = false;
+            }
+            resolve(result);
+        };
+
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
-            if (newState.newTick === prevTick) return;
-            prevTick = newState.newTick;
+            if (!isFastTradeExecution()) {
+                if (newState.newTick === prevTick) return;
+                prevTick = newState.newTick;
+            }
 
             if (newState.scope === passScope && newState[passFlag]) {
-                unsubscribe();
-                resolve(true);
+                prevTick = newState.newTick;
+                finish(true);
+                return;
             }
 
             if (newState.scope === stopScope) {
-                unsubscribe();
-                resolve(false);
+                finish(false);
             }
         });
+
+        // Start() finishes before watch() subscribes — wake immediately in fast mode when ready.
+        // Same-tick pass is allowed once after sell; further attempts wait for a store update/tick.
+        if (isFastTradeExecution()) {
+            const ready = store.getState();
+            if (ready.scope === stopScope) {
+                finish(false);
+            } else if (ready.scope === passScope && ready[passFlag]) {
+                if (allowSameTickPass || ready.newTick !== prevTick) {
+                    prevTick = ready.newTick;
+                    finish(true);
+                }
+            }
+        }
     });
 };
 
@@ -114,23 +154,39 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.accountInfo = api_base.account_info;
         this.token = api_base.token;
         return new Promise(resolve => {
-            // Try to recover from a situation where API doesn't give us a correct response on
-            // "proposal_open_contract" which would make the bot run forever. When there's a "sell"
-            // event, wait a couple seconds for the API to give us the correct "proposal_open_contract"
-            // response, if there's none after x seconds. Send an explicit request, which _should_
-            // solve the issue. This is a backup!
+            // Fast: close the cycle on sell transaction immediately (don't wait for proposal_open_contract).
+            // Normal: keep the legacy recovery timeout if POC never arrives.
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
-                if (data.msg_type === 'transaction' && data.transaction.action === 'sell') {
-                    this.transaction_recovery_timeout = setTimeout(() => {
-                        const { contract } = this.data;
-                        const is_same_contract = contract.contract_id === data.transaction.contract_id;
-                        const is_open_contract = contract.status === 'open';
-                        if (is_same_contract && is_open_contract) {
-                            doUntilDone(() => {
-                                api_base.api.send({ proposal_open_contract: 1, contract_id: contract.contract_id });
-                            }, ['PriceMoved']);
+                if (data.msg_type === 'transaction' && data.transaction?.action === 'sell') {
+                    if (isFastTradeExecution()) {
+                        if (this.expectedContractId(data.transaction.contract_id)) {
+                            clearTimeout(this.transaction_recovery_timeout);
+                            this.handleFastSellTransaction(data.transaction);
+                            doUntilDone(
+                                () =>
+                                    api_base.api.send({
+                                        proposal_open_contract: 1,
+                                        contract_id: data.transaction.contract_id,
+                                    }),
+                                ['PriceMoved']
+                            );
                         }
-                    }, 1500);
+                    } else {
+                        clearTimeout(this.transaction_recovery_timeout);
+                        this.transaction_recovery_timeout = setTimeout(() => {
+                            const { contract } = this.data;
+                            const is_same_contract = contract.contract_id === data.transaction.contract_id;
+                            const is_open_contract = contract.status === 'open';
+                            if (is_same_contract && is_open_contract) {
+                                doUntilDone(() => {
+                                    api_base.api.send({
+                                        proposal_open_contract: 1,
+                                        contract_id: contract.contract_id,
+                                    });
+                                }, ['PriceMoved']);
+                            }
+                        }, 1500);
+                    }
                 }
                 resolve();
             });
