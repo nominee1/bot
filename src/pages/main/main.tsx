@@ -1,11 +1,27 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import classNames from 'classnames';
+import {
+    Brain,
+    Calculator,
+    Copy,
+    Hand,
+    Heart,
+    Layers,
+    LayoutDashboard,
+    LineChart,
+    Package,
+    Puzzle,
+    Rocket,
+    Target,
+    Timer,
+    Users,
+    Wallet,
+    Wand2,
+    Zap,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
 import FloatingRiskDisclaimer from '@/components/floating-risk-disclaimer/floating-risk-disclaimer';
-import { AutoStrategyHeartIcon } from '@/components/icons/auto-strategy-heart-icon';
-import { DepositSectionIcon } from '@/components/icons/deposit-section-icon';
-import { SpeedBotTabIcon } from '@/components/icons/speed-bot-tab-icon';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import DesktopWrapper from '@/components/shared_ui/desktop-wrapper';
 import Dialog from '@/components/shared_ui/dialog';
@@ -24,6 +40,15 @@ import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
+
+/** Lucide tab icons — same bundle / sizing as dbtraders. */
+const TAB_ICON_PROPS = {
+    size: 24,
+    strokeWidth: 2.35,
+    'aria-hidden': true,
+    color: 'currentColor',
+} as const;
+
 // Lazy modules
 const AviatorR = lazy(() => import('../aaviatorR/AviatorR'));
 const ViewToggle = lazy(() => import('../aaa/ViewToggle'));
@@ -43,22 +68,8 @@ const Multi = lazy(() => import('../aaabc/multi'));
 // const RotTokenAudit = lazy(() => import('../rot-token-audit'));
 const ManualTrader = lazy(() => import('../manualtrader/ManualTrader'));
 const SpeedBot = lazy(() => import('../aaaspeed/Speed'));
-// Free Bots tab — re-enable when catalog is ready (see src/pages/aaabots/)
-// const FreeBots = lazy(() => import('../aaabots'));
+const FreeBots = lazy(() => import('../aaabots'));
 const Withdrawal = lazy(() => import('../withdrawal'));
-
-// Simple emoji component for consistent a11y/sizing
-const Emoji: React.FC<{ symbol: string; label?: string; size?: number }> = ({ symbol, label, size = 24 }) => (
-    <span
-        className='emoji'
-        role='img'
-        aria-label={label || ''}
-        aria-hidden={label ? 'false' : 'true'}
-        style={{ fontSize: `${size}px`, lineHeight: 1, display: 'inline-block' }}
-    >
-        {symbol}
-    </span>
-);
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -94,9 +105,10 @@ const AppWrapper = observer(() => {
         'dashboard',
         'bot_builder',
         'Instant Fill',
-        'DTrader',
+        'free_bots',
         'Asians',
         'Bulk Trader',
+        'DTrader',
         'Auto Strategy',
         'Manual Trader',
         'Speed Bot',
@@ -117,12 +129,19 @@ const AppWrapper = observer(() => {
         tab_value = location.hash?.split('#')[1];
         if (!tab_value) return tab;
         if (tab_value === 'Bulk Buy') return hash.indexOf('Bulk Trader');
+        if (tab_value === 'bot_hacker' || tab_value === 'Bot Hacker' || tab_value === 'Free Bots') {
+            return hash.indexOf('free_bots');
+        }
         return Number(hash.indexOf(String(tab_value)));
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Connection guard: Blockly bot only. Ready strategies (Flipaa, Double Double, Manual Trader)
-    // manage their own reconnect via tradingSocketGeneration — do not hard-stop them here.
+    // Connection guard: Blockly / free bots / Bot Settings only.
+    // Flipaa & other ready strategies keep isRunning across socket swaps and resubscribe —
+    // they never call stopBot on CLOSED. Blockly used to hard-stop after 3s, but Options OTP
+    // reconnect (close → init(true) → new OTP WS) routinely takes longer, which killed free-bot
+    // runs and showed "You're back online". Match Flipaa: stay running while api_base reconnects;
+    // only stop after a long outage.
     useEffect(() => {
         if (connectionStatus === CONNECTION_STATUS.OPENED) {
             setWebSocketState(true);
@@ -138,10 +157,24 @@ const AppWrapper = observer(() => {
             return;
         }
 
-        clear();
-        stopBot();
-        api_base.setIsRunning(false);
-        setWebSocketState(false);
+        // OTP reconnect + authorize often exceeds 3–15s; keep the run alive like Flipaa.
+        const reconnect_grace_ms = 60_000;
+        const stop_timer = window.setTimeout(() => {
+            if (document.getElementById('db-animation__stop-button') === null) {
+                return;
+            }
+            // Reconnected in the meantime (status may lag behind the live socket).
+            if (api_base.api?.connection?.readyState === 1) {
+                setWebSocketState(true);
+                return;
+            }
+            clear();
+            stopBot();
+            api_base.setIsRunning(false);
+            setWebSocketState(false);
+        }, reconnect_grace_ms);
+
+        return () => window.clearTimeout(stop_timer);
     }, [clear, connectionStatus, setWebSocketState, stopBot]);
 
     // Instant Fill / Auto Strategy / Smart Trader / Manual Trader / Home: minimize side run panel; opens on Run.
@@ -243,7 +276,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='🛖' size={24} />
+                                    <LayoutDashboard {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Home' />
                                 </>
                             }
@@ -255,7 +288,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='🤖 ' size={24} />
+                                    <Puzzle {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Bot Settings' />
                                 </>
                             }
@@ -265,7 +298,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <span className='tab-label tab-label--instant-fill'>
-                                    <Emoji symbol='⏱️' size={24} />
+                                    <Timer {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Instant Fill' />
                                 </span>
                             }
@@ -285,17 +318,17 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='🪙' size={24} />
-                                    <Localize i18n_default_text='DTrader' />
+                                    <Package {...TAB_ICON_PROPS} />
+                                    <Localize i18n_default_text='Free bots' />
                                 </>
                             }
-                            id='id-dtrader'
+                            id='id-free-bots'
                         >
-                            <div className='tutorials-wrapper tutorials-wrapper--dtrader'>
+                            <div className='tutorials-wrapper tutorials-wrapper--free-bots'>
                                 <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}
+                                    fallback={<ChunkLoader message={localize('Please wait, loading Free bots...')} />}
                                 >
-                                    <DTrader />
+                                    <FreeBots />
                                 </Suspense>
                             </div>
                         </div>
@@ -303,7 +336,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='🎁' size={22} />
+                                    <Target {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Asians' />
                                 </>
                             }
@@ -321,7 +354,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <span className='tab-label tab-label--bulk-trader'>
-                                    <Emoji symbol='🛒' size={22} />
+                                    <Layers {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Bulk Trader' />
                                 </span>
                             }
@@ -338,8 +371,26 @@ const AppWrapper = observer(() => {
 
                         <div
                             label={
+                                <>
+                                    <LineChart {...TAB_ICON_PROPS} />
+                                    <Localize i18n_default_text='DTrader' />
+                                </>
+                            }
+                            id='id-dtrader'
+                        >
+                            <div className='tutorials-wrapper tutorials-wrapper--dtrader'>
+                                <Suspense
+                                    fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}
+                                >
+                                    <DTrader />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div
+                            label={
                                 <span className='tab-label tab-label--auto-strategy'>
-                                    <AutoStrategyHeartIcon size={18} animated />
+                                    <Heart {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Auto Strategy' />
                                 </span>
                             }
@@ -359,7 +410,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='✍️ ' size={16} />
+                                    <Hand {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Manual Trader' />
                                 </>
                             }
@@ -379,7 +430,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <span className='tab-label tab-label--speed-bot'>
-                                    <SpeedBotTabIcon size={18} animated />
+                                    <Zap {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Speed Bot' />
                                 </span>
                             }
@@ -397,7 +448,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='🎯' size={18} />
+                                    <Wand2 {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Strategies' />
                                 </>
                             }
@@ -415,7 +466,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='2️⃣2️⃣' size={16} />
+                                    <Copy {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Double Double' />
                                 </>
                             }
@@ -434,7 +485,6 @@ const AppWrapper = observer(() => {
                         {/* <div
               label={
                 <>
-                  <Emoji symbol="🪖" size={16} />
                   <Localize i18n_default_text='Defender' />
                 </>
               }
@@ -451,7 +501,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <span className='tab-label tab-label--smart-trader'>
-                                    <Emoji symbol='🧠' size={19} />
+                                    <Brain {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Smart Trader' />
                                 </span>
                             }
@@ -471,7 +521,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='🚀' size={16} />
+                                    <Rocket {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Pro Aviator' />
                                 </>
                             }
@@ -489,7 +539,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='📐' size={18} />
+                                    <Calculator {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Risk Calculator' />
                                 </>
                             }
@@ -509,7 +559,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <DepositSectionIcon size={18} />
+                                    <Wallet {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Deposit' />
                                 </>
                             }
@@ -526,7 +576,7 @@ const AppWrapper = observer(() => {
                         <div
                             label={
                                 <>
-                                    <Emoji symbol='📝' size={16} />
+                                    <Users {...TAB_ICON_PROPS} />
                                     <Localize i18n_default_text='Copytrading' />
                                 </>
                             }
@@ -543,28 +593,10 @@ const AppWrapper = observer(() => {
                             </div>
                         </div>
 
-                        {/* Free Bots tab — re-enable when catalog is ready (see src/pages/aaabots/) */}
-                        {/* <div
-              label={
-                <>
-                  <Emoji symbol="🎁" size={22} />
-                  <Localize i18n_default_text='Free Bots' />
-                </>
-              }
-              id='id-free-bots'
-            >
-              <div className='tutorials-wrapper tutorials-wrapper--free-bots'>
-                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Free Bots...')} />}>
-                  <FreeBots />
-                </Suspense>
-              </div>
-            </div> */}
-
                         {/* Copytraders — re-enable when Oracle arming is ready again */}
                         {/* <div
                             label={
                                 <>
-                                    <Emoji symbol='👥' size={16} />
                                     <Localize i18n_default_text='Copytraders' />
                                 </>
                             }
@@ -585,7 +617,6 @@ const AppWrapper = observer(() => {
                         {/* <div
                             label={
                                 <>
-                                    <Emoji symbol='🔐' size={16} />
                                     <Localize i18n_default_text='ROT Tokens' />
                                 </>
                             }
