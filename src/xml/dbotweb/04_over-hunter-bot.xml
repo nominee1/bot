@@ -1,0 +1,178 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="oh_stake">Stake</variable>
+    <variable id="oh_initialStake">initialStake</variable>
+    <variable id="oh_martingale">Martingale</variable>
+  </variables>
+  <block type="trade_definition" id="oh_trade_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="oh_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="oh_tradetype" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="oh_contracttype" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="oh_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="oh_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="oh_restarterror" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="oh_set_stake">
+        <field name="VAR" id="oh_stake">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="oh_stake_val">
+            <field name="NUM">1</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="oh_set_initial">
+            <field name="VAR" id="oh_initialStake">initialStake</field>
+            <value name="VALUE">
+              <block type="math_number" id="oh_initial_val">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="oh_set_martingale">
+                <field name="VAR" id="oh_martingale">Martingale</field>
+                <value name="VALUE">
+                  <block type="math_number" id="oh_martingale_val">
+                    <field name="NUM">2</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="strategy_set_entry_point" id="oh_set_entry">
+                    <value name="DIGIT">
+                      <block type="math_number" id="oh_entry_digit">
+                        <field name="NUM">5</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="oh_tradeoptions">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <field name="CURRENCY_LIST">USD</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="oh_dur_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="math_number" id="oh_dur_val">
+            <field name="NUM">1</field>
+          </block>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="oh_amt_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="oh_amt_var">
+            <field name="VAR" id="oh_stake">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="oh_pred_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="oh_before_purchase" deletable="false" x="0" y="520">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="oh_entry_gate">
+        <value name="IF0">
+          <block type="strategy_entry_point_reached" id="oh_entry_reached"></block>
+        </value>
+        <statement name="DO0">
+          <block type="strategy_contract_sequence_over12_recover_over4_apply" id="oh_apply">
+            <next>
+              <block type="purchase" id="oh_purchase">
+                <field name="PURCHASE_LIST">DIGITOVER</field>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="oh_after_purchase" x="720" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="oh_win_check">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="oh_check_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="oh_win_reset_stake">
+            <field name="VAR" id="oh_stake">Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="oh_win_initial_get">
+                <field name="VAR" id="oh_initialStake">initialStake</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="oh_loss_double_stake">
+            <field name="VAR" id="oh_stake">Stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="oh_loss_multiply">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="oh_mult_a_shadow">
+                    <field name="NUM">1</field>
+                  </shadow>
+                  <block type="variables_get" id="oh_mult_stake_get">
+                    <field name="VAR" id="oh_stake">Stake</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="oh_mult_b_shadow">
+                    <field name="NUM">2</field>
+                  </shadow>
+                  <block type="variables_get" id="oh_mult_martingale_get">
+                    <field name="VAR" id="oh_martingale">Martingale</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="trade_again" id="oh_trade_again"></block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

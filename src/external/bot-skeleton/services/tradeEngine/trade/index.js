@@ -11,10 +11,12 @@ import { proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
+import DbotwebStrategies from './DbotwebStrategies';
 import OpenContract from './OpenContract';
 import Proposal from './Proposal';
 import Purchase from './Purchase';
 import Sell from './Sell';
+import StrategyControl from './StrategyControl';
 import Ticks from './Ticks';
 import Total from './Total';
 
@@ -102,7 +104,9 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
     });
 };
 
-export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Proposal(Ticks(Total(class {}))))))) {
+export default class TradeEngine extends Balance(
+    Purchase(Sell(OpenContract(Proposal(Ticks(DbotwebStrategies(StrategyControl(Total(class {}))))))))
+) {
     constructor($scope) {
         super();
         this.observer = $scope.observer;

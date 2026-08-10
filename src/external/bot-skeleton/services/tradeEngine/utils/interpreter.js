@@ -133,6 +133,178 @@ const Interpreter = () => {
         );
         js_interpreter.setProperty(
             pseudo_bot_interface,
+            'multiplePurchase',
+            createAsync(js_interpreter, bot_interface.multiplePurchase)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setTradeQuantity',
+            js_interpreter.nativeToPseudo(bot_interface.setTradeQuantity)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setOneSMarkets',
+            js_interpreter.nativeToPseudo(bot_interface.setOneSMarkets)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setHedgeHookInfo',
+            js_interpreter.nativeToPseudo(bot_interface.setHedgeHookInfo)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setOverUnderHookInfo',
+            js_interpreter.nativeToPseudo(bot_interface.setOverUnderHookInfo)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setVirtualHookInfo',
+            js_interpreter.nativeToPseudo(bot_interface.setVirtualHookInfo)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'runHedgeHook',
+            createAsync(js_interpreter, bot_interface.runHedgeHook)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'runOverUnderHook',
+            createAsync(js_interpreter, bot_interface.runOverUnderHook)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'runVirtualHook',
+            createAsync(js_interpreter, bot_interface.runVirtualHook)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setPrediction',
+            js_interpreter.nativeToPseudo(bot_interface.setPrediction)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setVirtualHookEnabled',
+            js_interpreter.nativeToPseudo(bot_interface.setVirtualHookEnabled)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setVirtualHookMaxSteps',
+            js_interpreter.nativeToPseudo(bot_interface.setVirtualHookMaxSteps)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setVirtualHookMinTrades',
+            js_interpreter.nativeToPseudo(bot_interface.setVirtualHookMinTrades)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'directPurchase',
+            createAsync(js_interpreter, bot_interface.directPurchase)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'contractSwitcher',
+            js_interpreter.nativeToPseudo(bot_interface.contractSwitcher)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setEntryPoint',
+            js_interpreter.nativeToPseudo(bot_interface.setEntryPoint)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'isEntryPointReached',
+            createAsync(js_interpreter, bot_interface.isEntryPointReached)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyEvenOddTwoStreak',
+            createAsync(js_interpreter, bot_interface.applyEvenOddTwoStreak)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyRecoveryBlock',
+            createAsync(js_interpreter, bot_interface.applyRecoveryBlock)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyRedBarReverseMatches',
+            createAsync(js_interpreter, bot_interface.applyRedBarReverseMatches)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyOver2Under7Switch',
+            createAsync(js_interpreter, bot_interface.applyOver2Under7Switch)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyOverUnderSwitch',
+            createAsync(js_interpreter, bot_interface.applyOverUnderSwitch)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyOverHunter',
+            createAsync(js_interpreter, bot_interface.applyOverHunter)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyOverUnderEoRecovery',
+            createAsync(js_interpreter, bot_interface.applyOverUnderEoRecovery)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyRandy',
+            createAsync(js_interpreter, bot_interface.applyRandy)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyEvenOddStrategy',
+            createAsync(js_interpreter, bot_interface.applyEvenOddStrategy)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyContractSequenceDiff0Over12Diff9Under87',
+            createAsync(js_interpreter, bot_interface.applyContractSequenceDiff0Over12Diff9Under87)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyContractSequenceOver12RecoverOver4',
+            createAsync(js_interpreter, bot_interface.applyContractSequenceOver12RecoverOver4)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyRotateMarketEachTrade',
+            createAsync(js_interpreter, bot_interface.applyRotateMarketEachTrade)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'rotateToNextVolatilityMarket',
+            createAsync(js_interpreter, bot_interface.rotateToNextVolatilityMarket)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyContractSequenceDiff0Over12Streak2',
+            createAsync(js_interpreter, bot_interface.applyContractSequenceDiff0Over12Streak2)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'applyConceptBlock',
+            createAsync(js_interpreter, bot_interface.applyConceptBlock)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setNextContractType',
+            js_interpreter.nativeToPseudo(bot_interface.setNextContractType)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'setActiveContractType',
+            js_interpreter.nativeToPseudo(bot_interface.setActiveContractType)
+        );
+        js_interpreter.setProperty(pseudo_bot_interface, 'showTP', js_interpreter.nativeToPseudo(bot_interface.showTP));
+        js_interpreter.setProperty(pseudo_bot_interface, 'showSL', js_interpreter.nativeToPseudo(bot_interface.showSL));
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
             'sellAtMarket',
             createAsync(js_interpreter, bot_interface.sellAtMarket)
         );

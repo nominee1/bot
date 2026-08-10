@@ -1,0 +1,15 @@
+import './strategy_entry_point';
+import './strategy_even_odd_two_streak_apply';
+import './strategy_recovery_block_apply';
+import './strategy_red_bar_reverse_matches_apply';
+import './strategy_rotate_market';
+import './strategy_contract_sequence_diff0_over12_apply';
+import './strategy_concept_block_apply';
+import './strategy_over2_under7_switch_apply';
+import './strategy_over_hunter_apply';
+import './strategy_sv_switcher_apply';
+import './strategy_randy_apply';
+import './strategy_even_odd_strategy_apply';
+import './strategy_contract_sequence_diff_over_under_apply';
+import './strategy_contract_sequence_over12_recover_over4_apply';
+import './strategy_rotate_market_each_trade';
