@@ -10,7 +10,10 @@ import {
     getDenaraOidNumericAppId,
     getDerivOAuthClientId,
     getDerivTokenExchangeUrl,
+    getSiteOAuthHandoffUrl,
     hasBotStudioOAuthConfig,
+    PLATFORM_SITE_OAUTH_CALLBACK_URL,
+    SITE_OAUTH_MESSAGE_TYPE,
 } from '@/components/shared/utils/config/config';
 import {
     applyDerivOAuthAccessTokenToFirstUsd,
@@ -118,7 +121,8 @@ function App() {
     }, [loginInfo.length]);
 
     React.useEffect(() => {
-        if (!hasBotStudioOAuthConfig()) return;
+        const siteHandoffEarly = new URLSearchParams(window.location.search).get('site_oauth_handoff');
+        if (!hasBotStudioOAuthConfig() && !siteHandoffEarly) return;
 
         const cleanOAuthParamsFromUrl = () => {
             const url = new URL(window.location.href);
@@ -126,13 +130,15 @@ function App() {
                 url.searchParams.has('code') ||
                 url.searchParams.has('state') ||
                 url.searchParams.has('error') ||
-                url.searchParams.has('error_description');
+                url.searchParams.has('error_description') ||
+                url.searchParams.has('site_oauth_handoff');
             if (!had) return;
             url.searchParams.delete('code');
             url.searchParams.delete('state');
             url.searchParams.delete('scope');
             url.searchParams.delete('error');
             url.searchParams.delete('error_description');
+            url.searchParams.delete('site_oauth_handoff');
             const search = url.searchParams.toString();
             window.history.replaceState({}, '', `${url.pathname}${search ? `?${search}` : ''}${url.hash}`);
         };
@@ -144,6 +150,79 @@ function App() {
             showOAuthToast(userMessage, 'error');
             console.error('[OAuth]', debugNote); // eslint-disable-line no-console
         };
+
+        const redeemSiteOAuthHandoff = async (siteHandoff: string) => {
+            setIsOAuthAccountSetup(true);
+            try {
+                const res = await fetch(getSiteOAuthHandoffUrl(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handoff: siteHandoff }),
+                });
+                const body = (await res.json().catch(() => null)) as unknown;
+                const accessToken = parseOAuthAccessTokenFromExchangeBody(body);
+                if (!res.ok || !accessToken) {
+                    reportOAuthFailure(
+                        'Shared Deriv sign-in could not finish. Try Log in again.',
+                        `site oauth handoff HTTP ${res.status}`
+                    );
+                    return;
+                }
+                const prefetchedAccounts = extractNormalizedOptionsAccountsFromBody(body);
+                let hydrate = await applyDerivOAuthAccessTokenToFirstUsd(
+                    accessToken,
+                    prefetchedAccounts.length ? prefetchedAccounts : undefined
+                );
+                if (!hydrate.ok && prefetchedAccounts.length) {
+                    hydrate = await applyDerivOAuthAccessTokenToFirstUsd(accessToken);
+                }
+                if (!hydrate.ok) {
+                    reportOAuthFailure(
+                        'Your Deriv account could not be loaded. Please try again.',
+                        `site oauth hydrate failed: ${hydrate.error}`
+                    );
+                    return;
+                }
+                await api_base.init(true);
+            } catch (e) {
+                reportOAuthFailure(
+                    'Shared Deriv sign-in failed. Please try again.',
+                    `site oauth handoff threw: ${String(e)}`
+                );
+            } finally {
+                setIsOAuthAccountSetup(false);
+            }
+        };
+
+        const onSiteOAuthMessage = (event: MessageEvent) => {
+            let allowedOrigin = '';
+            try {
+                allowedOrigin = new URL(PLATFORM_SITE_OAUTH_CALLBACK_URL).origin;
+            } catch {
+                return;
+            }
+            if (event.origin !== allowedOrigin) return;
+            const data = event.data as { type?: string; handoff?: string | null; error?: string | null };
+            if (data?.type !== SITE_OAUTH_MESSAGE_TYPE) return;
+            if (data.error) {
+                reportOAuthFailure(
+                    'Shared Deriv sign-in could not finish. Try Log in again.',
+                    `site oauth popup: ${data.error}`
+                );
+                return;
+            }
+            if (data.handoff) {
+                void redeemSiteOAuthHandoff(data.handoff);
+            }
+        };
+        window.addEventListener('message', onSiteOAuthMessage);
+
+        const siteHandoff = siteHandoffEarly;
+        if (siteHandoff) {
+            cleanOAuthParamsFromUrl();
+            void redeemSiteOAuthHandoff(siteHandoff);
+            return () => window.removeEventListener('message', onSiteOAuthMessage);
+        }
 
         if (result?.status === 'success') {
             setIsOAuthAccountSetup(true);
@@ -251,6 +330,7 @@ function App() {
             setIsOAuthAccountSetup(false);
         }
         cleanOAuthParamsFromUrl();
+        return () => window.removeEventListener('message', onSiteOAuthMessage);
     }, []);
 
     React.useEffect(() => {

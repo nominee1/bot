@@ -4,6 +4,8 @@ import {
     getDerivOidcRedirectCallbackUri,
     hasBotStudioOAuthConfig,
     isBotStudioDeploy,
+    PLATFORM_SITE_OAUTH_START_URL,
+    usesPlatformSiteOAuthCallback,
 } from '../config/config';
 import { isStorageSupported } from '../storage/storage';
 import { getStaticUrl } from '../url';
@@ -175,6 +177,22 @@ const stripStaleOAuthQueryParams = () => {
 };
 
 export const requestDerivOAuthAuthentication = async () => {
+    if (usesPlatformSiteOAuthCallback()) {
+        const clientId = getDerivOAuthClientId();
+        if (!clientId) {
+            const message =
+                'This site has no assigned Deriv App ID. Redeploy from Undasite so a platform App ID is baked in.';
+            setOAuthUserMessage(message, 'retry');
+            showOAuthToast(message, 'error');
+            return;
+        }
+        const start = new URL(PLATFORM_SITE_OAUTH_START_URL);
+        start.searchParams.set('return_to', window.location.origin);
+        start.searchParams.set('app_id', clientId);
+        window.location.assign(start.toString());
+        return;
+    }
+
     if (ensureOAuthCanonicalOriginBeforeLogin()) {
         return;
     }

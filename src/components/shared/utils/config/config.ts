@@ -187,6 +187,35 @@ const readBuildEnv = (key: string): string => {
 /** Deriv Sites / App Builder deploy — redirect URI is always injected at build time. */
 export const isBotStudioDeploy = (): boolean => Boolean(readBuildEnv('DERIV_OAUTH_REDIRECT_URI'));
 
+export const PLATFORM_SITE_OAUTH_CALLBACK_URL = 'https://undasite.com/auth/callback';
+/** Same-tab start: sets the PKCE cookie on undasite.com then 302s to Deriv. */
+export const PLATFORM_SITE_OAUTH_START_URL = 'https://undasite.com/api/auth/site-oauth/start';
+export const SITE_OAUTH_MESSAGE_TYPE = 'undasite_site_oauth';
+
+function isPlatformSharedCallbackUri(uri: string): boolean {
+    try {
+        const url = new URL(uri);
+        const path = url.pathname.replace(/\/$/, '');
+        if (path !== '/auth/callback') return false;
+        const host = url.hostname.toLowerCase();
+        return host === 'undasite.com' || host === 'www.undasite.com' || host === 'localhost';
+    } catch {
+        return false;
+    }
+}
+
+/** Shared callback is used when deploy baked `DERIV_OAUTH_REDIRECT_URI` to undasite.com/auth/callback. */
+export const usesPlatformSiteOAuthCallback = (): boolean =>
+    isPlatformSharedCallbackUri(readBuildEnv('DERIV_OAUTH_REDIRECT_URI'));
+
+export const getSiteOAuthHandoffUrl = (): string => {
+    try {
+        return new URL('/api/auth/site-oauth/handoff', PLATFORM_SITE_OAUTH_CALLBACK_URL).toString();
+    } catch {
+        return 'https://undasite.com/api/auth/site-oauth/handoff';
+    }
+};
+
 /** True when Bot Studio injected OAuth client, redirect URI, and token exchange URL at build time. */
 export const hasBotStudioOAuthConfig = (): boolean =>
     Boolean(
@@ -196,7 +225,13 @@ export const hasBotStudioOAuthConfig = (): boolean =>
     );
 
 /** OAuth `client_id` for PKCE login (Bot Studio build or env override). */
-export const getDerivOAuthClientId = (): string => readBuildEnv('DERIV_OAUTH_CLIENT_ID');
+export const getDerivOAuthClientId = (): string => {
+    if (usesPlatformSiteOAuthCallback()) {
+        const pooled = readBuildEnv('DERIV_OAUTH_CLIENT_ID') || readBuildEnv('NEXT_PUBLIC_DERIV_APP_ID');
+        if (pooled) return pooled;
+    }
+    return readBuildEnv('DERIV_OAUTH_CLIENT_ID');
+};
 
 /** Numeric WS `app_id` for OAuth authorize + legacy WS. */
 export const getDenaraOidNumericAppId = (): string => {
@@ -233,6 +268,8 @@ export const getDerivTokenExchangeUrl = (): string => {
 
 /** Registered OAuth redirect URI (must match Deriv dashboard). */
 export const getDerivOidcRedirectCallbackUri = (): string => {
+    if (usesPlatformSiteOAuthCallback()) return PLATFORM_SITE_OAUTH_CALLBACK_URL;
+
     const fromEnv = readBuildEnv('DERIV_OAUTH_REDIRECT_URI');
     if (fromEnv) return fromEnv;
     return window.location.origin;
