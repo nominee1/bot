@@ -52,6 +52,7 @@ export default defineConfig({
                 BOT_STUDIO_AFFILIATE_CODE: JSON.stringify(process.env.BOT_STUDIO_AFFILIATE_CODE ?? ''),
                 VIRTUAL_SHADOW_LOGINID: JSON.stringify(process.env.VIRTUAL_SHADOW_LOGINID ?? ''),
                 BOT_STUDIO_VIRTUAL_SHADOW_LOGINID: JSON.stringify(process.env.BOT_STUDIO_VIRTUAL_SHADOW_LOGINID ?? ''),
+                DERIV1_APP_ORIGIN: JSON.stringify(process.env.DERIV1_APP_ORIGIN ?? 'https://deriv-1-beta.vercel.app'),
             },
         },
         alias: {

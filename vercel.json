@@ -3,5 +3,17 @@
     "installCommand": "npm install --ignore-scripts",
     "outputDirectory": "dist",
     "framework": null,
-    "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+    "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                { "key": "Access-Control-Allow-Origin", "value": "https://deriv-1-beta.vercel.app" },
+                { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+                { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" },
+                { "key": "Access-Control-Allow-Credentials", "value": "true" },
+                { "key": "Access-Control-Expose-Headers", "value": "Content-Type" }
+            ]
+        }
+    ]
 }

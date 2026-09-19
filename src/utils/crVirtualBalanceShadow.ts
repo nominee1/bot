@@ -3,6 +3,7 @@ import {
     isDerivOptionsOAuthSession,
 } from '@/components/shared/utils/login/deriv-oauth-storage';
 import type ClientStore from '@/stores/client-store';
+import { getHandoffShadowLoginid, isHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import type { Balance } from '@deriv/api-types';
 
 /** Real-money wallet used by BotIframe virtual pipeline (shadow balance in localStorage). */
@@ -78,6 +79,7 @@ export function resolveVirtualShadowLedgerKey(loginid: string | undefined | null
 
     const tenantMatch = getTenantVirtualShadowLoginids().find(tenantId => tenantId.toUpperCase() === id);
     if (tenantMatch) return tenantMatch;
+    if (isHandoffShadowLoginid(loginid)) return String(loginid).trim();
 
     return String(loginid ?? '').trim() || ALLOWED_BOT_IFRAME_LOGINID;
 }
@@ -200,11 +202,13 @@ export function isShadowDisplayManagedLoginid(loginid: string): boolean {
     if (key === OPTIONS_VIRTUAL_SHADOW_LOGINID.toUpperCase()) return true;
     if (key === ALLOWED_BOT_IFRAME_LOGINID.toUpperCase() && !isDerivOptionsOAuthSession()) return true;
     if (isTenantVirtualShadowLoginid(loginid)) return true;
+    if (isHandoffShadowLoginid(loginid)) return true;
     return false;
 }
 
 /** Block live Deriv balance merges while header tracks the shared virtual ledger. */
 export function shouldSuppressDerivBalanceForVirtualShadow(loginid: string | undefined | null): boolean {
+    if (getHandoffShadowLoginid()) return true;
     const id = String(loginid ?? '').trim();
     if (!id) return false;
     return isShadowDisplayManagedLoginid(id);
@@ -395,6 +399,9 @@ export function writeCrShadow(loginid: string, value: number) {
         } catch {
             /* ignore */
         }
+    });
+    void import('@/utils/deriv1SessionHandoff').then(({ postVirtualBalanceToDeriv1 }) => {
+        postVirtualBalanceToDeriv1(value, loginid);
     });
 }
 

@@ -44,6 +44,8 @@ import { StoreProvider } from '@/hooks/useStore';
 import CallbackPage from '@/pages/callback';
 import Endpoint from '@/pages/endpoint';
 import { TAuthData } from '@/types/api-types';
+import { writeCrShadow } from '@/utils/crVirtualBalanceShadow';
+import { consumeDeriv1Handoff, listenForDeriv1Session } from '@/utils/deriv1SessionHandoff';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
 import { URLUtils } from '@deriv-com/utils';
 import CoreStoreProvider from './CoreStoreProvider';
@@ -100,6 +102,17 @@ function App() {
         if (typeof window === 'undefined') return false;
         return hasBotStudioOAuthConfig() && hasOAuthCallbackQuery();
     });
+
+    React.useLayoutEffect(() => {
+        const session = consumeDeriv1Handoff(writeCrShadow);
+        const stop = listenForDeriv1Session(writeCrShadow);
+        if (session?.oauthToken) {
+            void applyDerivOAuthAccessTokenToFirstUsd(session.oauthToken).then(async result => {
+                if (result.ok) await api_base.init(true);
+            });
+        }
+        return stop;
+    }, []);
 
     React.useLayoutEffect(() => {
         redirectOAuthCallbackToCanonicalOriginIfNeeded();

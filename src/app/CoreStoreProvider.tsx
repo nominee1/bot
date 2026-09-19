@@ -28,11 +28,15 @@ import {
     crShadowBroadcastMatchesWallet,
     crShadowChannel,
     type CrShadowMsg,
+    isCrVirtualShadowLogin,
     shouldSuppressDerivBalanceForMoonLead,
     shouldSuppressDerivBalanceForVirtualShadow,
     syncCrShadowBalanceIfNeeded,
     syncMoonVirtLedgerToHeaderIfNeeded,
+    writeCrShadow,
 } from '@/utils/crVirtualBalanceShadow';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
+import { fetchSharedVirtualLedgerBalance, hasPendingSharedVirtualLedgerSync } from '@/utils/sharedVirtualLedgerSync';
 import type { Balance } from '@deriv/api-types';
 import { useTranslations } from '@deriv-com/translations';
 
@@ -178,6 +182,32 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
         crShadowChannel.addEventListener('message', onMsg);
         return () => crShadowChannel?.removeEventListener('message', onMsg);
     }, [client, activeAccount?.loginid]);
+
+    useEffect(() => {
+        if (!client) return undefined;
+        const loginid = String(activeAccount?.loginid || client.loginid || '').trim();
+        const ledgerLogin = getHandoffShadowLoginid() || loginid;
+        if (!ledgerLogin || !isCrVirtualShadowLogin(ledgerLogin)) return undefined;
+
+        let cancelled = false;
+        const pull = async () => {
+            if (hasPendingSharedVirtualLedgerSync()) return;
+            const bal = await fetchSharedVirtualLedgerBalance();
+            if (cancelled || bal == null) return;
+            writeCrShadow(ledgerLogin, bal);
+            syncCrShadowBalanceIfNeeded(client, ledgerLogin, bal);
+            if (!isCrVirtualShadowLogin(loginid)) {
+                client.setBalance(bal.toFixed(2));
+                client.setCurrency('USD');
+            }
+        };
+        void pull();
+        const intervalId = window.setInterval(() => void pull(), 2000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [client, activeAccount?.loginid, client?.loginid]);
 
     useEffect(() => {
         if (!client) return;
