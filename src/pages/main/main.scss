@@ -471,6 +471,12 @@
     z-index: -1;
     background: var(--general-main-1);
     height: var(--tab-content-height);
+    padding-inline-start: 0;
+
+    @media (width >= 1280px) {
+        /* Offset the 7.2rem vertical sidebar (left 1.6rem + 5.6rem padding = 72px). */
+        padding-inline-start: 5.6rem;
+    }
 
     .injectionDiv {
         .blocklyTrash {
@@ -492,6 +498,7 @@
         z-index: 1;
     }
 
+    &:not(.bot-builder--active),
     &--inactive {
         display: none;
     }
@@ -501,6 +508,7 @@
         inset-inline-start: 0;
         width: 100vw;
         height: var(--tab-content-height-mobile);
+        padding-inline-start: 0;
     }
 }
 

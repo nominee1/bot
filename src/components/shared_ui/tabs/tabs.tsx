@@ -83,7 +83,7 @@ const Tabs = ({
         }
     }, []);
 
-    let initial_index_to_show = 0;
+    let initial_index_to_show = active_index;
     let tab_width: string;
 
     useConstructor(() => {
@@ -109,8 +109,14 @@ const Tabs = ({
     });
 
     const [active_tab_index, setActiveTabIndex] = React.useState(initial_index_to_show);
+    const has_synced_click = React.useRef(false);
 
     React.useEffect(() => {
+        if (!has_synced_click.current) {
+            has_synced_click.current = true;
+            setActiveLineStyle();
+            return;
+        }
         if (active_tab_index >= 0 && active_index !== active_tab_index) {
             onTabItemClick?.(active_tab_index);
         }

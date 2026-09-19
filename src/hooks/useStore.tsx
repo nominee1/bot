@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import RootStore from '@/stores/root-store';
 import { TWebSocket } from '@/Types';
 import Bot from '../external/bot-skeleton/scratch/dbot';
@@ -11,35 +11,17 @@ type TStoreProvider = {
 };
 
 const StoreProvider: React.FC<TStoreProvider> = ({ children, mockStore }) => {
-    const [store, setStore] = useState<RootStore | null>(null);
-    const initializingStore = useRef(false);
-
-    useEffect(() => {
-        const initializeStore = async () => {
-            const rootStore = new RootStore(Bot);
-            setStore(rootStore);
-        };
-
-        if (!store && !initializingStore.current) {
-            initializingStore.current = true;
-            // If the store is mocked for testing purposes, then return the mocked value.
-            if (mockStore) {
-                setStore(mockStore);
-            } else {
-                initializeStore();
-            }
-        }
-    }, [store, mockStore]);
-
-    if (!store && mockStore) return null;
+    const [store] = useState(() => mockStore ?? new RootStore(Bot));
 
     return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 };
 
 const useStore = () => {
     const store = useContext(StoreContext);
-
-    return store as RootStore;
+    if (!store) {
+        throw new Error('useStore must be used within StoreProvider');
+    }
+    return store;
 };
 
 export { StoreProvider, useStore };

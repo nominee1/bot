@@ -75,8 +75,9 @@ export default class BlocklyStore {
     };
 
     getCachedActiveTab = (): void => {
-        if (getSetting('active_tab')) {
-            this.active_tab = getSetting('active_tab');
+        const saved = getSetting('active_tab');
+        if (saved === tabs_title.WORKSPACE || saved === tabs_title.CHART) {
+            this.active_tab = saved;
         }
     };
 

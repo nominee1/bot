@@ -3,6 +3,7 @@ import { action, makeObservable, observable, reaction } from 'mobx';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message, NOTIFICATION_TYPE } from '@/components/bot-notification/bot-notification-utils';
 import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import { TStores } from '@deriv/stores/types';
 import * as strategy_description from '../constants/quick-strategies';
 import { TDescriptionItem } from '../pages/bot-builder/quick-strategy/types';
@@ -179,7 +180,7 @@ export default class DashboardStore implements IDashboardStore {
         this.initInfoPanel();
     }
 
-    active_tab = 0;
+    active_tab = DBOT_TABS.BOT_BUILDER;
     active_tab_tutorials = 0;
     active_tour_step_number = 0;
     dialog_options: TDialogOptions = {};

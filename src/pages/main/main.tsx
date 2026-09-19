@@ -10,7 +10,7 @@ import MobileWrapper from '@/components/shared_ui/mobile-wrapper';
 import Tabs from '@/components/shared_ui/tabs/tabs';
 import TradingViewModal from '@/components/trading-view-chart/trading-view-modal';
 import { DBOT_TABS, TAB_IDS } from '@/constants/bot-contents';
-import { api_base, updateWorkspaceName } from '@/external/bot-skeleton';
+import { api_base, onWorkspaceResize, updateWorkspaceName } from '@/external/bot-skeleton';
 import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
@@ -74,11 +74,11 @@ const AppWrapper = observer(() => {
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
 
-    let tab_value: number | string = active_tab;
     const GetHashedValue = (tab: number) => {
-        tab_value = location.hash?.split('#')[1];
-        if (!tab_value) return tab;
-        return Number(hash.indexOf(String(tab_value)));
+        const raw = location.hash?.replace(/^#/, '').split('&')[0] || '';
+        if (!raw || raw.startsWith('deriv1_session')) return tab;
+        const idx = hash.indexOf(raw);
+        return idx === -1 ? tab : idx;
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
@@ -148,11 +148,13 @@ const AppWrapper = observer(() => {
         }
 
         if (init_render.current) {
-            setActiveTab(Number(active_hash_tab));
-            if (!isDesktop) handleTabChange(Number(active_hash_tab));
+            const hashed_tab = Number(active_hash_tab);
+            const next_tab = Number.isFinite(hashed_tab) && hashed_tab >= 0 ? hashed_tab : DBOT_TABS.BOT_BUILDER;
+            setActiveTab(next_tab);
+            if (!isDesktop) handleTabChange(next_tab);
             init_render.current = false;
         } else {
-            navigate({ search: window.location.search, hash: `#${hash[active_tab] || hash[0]}` });
+            navigate({ search: window.location.search, hash: `#${hash[active_tab] || hash[1]}` });
         }
         if (active_tour !== '') {
             setActiveTour('');
@@ -194,6 +196,12 @@ const AppWrapper = observer(() => {
         //eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active_tab, is_drawer_open]);
 
+    React.useEffect(() => {
+        if (active_tab !== BOT_BUILDER) return undefined;
+        const id = window.setTimeout(() => onWorkspaceResize(), 50);
+        return () => window.clearTimeout(id);
+    }, [active_tab]);
+
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>;
         if (dashboard_strategies.length > 0) {
@@ -216,6 +224,9 @@ const AppWrapper = observer(() => {
                 const el_tab = document.getElementById(el_id);
                 setTimeout(() => {
                     el_tab?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                    if (tab_index === BOT_BUILDER) {
+                        onWorkspaceResize();
+                    }
                 }, 10);
             }
         },

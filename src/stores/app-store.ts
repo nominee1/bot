@@ -8,7 +8,7 @@ import {
     standalone_routes,
 } from '@/components/shared';
 import { getWhiteLabelTradersHubUrl, hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
-import { api_base, ApiHelpers, DBot, runIrreversibleEvents } from '@/external/bot-skeleton';
+import { api_base, ApiHelpers, DBot, onWorkspaceResize, runIrreversibleEvents } from '@/external/bot-skeleton';
 import { setCurrency } from '@/external/bot-skeleton/scratch/utils';
 import { TApiHelpersStore } from '@/types/stores.types';
 import { localize } from '@deriv-com/translations';
@@ -174,12 +174,16 @@ export default class AppStore {
             }
         }, 10000);
 
+        if (!this.dbot_store) {
+            this.setDBotEngineStores();
+        }
         if (!this.dbot_store) return;
 
         blockly_store.setLoading(true);
         await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
 
         blockly_store.setContainerSize();
+        onWorkspaceResize();
         blockly_store.setLoading(false);
 
         this.registerCurrencyReaction.call(this);

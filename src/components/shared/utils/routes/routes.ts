@@ -45,6 +45,11 @@ const domains: Record<Service, DomainConfig> = {
     },
 };
 
+const getDeriv1HomeUrl = (): string => {
+    const fromEnv = typeof process.env.DERIV1_APP_ORIGIN === 'string' ? process.env.DERIV1_APP_ORIGIN.trim() : '';
+    return (fromEnv || 'https://deriv-1-beta.vercel.app').replace(/\/+$/, '');
+};
+
 const getDerivDomain = (service: Service): string => {
     const hostname = window.location.hostname;
     const isStaging = hostname.includes('staging');
@@ -91,7 +96,7 @@ export const standalone_routes = {
     deriv_app: getDerivDomain('derivApp'),
     endpoint: `${window.location.origin}/endpoint`,
     account_limits: `${getDerivDomain('derivApp')}/account/account-limits`,
-    home: 'https://home.deriv.com/dashboard/home',
+    home: getDeriv1HomeUrl(),
     help_center: `${getDerivDomain('derivCom')}/help-centre/`,
     responsible: `${getDerivDomain('derivCom')}/responsible/`,
 };

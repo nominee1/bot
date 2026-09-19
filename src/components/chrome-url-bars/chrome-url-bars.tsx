@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { standalone_routes } from '@/components/shared';
 import { useChromeCollapse } from '@/hooks/use-chrome-collapse';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
 
@@ -91,7 +92,6 @@ const IconBtn = ({
 
 const ChromeUrlBars = () => {
     const location = useLocation();
-    const navigate = useNavigate();
     const [starred, setStarred] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [barPosition, setBarPosition] = useState<BarPosition>('top');
@@ -206,7 +206,11 @@ const ChromeUrlBars = () => {
             ) : null}
 
             <div className='chrome-url-bars-mobile'>
-                <IconBtn label='Home' className='chrome-url-bars-mobile__btn' onClick={() => navigate('/')}>
+                <IconBtn
+                    label='Home'
+                    className='chrome-url-bars-mobile__btn'
+                    onClick={() => window.location.assign(standalone_routes.home)}
+                >
                     <svg
                         viewBox='0 0 24 24'
                         width='22'

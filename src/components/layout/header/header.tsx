@@ -38,7 +38,7 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
     });
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    const homeHref = `${standalone_routes.home}?lang=${currentLang}`;
+    const homeHref = standalone_routes.home;
     const reportsHref = (() => {
         const url = new URL(standalone_routes.positions);
         url.searchParams.set('redirect', window.location.origin);
