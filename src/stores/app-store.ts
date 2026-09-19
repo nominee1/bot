@@ -20,6 +20,7 @@ export default class AppStore {
     dbot_store: RootStore | null;
     api_helpers_store: TApiHelpersStore | null;
     timer: ReturnType<typeof setInterval> | null;
+    is_workspace_mounting = false;
     disposeReloadOnLanguageChangeReaction: unknown;
     disposeCurrencyReaction: unknown;
     disposeSwitchAccountListener: unknown;
@@ -179,12 +180,26 @@ export default class AppStore {
         }
         if (!this.dbot_store) return;
 
-        blockly_store.setLoading(true);
-        await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
+        if (window.Blockly?.derivWorkspace) {
+            blockly_store.setLoading(false);
+            blockly_store.setContainerSize();
+            onWorkspaceResize();
+            return;
+        }
+        if (this.is_workspace_mounting) return;
+        this.is_workspace_mounting = true;
 
-        blockly_store.setContainerSize();
-        onWorkspaceResize();
-        blockly_store.setLoading(false);
+        blockly_store.setLoading(true);
+        try {
+            await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
+            blockly_store.setContainerSize();
+            onWorkspaceResize();
+        } catch {
+            /* workspace inject can fail if the host is still hidden; Bot Builder retries on tab focus */
+        } finally {
+            this.is_workspace_mounting = false;
+            blockly_store.setLoading(false);
+        }
 
         this.registerCurrencyReaction.call(this);
         this.registerOnAccountSwitch.call(this);

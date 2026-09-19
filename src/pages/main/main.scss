@@ -498,9 +498,19 @@
         z-index: 1;
     }
 
-    &:not(.bot-builder--active),
+    &:not(.bot-builder--active) {
+        z-index: -1;
+
+        .db-toolbox,
+        .toolbar,
+        .flyout {
+            visibility: hidden;
+            pointer-events: none;
+        }
+    }
+
     &--inactive {
-        display: none;
+        z-index: -1;
     }
 
     @include mobile-or-tablet-screen {

@@ -36,6 +36,15 @@ const BotBuilder = observer(() => {
     }, [onMount, onUnmount]);
 
     React.useEffect(() => {
+        if (active_tab !== 1) return;
+        if (window.Blockly?.derivWorkspace) {
+            window.dispatchEvent(new Event('resize'));
+            return;
+        }
+        onMount();
+    }, [active_tab, onMount]);
+
+    React.useEffect(() => {
         const workspace = window.Blockly?.derivWorkspace;
         if (workspace && is_running && !is_blockly_listener_registered.current) {
             is_blockly_listener_registered.current = true;
@@ -114,7 +123,6 @@ const BotBuilder = observer(() => {
             <div
                 className={classNames('bot-builder', {
                     'bot-builder--active': active_tab === 1 && !is_preview_on_popup,
-                    'bot-builder--inactive': active_tab !== 1 || is_preview_on_popup,
                     'bot-builder--tour-active': active_tour,
                 })}
             >

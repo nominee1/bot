@@ -115,7 +115,8 @@ class DBot {
                     }
                 }
                 const el_scratch_div = document.getElementById('scratch_div');
-                if (!el_scratch_div) {
+                if (!el_scratch_div || el_scratch_div.offsetWidth < 8) {
+                    resolve();
                     return;
                 }
 
