@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import useModalManager from '@/hooks/useModalManager';
 import { getActiveTabUrl } from '@/utils/getActiveTabUrl';
 import { LANGUAGES } from '@/utils/languages';
@@ -14,17 +13,30 @@ import ReportsSubmenu from './reports-submenu';
 import ToggleButton from './toggle-button';
 import './mobile-menu.scss';
 
-const MobileMenu = () => {
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+type TMobileMenuProps = {
+    hideToggle?: boolean;
+    isOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
+};
+
+const MobileMenu = ({ hideToggle = false, isOpen, onOpenChange }: TMobileMenuProps) => {
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
     const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
     const { currentLang = 'EN', localize, switchLanguage } = useTranslations();
     const { hideModal, isModalOpenFor, showModal } = useModalManager();
     const { isDesktop } = useDevice();
-    const is_white_label = hasBotStudioOAuthConfig();
+    const isDrawerOpen = isOpen ?? uncontrolledOpen;
 
-    const openDrawer = () => setIsDrawerOpen(true);
+    const setDrawerOpen = (open: boolean) => {
+        onOpenChange?.(open);
+        if (isOpen === undefined) {
+            setUncontrolledOpen(open);
+        }
+    };
+
+    const openDrawer = () => setDrawerOpen(true);
     const closeDrawer = () => {
-        setIsDrawerOpen(false);
+        setDrawerOpen(false);
         setActiveSubmenu(null);
     };
 
@@ -37,14 +49,16 @@ const MobileMenu = () => {
     if (isDesktop) return null;
     return (
         <div className='mobile-menu'>
-            <div className='mobile-menu__toggle'>
-                <ToggleButton onClick={openDrawer} />
-            </div>
+            {!hideToggle && (
+                <div className='mobile-menu__toggle'>
+                    <ToggleButton onClick={openDrawer} />
+                </div>
+            )}
 
             <Drawer isOpen={isDrawerOpen} onCloseDrawer={closeDrawer} width='29.5rem'>
                 <Drawer.Header onCloseDrawer={closeDrawer}>
                     <MenuHeader
-                        hideLanguageSetting={isLanguageSettingVisible || is_white_label}
+                        hideLanguageSetting={isLanguageSettingVisible}
                         openLanguageSetting={openLanguageSetting}
                     />
                 </Drawer.Header>
@@ -81,12 +95,10 @@ const MobileMenu = () => {
                     )}
                 </Drawer.Content>
 
-                {!is_white_label ? (
-                    <Drawer.Footer className='mobile-menu__footer'>
-                        <ServerTime />
-                        <NetworkStatus />
-                    </Drawer.Footer>
-                ) : null}
+                <Drawer.Footer className='mobile-menu__footer'>
+                    <ServerTime />
+                    <NetworkStatus />
+                </Drawer.Footer>
             </Drawer>
         </div>
     );

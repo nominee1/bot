@@ -1,7 +1,205 @@
 @use 'components/shared/styles/constants' as *;
 @use 'components/shared/styles/mixins' as *;
 
+.auth-actions {
+    display: flex;
+    align-items: center;
+    padding-block: 8px;
+
+    button {
+        border-radius: 16px;
+        font-weight: 400;
+        margin-inline-end: 1.6rem;
+    }
+
+    &--logged-out {
+        padding-block: 0;
+        margin-inline-start: auto;
+
+        .login-button {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            min-width: auto;
+            margin-inline-end: 0.8rem;
+            padding: 0 0.8rem;
+            font-weight: 700;
+            color: var(--brand-red-coral, #ff444f);
+
+            span {
+                color: var(--brand-red-coral, #ff444f);
+            }
+
+            &:hover {
+                background: transparent !important;
+                text-decoration: underline;
+            }
+        }
+    }
+}
+
+.deposit-button,
+.manage-funds-button {
+    margin-inline-end: 1.6rem;
+}
+
 .app-header {
+    &--desktop {
+        background: var(--general-main-1);
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+        width: 7.2rem;
+        height: calc(100vh - var(--site-url-bars-h, 0px));
+        padding: 0;
+        display: flex;
+        position: fixed;
+        top: var(--site-url-bars-h, 0);
+        inset-inline-start: 0;
+        z-index: 3;
+        border-inline-end: 1px solid var(--general-section-1);
+    }
+
+    &--mobile {
+        background: var(--general-main-1);
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100%;
+        min-height: 5.6rem;
+        padding: 0 0.8rem 0 0;
+        border-bottom: 1px solid var(--general-section-1);
+        z-index: 4;
+        position: relative;
+
+        .auth-actions {
+            flex: 1;
+            padding-block: 0;
+            min-width: 0;
+
+            .deposit-button,
+            .manage-funds-button {
+                margin-inline-start: auto;
+                margin-inline-end: 0.8rem;
+            }
+        }
+    }
+
+    &__top-section {
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        padding-top: 0;
+        display: flex;
+    }
+
+    &__bottom-section {
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        margin-top: auto;
+        padding-bottom: 1rem;
+        display: flex;
+    }
+
+    &__bottom-section .app-header__nav-item:before,
+    &__bottom-section .app-header__nav-item:after {
+        display: none;
+    }
+
+    &__bottom-section .app-header__nav-item:first-child:before {
+        display: block;
+    }
+
+    &__logo-container {
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        margin: 0;
+        padding: 1.5rem 0;
+        display: flex;
+        text-decoration: none;
+    }
+
+    &--mobile &__logo-container {
+        width: auto;
+        padding: 0.8rem;
+        flex: 0 0 auto;
+    }
+
+    &__nav-item {
+        cursor: pointer;
+        width: 100%;
+        padding: 5px;
+        position: relative;
+    }
+
+    &__nav-item:before,
+    &__nav-item:after {
+        content: '';
+        background-color: var(--general-section-1);
+        height: 1px;
+        position: absolute;
+        left: 6px;
+        right: 6px;
+    }
+
+    &__nav-item:before {
+        top: 0;
+    }
+
+    &__nav-item:after {
+        bottom: 0;
+    }
+
+    &__nav-item .app-footer__language,
+    &__nav-item .app-footer__icon,
+    &__theme-wrap {
+        cursor: pointer;
+        width: 100%;
+        color: var(--text-general);
+        flex-direction: column;
+        align-items: center;
+        padding: 1rem 0;
+        display: flex;
+        background: none;
+        border: 0;
+    }
+
+    &__nav-item .app-footer__language svg,
+    &__nav-item .app-footer__icon svg {
+        margin-bottom: 0.5rem;
+    }
+
+    &__nav-item .app-footer__language svg path,
+    &__nav-item .app-footer__icon svg path {
+        fill: var(--text-general);
+    }
+
+    &__theme-wrap .app-footer__icon {
+        padding: 0;
+    }
+
+    &__nav-link {
+        width: 100%;
+        color: var(--text-general);
+        cursor: pointer;
+        flex-direction: column;
+        align-items: center;
+        padding: 1rem 0;
+        text-decoration: none;
+        display: flex;
+        background: none;
+        border: 0;
+    }
+
+    &__nav-text {
+        text-align: center;
+        margin-top: 0.5rem;
+        font-size: 1.2rem;
+        color: var(--text-general);
+    }
+
     &__account-settings {
         padding-inline-end: 1.2rem;
         border-inline-end: 0.1rem solid var(--general-section-1);
@@ -271,21 +469,6 @@
     .deriv-text {
         color: var(--text-prominent) !important;
     }
-}
-
-.auth-actions {
-    display: flex;
-    padding-block: 8px;
-
-    button {
-        font-weight: 400;
-        margin-inline-end: 1.6rem;
-    }
-}
-
-.deposit-button,
-.manage-funds-button {
-    margin-inline-end: 1.6rem;
 }
 
 .deriv-accordion--underline {

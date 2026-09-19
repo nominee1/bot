@@ -91,6 +91,7 @@ export const standalone_routes = {
     deriv_app: getDerivDomain('derivApp'),
     endpoint: `${window.location.origin}/endpoint`,
     account_limits: `${getDerivDomain('derivApp')}/account/account-limits`,
+    home: 'https://home.deriv.com/dashboard/home',
     help_center: `${getDerivDomain('derivCom')}/help-centre/`,
     responsible: `${getDerivDomain('derivCom')}/responsible/`,
 };

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" dir="auto">
+<html lang="en" dir="auto" data-chrome-bar="top">
     <head>
         <meta charset="UTF-8" />
         <link rel="icon" type="image/svg+xml" href="/deriv-logo.svg" />
@@ -9,34 +9,42 @@
         <link rel="manifest" href="/manifest.json" />
 
         <!-- PWA Meta Tags -->
-        <meta name="theme-color" content="#ff444f" />
+        <meta name="theme-color" content="#ffffff" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Deriv Bot" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="msapplication-TileColor" content="#ff444f" />
+        <meta name="msapplication-TileColor" content="#ffffff" />
         <meta name="msapplication-tap-highlight" content="no" />
 
         <!-- Apple Touch Icons -->
         <link rel="apple-touch-icon" href="/assets/icons/pwa/icon-152x152.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/assets/icons/pwa/icon-152x152.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/pwa/icon-192x192.png" />
-        <meta name="title" content="Build a trading bot without coding | Deriv Bot." />
+        <meta name="title" content="Automate Your Trades | Deriv Bot" />
         <meta
             name="description"
             content="Import your current bot or learn how to create a trading bot from scratch with our detailed guides, FAQs, and tutorials. Start with a quick strategy!"
         />
-        <meta property="og:title" content="Deriv Bot" />
+        <meta property="og:title" content="Automate Your Trades | Deriv Bot" />
         <meta
             property="og:description"
             content="Import your current bot or learn how to create a trading bot from scratch with our detailed guides, FAQs, and tutorials. Start with a quick strategy!"
         />
-        <title>Build a trading bot without coding | Deriv Bot.</title>
+        <title>Automate Your Trades | Deriv Bot</title>
         <style>
             :root {
                 font-size: 62.5%;
             }
         </style>
+        <script>
+            (function () {
+                try {
+                    var p = localStorage.getItem('chrome-url-bar-position');
+                    document.documentElement.setAttribute('data-chrome-bar', p === 'bottom' ? 'bottom' : 'top');
+                } catch (e) {}
+            })();
+        </script>
     </head>
 
     <body class="body theme theme--light">

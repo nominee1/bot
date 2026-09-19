@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
-import { LegacyThemeDarkIcon, LegacyThemeLightIcon } from '@deriv/quill-icons/Legacy';
+import { StandaloneMoonRegularIcon, StandaloneSunBrightRegularIcon } from '@deriv/quill-icons/Standalone';
 import { useTranslations } from '@deriv-com/translations';
 import { Tooltip } from '@deriv-com/ui';
 
@@ -15,7 +15,11 @@ const ChangeTheme = observer(() => {
             tooltipContent={localize('Change theme')}
             onClick={toggleTheme}
         >
-            {!is_dark_mode_on ? <LegacyThemeLightIcon iconSize='xs' /> : <LegacyThemeDarkIcon iconSize='xs' />}
+            {!is_dark_mode_on ? (
+                <StandaloneSunBrightRegularIcon width={24} height={24} fill='var(--text-general)' />
+            ) : (
+                <StandaloneMoonRegularIcon width={24} height={24} fill='var(--text-general)' />
+            )}
         </Tooltip>
     );
 });

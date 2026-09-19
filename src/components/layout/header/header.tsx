@@ -1,27 +1,24 @@
-import { useCallback } from 'react';
-import clsx from 'clsx';
+import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import PWAInstallButton from '@/components/pwa-install-button';
-import { generateOAuthURL, standalone_routes } from '@/components/shared';
-import { hasBotStudioOAuthConfig, isBotStudioDeploy } from '@/components/shared/utils/config/config';
-import { requestDerivOAuthAuthentication } from '@/components/shared/utils/login/login';
-import Button from '@/components/shared_ui/button';
-import useActiveAccount from '@/hooks/api/account/useActiveAccount';
+import { standalone_routes } from '@/components/shared';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
-import { useFirebaseCountriesConfig } from '@/hooks/firebase/useFirebaseCountriesConfig';
 import { useApiBase } from '@/hooks/useApiBase';
+import useModalManager from '@/hooks/useModalManager';
 import { useStore } from '@/hooks/useStore';
-import useTMB from '@/hooks/useTMB';
-import { clearAuthData, handleOidcAuthFailure } from '@/utils/auth-utils';
-import { StandaloneCircleUserRegularIcon } from '@deriv/quill-icons/Standalone';
-import { requestOidcAuthentication } from '@deriv-com/auth-client';
+import { getActiveTabUrl } from '@/utils/getActiveTabUrl';
+import { LANGUAGES } from '@/utils/languages';
+import {
+    StandaloneFileRegularIcon,
+    StandaloneGlobeRegularIcon,
+    StandaloneHouseBlankRegularIcon,
+    StandaloneRightFromBracketRegularIcon,
+} from '@deriv/quill-icons/Standalone';
 import { Localize, useTranslations } from '@deriv-com/translations';
-import { Header, useDevice, Wrapper } from '@deriv-com/ui';
-import { Tooltip } from '@deriv-com/ui';
+import { DesktopLanguagesModal, useDevice } from '@deriv-com/ui';
 import { AppLogo } from '../app-logo';
-import AccountsInfoLoader from './account-info-loader';
-import AccountSwitcher from './account-switcher';
-import MenuItems from './menu-items';
+import ChangeTheme from '../footer/ChangeTheme';
+import AccountActions from './account-actions';
+import BottomNavigation from './bottom-navigation';
 import MobileMenu from './mobile-menu';
 import './header.scss';
 
@@ -31,210 +28,122 @@ type TAppHeaderProps = {
 
 const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
     const { isDesktop } = useDevice();
-    const { isAuthorizing, activeLoginid } = useApiBase();
+    const { activeLoginid } = useApiBase();
     const { client } = useStore() ?? {};
-
-    const { data: activeAccount } = useActiveAccount({ allBalanceData: client?.all_accounts_balance });
-    const { accounts, getCurrency, is_virtual } = client ?? {};
-    const has_wallet = Object.keys(accounts ?? {}).some(id => accounts?.[id].account_category === 'wallet');
-
-    const currency = getCurrency?.();
-    const { localize } = useTranslations();
-
-    const { isSingleLoggingIn } = useOauth2();
-
-    const { hubEnabledCountryList } = useFirebaseCountriesConfig();
-    const { onRenderTMBCheck, isTmbEnabled } = useTMB();
-    const is_tmb_enabled = isTmbEnabled() || window.is_tmb_enabled === true;
-    // No need for additional state management here since we're handling it in the layout component
-
-    const is_white_label = hasBotStudioOAuthConfig();
-    const use_pkce_login = isBotStudioDeploy();
-
-    const renderAccountSection = useCallback(() => {
-        // Show loader during authentication processes
-        if (isAuthenticating || isAuthorizing || (isSingleLoggingIn && !is_tmb_enabled)) {
-            return <AccountsInfoLoader isLoggedIn isMobile={!isDesktop} speed={3} />;
-        } else if (activeLoginid) {
-            return (
-                <>
-                    {/* <CustomNotifications /> */}
-
-                    {isDesktop &&
-                        !is_white_label &&
-                        (has_wallet ? (
-                            <Button
-                                className='manage-funds-button'
-                                has_effect
-                                text={localize('Manage funds')}
-                                onClick={() => {
-                                    let redirect_url = new URL(standalone_routes.wallets_transfer);
-                                    const is_hub_enabled_country = hubEnabledCountryList.includes(
-                                        client?.residence || ''
-                                    );
-                                    if (is_hub_enabled_country) {
-                                        redirect_url = new URL(standalone_routes.recent_transactions);
-                                    }
-                                    if (is_virtual) {
-                                        redirect_url.searchParams.set('account', 'demo');
-                                    } else if (currency) {
-                                        redirect_url.searchParams.set('account', currency);
-                                    }
-                                    window.location.assign(redirect_url.toString());
-                                }}
-                                primary
-                            />
-                        ) : (
-                            <Button
-                                primary
-                                onClick={() => {
-                                    const redirect_url = new URL(standalone_routes.cashier_deposit);
-                                    if (currency) {
-                                        redirect_url.searchParams.set('account', currency);
-                                    }
-                                    window.location.assign(redirect_url.toString());
-                                }}
-                                className='deposit-button'
-                            >
-                                {localize('Deposit')}
-                            </Button>
-                        ))}
-
-                    <AccountSwitcher activeAccount={activeAccount} />
-
-                    {isDesktop &&
-                        (() => {
-                            let redirect_url = new URL(standalone_routes.personal_details);
-                            const is_hub_enabled_country = hubEnabledCountryList.includes(client?.residence || '');
-
-                            if (has_wallet && is_hub_enabled_country) {
-                                redirect_url = new URL(standalone_routes.account_settings);
-                            }
-                            // Check if the account is a demo account
-                            // Use the URL parameter to determine if it's a demo account, as this will update when the account changes
-                            const urlParams = new URLSearchParams(window.location.search);
-                            const account_param = urlParams.get('account');
-                            const is_virtual = client?.is_virtual || account_param === 'demo';
-
-                            if (is_virtual) {
-                                // For demo accounts, set the account parameter to 'demo'
-                                redirect_url.searchParams.set('account', 'demo');
-                            } else if (currency) {
-                                // For real accounts, set the account parameter to the currency
-                                redirect_url.searchParams.set('account', currency);
-                            }
-                            return (
-                                <Tooltip
-                                    as='a'
-                                    href={redirect_url.toString()}
-                                    tooltipContent={localize('Manage account settings')}
-                                    tooltipPosition='bottom'
-                                    className='app-header__account-settings'
-                                >
-                                    <StandaloneCircleUserRegularIcon className='app-header__profile_icon' />
-                                </Tooltip>
-                            );
-                        })()}
-                </>
-            );
-        } else {
-            return (
-                <div className='auth-actions'>
-                    <Button
-                        tertiary
-                        onClick={async () => {
-                            if (use_pkce_login) {
-                                clearAuthData(false);
-                                await requestDerivOAuthAuthentication();
-                                return;
-                            }
-                            clearAuthData(false);
-                            const getQueryParams = new URLSearchParams(window.location.search);
-                            const currency = getQueryParams.get('account') ?? '';
-                            const query_param_currency =
-                                currency || sessionStorage.getItem('query_param_currency') || 'USD';
-
-                            try {
-                                // First, explicitly wait for TMB status to be determined
-                                const tmbEnabled = await isTmbEnabled();
-                                // Now use the result of the explicit check
-                                if (tmbEnabled) {
-                                    await onRenderTMBCheck(true); // Pass true to indicate it's from login button
-                                } else {
-                                    // Always use OIDC if TMB is not enabled
-                                    try {
-                                        await requestOidcAuthentication({
-                                            redirectCallbackUri: `${window.location.origin}/callback`,
-                                            ...(query_param_currency
-                                                ? {
-                                                      state: {
-                                                          account: query_param_currency,
-                                                      },
-                                                  }
-                                                : {}),
-                                        });
-                                    } catch (err) {
-                                        handleOidcAuthFailure(err);
-                                        window.location.replace(generateOAuthURL());
-                                    }
-                                }
-                            } catch (error) {
-                                // eslint-disable-next-line no-console
-                                console.error(error);
-                            }
-                        }}
-                    >
-                        <Localize i18n_default_text='Log in' />
-                    </Button>
-                    <Button
-                        primary
-                        onClick={() => {
-                            window.open(standalone_routes.signup);
-                        }}
-                    >
-                        <Localize i18n_default_text='Sign up' />
-                    </Button>
-                </div>
-            );
-        }
-    }, [
-        isAuthenticating,
-        isAuthorizing,
-        isSingleLoggingIn,
-        isDesktop,
-        activeLoginid,
-        standalone_routes,
+    const { currentLang = 'EN', localize, switchLanguage } = useTranslations();
+    const { hideModal, isModalOpenFor, showModal } = useModalManager();
+    const { oAuthLogout } = useOauth2({
+        handleLogout: async () => client?.logout?.(),
         client,
-        has_wallet,
-        currency,
-        localize,
-        activeAccount,
-        is_virtual,
-        onRenderTMBCheck,
-        is_tmb_enabled,
-        is_white_label,
-    ]);
+    });
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    const homeHref = `${standalone_routes.home}?lang=${currentLang}`;
+    const reportsHref = (() => {
+        const url = new URL(standalone_routes.positions);
+        url.searchParams.set('redirect', window.location.origin);
+        url.searchParams.set('lang', currentLang);
+        const account_param = new URLSearchParams(window.location.search).get('account');
+        if (account_param) url.searchParams.set('account', account_param);
+        return url.toString();
+    })();
 
     if (client?.should_hide_header) return null;
+
+    if (isDesktop) {
+        return (
+            <>
+                <aside className='app-header app-header--desktop app-header--vertical'>
+                    <div className='app-header__top-section'>
+                        <AppLogo />
+                        <div className='app-header__nav-item'>
+                            <a href={homeHref} className='app-header__nav-link' aria-label={localize('Home')}>
+                                <StandaloneHouseBlankRegularIcon width={24} height={24} fill='var(--text-general)' />
+                                <span className='app-header__nav-text'>
+                                    <Localize i18n_default_text='Home' />
+                                </span>
+                            </a>
+                        </div>
+                        <div className='app-header__nav-item'>
+                            <a href={reportsHref} className='app-header__nav-link' aria-label={localize('Reports')}>
+                                <StandaloneFileRegularIcon width={24} height={24} fill='var(--text-general)' />
+                                <span className='app-header__nav-text'>
+                                    <Localize i18n_default_text='Reports' />
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+                    <div className='app-header__bottom-section'>
+                        <div className='app-header__nav-item'>
+                            <button
+                                type='button'
+                                className='app-footer__language'
+                                aria-label={`${localize('Change language')} - ${currentLang}`}
+                                onClick={() => showModal('DesktopLanguagesModal')}
+                            >
+                                <StandaloneGlobeRegularIcon width={24} height={24} fill='var(--text-general)' />
+                                <span className='app-header__nav-text'>
+                                    <Localize i18n_default_text='Language' />
+                                </span>
+                            </button>
+                        </div>
+                        <div className='app-header__nav-item'>
+                            <div className='app-header__theme-wrap'>
+                                <ChangeTheme />
+                                <span className='app-header__nav-text'>
+                                    <Localize i18n_default_text='Theme' />
+                                </span>
+                            </div>
+                        </div>
+                        {activeLoginid ? (
+                            <div className='app-header__nav-item'>
+                                <button
+                                    type='button'
+                                    className='app-header__nav-link'
+                                    aria-label={localize('Log out')}
+                                    onClick={() => oAuthLogout()}
+                                >
+                                    <StandaloneRightFromBracketRegularIcon
+                                        width={24}
+                                        height={24}
+                                        fill='var(--text-general)'
+                                    />
+                                    <span className='app-header__nav-text'>
+                                        <Localize i18n_default_text='Log out' />
+                                    </span>
+                                </button>
+                            </div>
+                        ) : null}
+                    </div>
+                </aside>
+                {isModalOpenFor('DesktopLanguagesModal') && (
+                    <DesktopLanguagesModal
+                        headerTitle={localize('Select Language')}
+                        isModalOpen
+                        languages={LANGUAGES}
+                        onClose={hideModal}
+                        onLanguageSwitch={code => {
+                            switchLanguage(code);
+                            hideModal();
+                            window.location.replace(getActiveTabUrl());
+                            window.location.reload();
+                        }}
+                        selectedLanguage={currentLang}
+                    />
+                )}
+            </>
+        );
+    }
+
     return (
-        <Header
-            className={clsx('app-header', {
-                'app-header--desktop': isDesktop,
-                'app-header--mobile': !isDesktop,
-            })}
-        >
-            <Wrapper variant='left'>
+        <>
+            <header className='app-header app-header--mobile'>
                 <AppLogo />
-                <MobileMenu />
-                {!is_white_label && isDesktop && <MenuItems.TradershubLink />}
-                {isDesktop && !is_white_label && <MenuItems />}
-            </Wrapper>
-            <Wrapper variant='right'>
-                {!isDesktop && <PWAInstallButton variant='primary' size='medium' />}
-                {renderAccountSection()}
-            </Wrapper>
-            {/* <PWAInstallModalTest /> */}
-        </Header>
+                <AccountActions isAuthenticating={isAuthenticating} />
+            </header>
+            <MobileMenu isOpen={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen} hideToggle />
+            <BottomNavigation onMenuClick={() => setIsMobileMenuOpen(true)} />
+        </>
     );
 });
 

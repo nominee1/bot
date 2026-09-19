@@ -24,6 +24,15 @@ import { useStore } from '@/hooks/useStore';
 import useTMB from '@/hooks/useTMB';
 import type ClientStore from '@/stores/client-store';
 import { TLandingCompany, TSocketResponseData } from '@/types/api-types';
+import {
+    crShadowBroadcastMatchesWallet,
+    crShadowChannel,
+    type CrShadowMsg,
+    shouldSuppressDerivBalanceForMoonLead,
+    shouldSuppressDerivBalanceForVirtualShadow,
+    syncCrShadowBalanceIfNeeded,
+    syncMoonVirtLedgerToHeaderIfNeeded,
+} from '@/utils/crVirtualBalanceShadow';
 import type { Balance } from '@deriv/api-types';
 import { useTranslations } from '@deriv-com/translations';
 
@@ -35,6 +44,14 @@ function mergeOptionsAccountBalances(
     accounts.forEach(account => {
         const loginid = String(account.loginid ?? '');
         if (!allowedLoginids.has(loginid)) return;
+        if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
+            syncCrShadowBalanceIfNeeded(client, loginid, Number(account.balance ?? 0));
+            return;
+        }
+        if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
+            syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
+            return;
+        }
         const currentBalanceData = client.all_accounts_balance?.accounts?.[loginid];
         const nextBalance = {
             balance: Number(account.balance ?? 0),
@@ -132,7 +149,16 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     }, [client, isAuthorized, isAuthorizing, accountList]);
 
     useEffect(() => {
-        const currentBalanceData = client?.all_accounts_balance?.accounts?.[activeAccount?.loginid ?? ''];
+        const loginid = activeAccount?.loginid ?? '';
+        if (client && loginid && shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
+            syncCrShadowBalanceIfNeeded(client, loginid);
+            return;
+        }
+        if (client && loginid && shouldSuppressDerivBalanceForMoonLead(loginid)) {
+            syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
+            return;
+        }
+        const currentBalanceData = client?.all_accounts_balance?.accounts?.[loginid];
         if (currentBalanceData) {
             client?.setBalance(currentBalanceData.balance.toFixed(getDecimalPlaces(currentBalanceData.currency)));
             client?.setCurrency(currentBalanceData.currency);
@@ -140,6 +166,18 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeAccount?.loginid, client?.all_accounts_balance]);
+
+    useEffect(() => {
+        if (!client || !activeAccount?.loginid || !crShadowChannel) return undefined;
+        const loginid = activeAccount.loginid;
+        const onMsg = (ev: MessageEvent<CrShadowMsg>) => {
+            if (ev.data?.type !== 'cr_shadow') return;
+            if (!crShadowBroadcastMatchesWallet(loginid, ev.data.loginid)) return;
+            syncCrShadowBalanceIfNeeded(client, loginid, ev.data.value);
+        };
+        crShadowChannel.addEventListener('message', onMsg);
+        return () => crShadowChannel?.removeEventListener('message', onMsg);
+    }, [client, activeAccount?.loginid]);
 
     useEffect(() => {
         if (!client) return;
@@ -245,9 +283,31 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             if (msg_type === 'balance' && data && !error) {
                 const balance = data.balance;
                 if (balance?.accounts) {
-                    client.setAllAccountsBalance(balance);
+                    const incoming = { ...(balance.accounts ?? {}) };
+                    Object.keys(incoming).forEach(loginid => {
+                        if (
+                            shouldSuppressDerivBalanceForVirtualShadow(loginid) ||
+                            shouldSuppressDerivBalanceForMoonLead(loginid)
+                        ) {
+                            delete incoming[loginid];
+                        }
+                    });
+                    client.setAllAccountsBalance({
+                        ...balance,
+                        accounts: {
+                            ...(client.all_accounts_balance?.accounts ?? {}),
+                            ...incoming,
+                        },
+                    });
+                    Object.keys(balance.accounts).forEach(loginid => {
+                        if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
+                            syncCrShadowBalanceIfNeeded(client, loginid, Number(balance.accounts?.[loginid]?.balance));
+                        } else if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
+                            syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
+                        }
+                    });
                     if (isDerivOptionsOAuthSession()) {
-                        Object.entries(balance.accounts).forEach(([loginid, entry]) => {
+                        Object.entries(incoming).forEach(([loginid, entry]) => {
                             const bal = entry?.balance;
                             if (typeof bal === 'number' && Number.isFinite(bal)) {
                                 updateStoredOptionsAccountBalance(loginid, bal, entry?.currency || 'USD');
@@ -255,6 +315,15 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
                         });
                     }
                 } else if (balance?.loginid) {
+                    const loginid = String(balance.loginid);
+                    if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
+                        syncCrShadowBalanceIfNeeded(client, loginid, Number(balance.balance));
+                        return;
+                    }
+                    if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
+                        syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
+                        return;
+                    }
                     if (!client?.all_accounts_balance?.accounts || !balance?.loginid) return;
                     const accounts = { ...client.all_accounts_balance.accounts };
                     const currentLoggedInBalance = { ...accounts[balance.loginid] };
@@ -269,11 +338,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
                     };
                     client.setAllAccountsBalance(updatedAccounts);
                     if (isDerivOptionsOAuthSession()) {
-                        updateStoredOptionsAccountBalance(
-                            String(balance.loginid),
-                            Number(balance.balance),
-                            balance.currency || 'USD'
-                        );
+                        updateStoredOptionsAccountBalance(loginid, Number(balance.balance), balance.currency || 'USD');
                     }
                 }
             }

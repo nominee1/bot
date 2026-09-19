@@ -2,7 +2,6 @@ import { ComponentProps, ReactNode, useMemo } from 'react';
 import Livechat from '@/components/chat/Livechat';
 import useIsLiveChatWidgetAvailable from '@/components/chat/useIsLiveChatWidgetAvailable';
 import { standalone_routes } from '@/components/shared';
-import { hasBotStudioOAuthConfig } from '@/components/shared/utils/config/config';
 import { useFirebaseCountriesConfig } from '@/hooks/firebase/useFirebaseCountriesConfig';
 import useRemoteConfig from '@/hooks/growthbook/useRemoteConfig';
 import { useIsIntercomAvailable } from '@/hooks/useIntercom';
@@ -45,7 +44,6 @@ type TMenuConfig = {
 const useMobileMenuConfig = (client?: RootStore['client']) => {
     const { localize } = useTranslations();
     const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
-    const is_white_label = hasBotStudioOAuthConfig();
 
     const { data } = useRemoteConfig(true);
     const { cs_chat_whatsapp } = data;
@@ -101,19 +99,6 @@ const useMobileMenuConfig = (client?: RootStore['client']) => {
     };
 
     const menuConfig = useMemo((): TMenuConfig[] => {
-        if (is_white_label) {
-            return [
-                [
-                    {
-                        as: 'button',
-                        label: localize('Dark theme'),
-                        LeftComponent: LegacyTheme1pxIcon,
-                        RightComponent: <ToggleSwitch value={is_dark_mode_on} onChange={toggleTheme} />,
-                    },
-                ],
-            ];
-        }
-
         return [
             [
                 {
@@ -205,7 +190,6 @@ const useMobileMenuConfig = (client?: RootStore['client']) => {
             [],
         ];
     }, [
-        is_white_label,
         is_dark_mode_on,
         toggleTheme,
         is_virtual,

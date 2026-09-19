@@ -27,6 +27,7 @@ import { LegacyGuide1pxIcon } from '@deriv/quill-icons/Legacy';
 import { requestOidcAuthentication } from '@deriv-com/auth-client';
 import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
+import AccountActions from '../../components/layout/header/account-actions';
 import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
@@ -86,37 +87,32 @@ const AppWrapper = observer(() => {
     React.useEffect(() => {
         const el_dashboard = document.getElementById('id-dbot-dashboard');
         const el_tutorial = document.getElementById('id-tutorials');
+        if (!el_dashboard || !el_tutorial) {
+            return undefined;
+        }
 
         const observer_dashboard = new window.IntersectionObserver(
             ([entry]) => {
-                if (entry.isIntersecting) {
-                    setLeftTabShadow(false);
-                    return;
-                }
-                setLeftTabShadow(true);
+                setLeftTabShadow(!entry.isIntersecting);
             },
-            {
-                root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
-            }
+            { root: null, threshold: 0.5 }
         );
 
         const observer_tutorial = new window.IntersectionObserver(
             ([entry]) => {
-                if (entry.isIntersecting) {
-                    setRightTabShadow(false);
-                    return;
-                }
-                setRightTabShadow(true);
+                setRightTabShadow(!entry.isIntersecting);
             },
-            {
-                root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
-            }
+            { root: null, threshold: 0.5 }
         );
+
         observer_dashboard.observe(el_dashboard);
         observer_tutorial.observe(el_tutorial);
-    });
+
+        return () => {
+            observer_dashboard.disconnect();
+            observer_tutorial.disconnect();
+        };
+    }, []);
 
     React.useEffect(() => {
         if (connectionStatus !== CONNECTION_STATUS.OPENED) {
@@ -272,7 +268,12 @@ const AppWrapper = observer(() => {
                         'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
                     })}
                 >
-                    <div>
+                    <div className='main__workspace'>
+                        {isDesktop && (
+                            <div className='main__tabs-account-section'>
+                                <AccountActions />
+                            </div>
+                        )}
                         {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
                             <div

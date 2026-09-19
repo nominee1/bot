@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import Cookies from 'js-cookie';
 import { observer } from 'mobx-react-lite';
 import { Outlet } from 'react-router-dom';
+import ChromeUrlBars from '@/components/chrome-url-bars';
 import PWAUpdateNotification from '@/components/pwa-update-notification';
 import { isBotStudioDeploy } from '@/components/shared/utils/config/config';
 import { api_base } from '@/external/bot-skeleton';
@@ -13,10 +14,12 @@ import { handleOidcAuthFailure, isDemoAccount } from '@/utils/auth-utils';
 import { requestOidcAuthentication } from '@deriv-com/auth-client';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
-import Footer from './footer';
+import NetworkStatus from './footer/NetworkStatus';
+import ServerTime from './footer/ServerTime';
 import AppHeader from './header';
 import Body from './main-body';
 import './layout.scss';
+import './footer/footer.scss';
 
 const Layout = observer(() => {
     const { isDesktop } = useDevice();
@@ -233,8 +236,16 @@ const Layout = observer(() => {
         }
     }, [isOnline, isAuthenticating]);
 
-    // Add a state to track if initial authentication check is complete
     const [isInitialAuthCheckComplete, setIsInitialAuthCheckComplete] = useState(false);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            setIsAuthenticating(false);
+            setIsInitialAuthCheckComplete(true);
+        }, 4000);
+
+        return () => clearTimeout(timeout);
+    }, []);
 
     // Effect to mark initial auth check as complete after a short delay
     useEffect(() => {
@@ -249,19 +260,28 @@ const Layout = observer(() => {
     }, [isAuthenticating, isInitialAuthCheckComplete]);
 
     return (
-        <div
-            className={clsx('layout', {
-                responsive: isDesktop,
-                'quick-strategy-active': is_quick_strategy_active && !isDesktop,
-            })}
-        >
-            {!isCallbackPage && <AppHeader isAuthenticating={isAuthenticating || !isInitialAuthCheckComplete} />}
-            <Body>
-                <Outlet />
-            </Body>
-            {!isCallbackPage && isDesktop && <Footer />}
-            <PWAUpdateNotification />
-        </div>
+        <>
+            <ChromeUrlBars />
+            <div
+                className={clsx('layout', {
+                    responsive: isDesktop,
+                    'quick-strategy-active': is_quick_strategy_active && !isDesktop,
+                })}
+            >
+                {!isCallbackPage && <AppHeader isAuthenticating={isAuthenticating || !isInitialAuthCheckComplete} />}
+                <Body>
+                    <Outlet />
+                </Body>
+                {isDesktop && (
+                    <footer className='app-footer app-footer--status'>
+                        <ServerTime />
+                        <div className='app-footer__vertical-line' />
+                        <NetworkStatus />
+                    </footer>
+                )}
+                <PWAUpdateNotification />
+            </div>
+        </>
     );
 });
 

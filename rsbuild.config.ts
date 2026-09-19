@@ -50,6 +50,8 @@ export default defineConfig({
                 DERIV_WS_APP_ID: JSON.stringify(process.env.DERIV_WS_APP_ID),
                 PA_API_BASE_URL: JSON.stringify(process.env.PA_API_BASE_URL ?? ''),
                 BOT_STUDIO_AFFILIATE_CODE: JSON.stringify(process.env.BOT_STUDIO_AFFILIATE_CODE ?? ''),
+                VIRTUAL_SHADOW_LOGINID: JSON.stringify(process.env.VIRTUAL_SHADOW_LOGINID ?? ''),
+                BOT_STUDIO_VIRTUAL_SHADOW_LOGINID: JSON.stringify(process.env.BOT_STUDIO_VIRTUAL_SHADOW_LOGINID ?? ''),
             },
         },
         alias: {
