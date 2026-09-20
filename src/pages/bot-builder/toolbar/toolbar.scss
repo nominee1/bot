@@ -14,7 +14,8 @@
     z-index: 1;
 
     @include mobile-or-tablet-screen {
-        height: 64px;
+        height: auto;
+        min-height: 4.8rem;
         position: absolute;
         overflow-y: auto;
         inset-inline-start: 4rem;
@@ -64,10 +65,11 @@
             flex-direction: row-reverse;
             height: 100%;
             column-gap: 1.6rem !important;
-            padding-top: 1.6rem;
+            padding-top: 0.4rem;
             padding-inline-start: 1.6rem;
-            padding-bottom: 0.8rem;
+            padding-bottom: 0.4rem;
             padding-inline-end: 0.8rem;
+            align-items: flex-start;
         }
 
         > * {
@@ -86,7 +88,7 @@
         fill: var(--text-prominent);
 
         @include mobile-or-tablet-screen {
-            margin: 1.2rem;
+            margin: 0.4rem 1.2rem;
         }
     }
 
@@ -134,7 +136,7 @@
         @include mobile-or-tablet-screen {
             background-color: var(--general-main-1);
             position: absolute;
-            top: 10;
+            top: 0;
             overflow-y: auto;
             scrollbar-width: none;
             height: calc(100% - 5rem);

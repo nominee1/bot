@@ -1,6 +1,21 @@
 .mobile-menu {
     height: 100%;
 
+    /* Drawer host only (toggle lives in bottom nav) — don't reserve vertical space. */
+    &--drawer-only {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: visible;
+        pointer-events: none;
+
+        .deriv-drawer,
+        [class*='Drawer'],
+        [role='dialog'] {
+            pointer-events: auto;
+        }
+    }
+
     &__toggle {
         padding-inline-start: 1rem;
         padding-inline-end: 1rem;

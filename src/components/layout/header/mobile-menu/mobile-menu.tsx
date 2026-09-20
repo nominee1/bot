@@ -48,7 +48,7 @@ const MobileMenu = ({ hideToggle = false, isOpen, onOpenChange }: TMobileMenuPro
 
     if (isDesktop) return null;
     return (
-        <div className='mobile-menu'>
+        <div className={`mobile-menu${hideToggle ? ' mobile-menu--drawer-only' : ''}`}>
             {!hideToggle && (
                 <div className='mobile-menu__toggle'>
                     <ToggleButton onClick={openDrawer} />
