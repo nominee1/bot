@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { standalone_routes } from '@/components/shared';
 import { useChromeCollapse } from '@/hooks/use-chrome-collapse';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
+import { getLiveDbotDisplayRoute } from '@/utils/bot-embed';
 
 const DISPLAY_HOST = 'bot.deriv.com';
 const BAR_POS_KEY = 'chrome-url-bar-position';
@@ -99,7 +100,7 @@ const ChromeUrlBars = () => {
     useChromeCollapse(`${location.pathname}${location.search}${location.hash}:${barPosition}`);
 
     const host = DISPLAY_HOST;
-    const route = `${location.pathname}${location.search}${location.hash}`;
+    const route = getLiveDbotDisplayRoute(location.pathname, location.search, location.hash);
     const href = `https://${host}${route}`;
 
     useEffect(() => {

@@ -1,13 +1,25 @@
 :root {
     --site-url-bars-h: 0px;
-    --chrome-mobile-bar-h: 0px;
+    --chrome-mobile-bar-h: 56px;
     --chrome-bar-top: 0px;
     --chrome-bar-bottom: 0px;
     --chrome-collapse: 0px;
 }
 
+html[data-chrome-bar='top'] {
+    --chrome-bar-top: calc(var(--chrome-mobile-bar-h) + env(safe-area-inset-top, 0px));
+    --chrome-bar-bottom: 0px;
+}
+
+html[data-chrome-bar='bottom'] {
+    --chrome-bar-top: 0px;
+    --chrome-bar-bottom: calc(var(--chrome-mobile-bar-h) + env(safe-area-inset-bottom, 0px));
+}
+
 @media (width >= 1280px) {
-    :root {
+    :root,
+    html[data-chrome-bar='top'],
+    html[data-chrome-bar='bottom'] {
         --site-url-bars-h: 48px;
         --chrome-mobile-bar-h: 0px;
         --chrome-bar-top: 0px;
@@ -120,7 +132,7 @@ body {
 }
 
 .chrome-url-bars-mobile {
-    display: none;
+    display: flex;
     position: fixed;
     inset-inline: 0;
     z-index: 220;
@@ -132,7 +144,7 @@ body {
     box-sizing: border-box;
     will-change: transform;
 
-    @media (width >= 768px) {
+    @media (width >= 1280px) {
         display: none;
     }
 

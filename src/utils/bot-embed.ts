@@ -34,3 +34,16 @@ export function requestDeriv1Home(): void {
     }
     window.location.assign('/');
 }
+
+const LIVE_TAB_HASHES = ['dashboard', 'bot_builder', 'chart', 'tutorial'] as const;
+
+/** Omnibox path matching live DBot: bot.deriv.com/#bot_builder (hash tab first, no embed/session). */
+export function getLiveDbotDisplayRoute(pathname: string, _search: string, hash: string): string {
+    const path = (pathname || '/').replace(/^\/bot(?=\/|$)/, '') || '/';
+    if (path === '/endpoint' || path.startsWith('/endpoint/')) return '/endpoint';
+    if (path === '/callback' || path.startsWith('/callback/')) return '/callback';
+
+    const raw = (hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
+    const tab = LIVE_TAB_HASHES.includes(raw as (typeof LIVE_TAB_HASHES)[number]) ? raw : 'bot_builder';
+    return `/#${tab}`;
+}

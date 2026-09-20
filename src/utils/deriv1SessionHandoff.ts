@@ -110,7 +110,7 @@ function stripHandoffHash(): void {
     try {
         const url = new URL(window.location.href);
         if (!url.hash.includes('deriv1_session=')) return;
-        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+        window.history.replaceState({}, '', `${url.pathname}${url.search}#bot_builder`);
     } catch {
         /* ignore */
     }

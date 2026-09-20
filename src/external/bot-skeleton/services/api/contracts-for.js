@@ -172,6 +172,29 @@ export default class ContractsFor {
         );
     }
 
+    inferBarrierCategory(contract) {
+        if (contract.barrier_category) {
+            return contract.barrier_category;
+        }
+
+        const { BARRIER_CATEGORIES } = config();
+        const category = contract.contract_category;
+        const from_map = Object.keys(BARRIER_CATEGORIES).find(barrier_category =>
+            BARRIER_CATEGORIES[barrier_category].includes(category)
+        );
+
+        if (from_map) {
+            return from_map;
+        }
+
+        // Options public WS uses `asian`; bot config lists the trade type as `asians`.
+        if (category === 'asian') {
+            return 'asian';
+        }
+
+        return undefined;
+    }
+
     async getContractsByTradeType(symbol, trade_type) {
         const contracts = await this.getContractsFor(symbol);
         const contract_category = this.getContractCategoryByTradeType(trade_type);
@@ -179,9 +202,16 @@ export default class ContractsFor {
 
         return contracts.filter(contract => {
             const has_matching_category = contract.contract_category === contract_category;
-            const has_matching_barrier = contract.barrier_category === barrier_category;
+            if (!has_matching_category) {
+                return false;
+            }
 
-            return has_matching_category && has_matching_barrier;
+            // Public Options contracts_for omits barrier_category; match category only then.
+            if (!barrier_category || !contract.barrier_category) {
+                return true;
+            }
+
+            return contract.barrier_category === barrier_category;
         });
     }
 
@@ -204,11 +234,21 @@ export default class ContractsFor {
             }
 
             const {
-                contracts_for: { available: contracts },
+                contracts_for: { available: contracts = [] },
             } = response;
 
             // We don't offer forward-starting contracts in bot.
-            const filtered_contracts = contracts.filter(c => c.start_type !== 'forward');
+            const filtered_contracts = (contracts || [])
+                .map(c => {
+                    const barrier_category = this.inferBarrierCategory(c);
+                    return {
+                        ...c,
+                        symbol: c.symbol || c.underlying_symbol,
+                        underlying: c.underlying || c.underlying_symbol,
+                        ...(barrier_category ? { barrier_category } : {}),
+                    };
+                })
+                .filter(c => c.start_type !== 'forward');
 
             this.contracts_for[symbol] = {
                 contracts: filtered_contracts,

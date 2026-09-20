@@ -67,6 +67,7 @@ export default defineConfig({
         },
     },
     output: {
+        assetPrefix: 'auto',
         copy: [
             {
                 from: 'node_modules/@deriv/deriv-charts/dist/*',

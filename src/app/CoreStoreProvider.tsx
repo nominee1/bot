@@ -250,6 +250,11 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     }, [currentLang, common]);
 
     useEffect(() => {
+        if (!common?.setSocketOpened) return;
+        common.setSocketOpened(connectionStatus === CONNECTION_STATUS.OPENED);
+    }, [common, connectionStatus]);
+
+    useEffect(() => {
         const updateServerTime = () => {
             api_base.api
                 .time()

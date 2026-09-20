@@ -1,3 +1,4 @@
+import './public-path';
 import ReactDOM from 'react-dom/client';
 import { AuthWrapper } from './app/AuthWrapper';
 import { AnalyticsInitializer } from './utils/analytics';

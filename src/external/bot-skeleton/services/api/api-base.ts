@@ -286,12 +286,10 @@ class APIBase {
                 this.api.connection.removeEventListener('open', this.onsocketopen.bind(this));
                 this.api.connection.removeEventListener('close', this.onsocketclose.bind(this));
             }
-            const optionsOAuth = isDerivOptionsOAuthSession() && Boolean(getDerivOAuthAccessToken());
-            if (!optionsOAuth) {
-                this.adoptTradingApi(generateDerivApiInstance() as TApiBaseApi);
-                this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
-                this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
-            }
+            // Public WS is required for active_symbols / contracts_for even when Options OTP is pending.
+            this.adoptTradingApi(generateDerivApiInstance() as TApiBaseApi);
+            this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
+            this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
         }
 
         if (!this.has_active_symbols && this.api) {
@@ -451,14 +449,36 @@ class APIBase {
         await doUntilDone(() => this.api?.send({ active_symbols: 'brief' }), [], this).then(result => {
             const { active_symbols = [], error = {} } = result ?? {};
             const pip_sizes = {};
-            if (active_symbols.length) this.has_active_symbols = true;
-            active_symbols.forEach(({ symbol, pip }: { symbol: string; pip: string }) => {
-                (pip_sizes as Record<string, number>)[symbol] = +(+pip).toExponential().substring(3);
+            const normalized = (active_symbols as Array<Record<string, unknown>>).map(item => {
+                const symbol = String(item.symbol || item.underlying_symbol || '');
+                const pip = item.pip ?? item.pip_size;
+                const market = String(item.market || '');
+                const submarket = String(item.submarket || '');
+                const display = String(item.display_name || item.underlying_symbol_name || symbol);
+                return {
+                    ...item,
+                    symbol,
+                    pip,
+                    display_name: display,
+                    market_display_name:
+                        item.market_display_name ||
+                        (market === 'synthetic_index' ? 'Derived indices' : market.replace(/_/g, ' ')),
+                    submarket_display_name:
+                        item.submarket_display_name ||
+                        (submarket === 'random_index' ? 'Continuous Indices' : submarket.replace(/_/g, ' ')),
+                };
+            });
+            if (normalized.length) this.has_active_symbols = true;
+            normalized.forEach(({ symbol, pip }: { symbol: string; pip: string | number }) => {
+                const n = Number(pip);
+                (pip_sizes as Record<string, number>)[symbol] = Number.isFinite(n)
+                    ? +n.toExponential().substring(3)
+                    : 2;
             });
             this.pip_sizes = pip_sizes as Record<string, number>;
             this.toggleRunButton(false);
-            this.active_symbols = active_symbols;
-            return active_symbols || error;
+            this.active_symbols = normalized as typeof this.active_symbols;
+            return normalized || error;
         });
     };
 

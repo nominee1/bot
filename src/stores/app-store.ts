@@ -38,6 +38,7 @@ export default class AppStore {
             setDBotEngineStores: action,
             onClickOutsideBlockly: action,
             showDigitalOptionsMaltainvestError: action,
+            refreshTradeDefinitionMarkets: action,
         });
 
         this.root_store = root_store;
@@ -184,6 +185,7 @@ export default class AppStore {
             blockly_store.setLoading(false);
             blockly_store.setContainerSize();
             onWorkspaceResize();
+            this.refreshTradeDefinitionMarkets();
             return;
         }
         if (this.is_workspace_mounting) return;
@@ -194,6 +196,7 @@ export default class AppStore {
             await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
             blockly_store.setContainerSize();
             onWorkspaceResize();
+            this.refreshTradeDefinitionMarkets();
         } catch {
             /* workspace inject can fail if the host is still hidden; Bot Builder retries on tab focus */
         } finally {
@@ -279,6 +282,31 @@ export default class AppStore {
         );
     };
 
+    refreshTradeDefinitionMarkets = () => {
+        const active_symbols = ApiHelpers?.instance?.active_symbols;
+        const contracts_for = ApiHelpers?.instance?.contracts_for;
+        if (!active_symbols || !contracts_for || !window.Blockly?.derivWorkspace) return;
+
+        active_symbols.retrieveActiveSymbols(true).then(() => {
+            contracts_for.disposeCache();
+            window.Blockly.derivWorkspace
+                .getAllBlocks()
+                .filter(
+                    block =>
+                        block.type === 'trade_definition_market' ||
+                        block.type === 'trade_definition_tradetype' ||
+                        block.type === 'trade_definition_contracttype' ||
+                        block.type === 'trade_definition_tradeoptions'
+                )
+                .forEach(block => {
+                    runIrreversibleEvents(() => {
+                        const fake_create_event = new window.Blockly.Events.BlockCreate(block);
+                        window.Blockly.Events.fire(fake_create_event);
+                    });
+                });
+        });
+    };
+
     registerOnAccountSwitch = () => {
         this.disposeSwitchAccountListener = reaction(
             () => this.root_store.common?.is_socket_opened,
@@ -299,23 +327,11 @@ export default class AppStore {
                 const contracts_for = ApiHelpers?.instance?.contracts_for;
 
                 if (ApiHelpers?.instance && active_symbols && contracts_for) {
-                    if (window.Blockly?.derivWorkspace) {
-                        active_symbols?.retrieveActiveSymbols(true).then(() => {
-                            contracts_for.disposeCache();
-                            window.Blockly?.derivWorkspace
-                                .getAllBlocks()
-                                .filter(block => block.type === 'trade_definition_market')
-                                .forEach(block => {
-                                    runIrreversibleEvents(() => {
-                                        const fake_create_event = new window.Blockly.Events.BlockCreate(block);
-                                        window.Blockly.Events.fire(fake_create_event);
-                                    });
-                                });
-                        });
-                    }
+                    this.refreshTradeDefinitionMarkets();
                     DBot.initializeInterpreter();
                 }
-            }
+            },
+            { fireImmediately: true }
         );
     };
 

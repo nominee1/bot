@@ -1,10 +1,7 @@
-import { useDevice } from '@deriv-com/ui';
 import { DerivBotMark } from './deriv-bot-mark';
 import './app-logo.scss';
 
 export const AppLogo = () => {
-    const { isDesktop } = useDevice();
-
     return (
         <a
             className='app-header__logo-container'
@@ -15,7 +12,7 @@ export const AppLogo = () => {
                 window.location.reload();
             }}
         >
-            <DerivBotMark size={isDesktop ? 32 : 28} />
+            <DerivBotMark size={32} />
         </a>
     );
 };

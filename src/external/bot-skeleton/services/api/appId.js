@@ -1,14 +1,11 @@
-import { getAppId, getSocketURL } from '@/components/shared';
-import { website_name } from '@/utils/site-config';
 import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
-import { getInitialLanguage } from '@deriv-com/translations';
 import APIMiddleware from './api-middleware';
 
+/** Public Options market-data socket (no auth). v3 ws.derivws.com returns empty active_symbols here. */
+export const PUBLIC_OPTIONS_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
+
 export const generateDerivApiInstance = () => {
-    const cleanedServer = getSocketURL().replace(/[^a-zA-Z0-9.]/g, '');
-    const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
-    const socket_url = `wss://${cleanedServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
-    return generateDerivApiInstanceFromUrl(socket_url);
+    return generateDerivApiInstanceFromUrl(PUBLIC_OPTIONS_WS_URL);
 };
 
 /** Options API OTP URL — authenticated `proposal` / `buy` / `sell` per Deriv docs. */

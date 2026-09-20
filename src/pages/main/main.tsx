@@ -154,6 +154,10 @@ const AppWrapper = observer(() => {
             setActiveTab(next_tab);
             if (!isDesktop) handleTabChange(next_tab);
             init_render.current = false;
+            navigate(
+                { search: window.location.search, hash: `#${hash[next_tab] || 'bot_builder'}` },
+                { replace: true }
+            );
         } else {
             navigate({ search: window.location.search, hash: `#${hash[active_tab] || hash[1]}` });
         }
