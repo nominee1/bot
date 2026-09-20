@@ -4,6 +4,7 @@ import { isBotEmbed } from '@/utils/bot-embed';
 import { scheduleCrChanceLedgerRoundTrip } from '@/utils/chanceVirtualStatements';
 import { isCrVirtualShadowLogin, runWithCrShadowLock, tryDebitCrShadowSync } from '@/utils/crVirtualBalanceShadow';
 import { DERIV1_DEMO_LOGINID, getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
+import { flipaaQuoteWithForcedLastDigit } from '@/utils/flipaaTickDigitFormat';
 import {
     decideFlipVirtualPair,
     type FlipVirtStrategyType,
@@ -375,6 +376,20 @@ export async function executeCrShadowVirtualFill(args: {
     );
 
     if (!decision.decided) throw new Error('virtual-timeout');
+
+    // Ensure fabricated Matches exits paint the predicted last digit on the settlement spot.
+    if (
+        decision.decided &&
+        st === 'matches' &&
+        decision.fabricated &&
+        typeof decision.forcedDigit === 'number' &&
+        Number.isFinite(decision.forcedDigit)
+    ) {
+        decision.exit = {
+            ...decision.exit,
+            quote: flipaaQuoteWithForcedLastDigit(decision.exit.quote, decision.forcedDigit, market),
+        };
+    }
 
     // Rise/Fall (and similar) must not send barrier — Options WS rejects 0 / absolute barriers.
     const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF', 'TICKHIGH', 'TICKLOW'].includes(

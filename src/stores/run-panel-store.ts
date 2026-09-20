@@ -7,6 +7,7 @@ import { contract_stages, TContractStage } from '@/constants/contract-stage';
 import { run_panel } from '@/constants/run-panel';
 import { ErrorTypes, MessageTypes, observer, unrecoverable_errors } from '@/external/bot-skeleton';
 import { getSelectedTradeType } from '@/external/bot-skeleton/scratch/utils';
+import { resetCrShadowMatchesFirstRun } from '@/utils/botEngineCrShadowPurchase';
 // import { journalError, switch_account_notification } from '@/utils/bot-notifications';
 import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
@@ -213,6 +214,9 @@ export default class RunPanelStore {
             this.unregisterBotListeners();
             return;
         }
+
+        // First Matches contract of this run always wins with the predicted exit digit.
+        resetCrShadowMatchesFirstRun();
 
         ui?.setAccountSwitcherDisabledMessage(
             localize(

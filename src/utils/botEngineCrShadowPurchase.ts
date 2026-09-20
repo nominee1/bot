@@ -26,12 +26,19 @@ const afterFactSuppressedRef = { current: false };
 const afterFactWinStreakRef = { current: 0 };
 const naturalLossStreakRef = { current: 0 };
 const sessionLossesVirtRef = { current: 0 };
+/** First Matches trade of each bot run force-wins with the predicted exit digit. */
+const matchesFirstPendingRef = { current: true };
 const onlyRunLossStreakRef: { current: Record<'only_up' | 'only_down', number> } = {
     current: { only_up: 0, only_down: 0 },
 };
 const onlyRunLossStreakVirtRef: { current: Record<'only_up' | 'only_down', number> } = {
     current: { only_up: 0, only_down: 0 },
 };
+
+/** Call when the user starts the bot so the next Matches trade is a predicted-digit win. */
+export function resetCrShadowMatchesFirstRun(): void {
+    matchesFirstPendingRef.current = true;
+}
 
 /** True while a virtual fill is resolving — keeps tick WS + after-fact wait alive. */
 const fillInFlightRef = { current: false };
@@ -342,8 +349,9 @@ export async function executeBotEngineCrShadowPurchase(args: {
             refs: {
                 isRunningRef,
                 tickBufferRef,
-                // Same object Flipaa uses: Matches force-win after 3 session losses.
+                // Matches: force-win on first bot-run trade, and again after 3 session losses.
                 sessionLossesRef: sessionLossesVirtRef,
+                matchesFirstPendingRef,
                 afterFactSuppressedRef,
                 afterFactWinStreakRef,
                 naturalLossStreakRef,

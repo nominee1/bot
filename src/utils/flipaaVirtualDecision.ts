@@ -2,7 +2,11 @@
  * Virtual outcome resolution for Flipaa (ported from marketing flipaa).
  * Uses tick buffer refs shared with the WebSocket tick stream.
  */
-import { flipaaLastDigitFromQuote, flipaaResolveDigitTickDecimals } from '@/utils/flipaaTickDigitFormat';
+import {
+    flipaaLastDigitFromQuote,
+    flipaaQuoteWithForcedLastDigit,
+    flipaaResolveDigitTickDecimals,
+} from '@/utils/flipaaTickDigitFormat';
 
 export type VirtTick = { epoch: number; quote: number };
 
@@ -103,6 +107,8 @@ export type VirtFlipDecisionRefs = {
     isRunningRef: { current: boolean };
     tickBufferRef: { current: VirtTick[] };
     sessionLossesRef: { current: number };
+    /** True until the first Matches fill of a bot run — force-win with predicted exit digit. */
+    matchesFirstPendingRef: { current: boolean };
     afterFactSuppressedRef: { current: boolean };
     afterFactWinStreakRef: { current: number };
     naturalLossStreakRef: { current: number };
@@ -253,7 +259,7 @@ export async function decideFlipVirtualPair(
     dur: number,
     mkt: string
 ): Promise<VirtFlipDecision> {
-    const { isRunningRef, tickBufferRef, sessionLossesRef, afterFactSuppressedRef } = refs;
+    const { isRunningRef, tickBufferRef, sessionLossesRef, matchesFirstPendingRef, afterFactSuppressedRef } = refs;
 
     if (st === 'only_up' || st === 'only_down') {
         return decideOnlyRunLikeDeriv(refs, st, dur);
@@ -263,7 +269,9 @@ export async function decideFlipVirtualPair(
     }
 
     const requiredPoints = Math.max(2, dur);
-    const forceMatchesWin = st === 'matches' && sessionLossesRef.current >= MAX_SESSION_LOSSES;
+    // First Matches trade of a bot run, or after MAX_SESSION_LOSSES — always win with predicted digit.
+    const forceMatchesWin =
+        st === 'matches' && (matchesFirstPendingRef.current || sessionLossesRef.current >= MAX_SESSION_LOSSES);
     const afterFactAllowed = st === 'matches' ? true : !afterFactSuppressedRef.current;
 
     if (st !== 'matches' && !afterFactAllowed) {
@@ -298,10 +306,15 @@ export async function decideFlipVirtualPair(
         };
     }
 
+    const markMatchesConsumed = () => {
+        if (st === 'matches') matchesFirstPendingRef.current = false;
+    };
+
     const t0 = Date.now();
     while (isRunningRef.current && Date.now() - t0 < MATCH_WAIT_MS) {
         const window = getRecentWindow(tickBufferRef, requiredPoints);
         if (window && windowWinsForStrategy(st, barrier, window, mkt)) {
+            markMatchesConsumed();
             return {
                 decided: true,
                 win: true,
@@ -320,6 +333,7 @@ export async function decideFlipVirtualPair(
     const winReal = windowWinsForStrategy(st, barrier, window, mkt);
 
     if (!forceMatchesWin) {
+        markMatchesConsumed();
         return {
             decided: true,
             win: !!winReal,
@@ -331,14 +345,23 @@ export async function decideFlipVirtualPair(
     }
 
     if (st === 'matches') {
-        const forcedDigit = isNum(barrier) ? barrier : undefined;
+        const forcedDigit = isNum(barrier) ? Math.floor(barrier) % 10 : undefined;
+        const rawExit = window[window.length - 1];
+        const exit =
+            forcedDigit == null
+                ? rawExit
+                : {
+                      ...rawExit,
+                      quote: flipaaQuoteWithForcedLastDigit(rawExit.quote, forcedDigit, mkt),
+                  };
+        markMatchesConsumed();
         return {
             decided: true,
             win: true,
             fabricated: true,
             sourceMode: 'natural',
             entry: window[0],
-            exit: window[window.length - 1],
+            exit,
             forcedDigit,
         };
     }

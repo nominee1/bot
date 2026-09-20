@@ -27,6 +27,14 @@ export function flipaaLastDigitFromQuote(price: number, market: string): number 
     return parseInt(flipaaFormatQuoteForDigitContract(price, market).slice(-1), 10);
 }
 
+/** Rewrite quote so its displayed last digit equals `digit` (0–9), keeping pip decimals. */
+export function flipaaQuoteWithForcedLastDigit(price: number, digit: number, market: string): number {
+    const d = ((Math.floor(Number(digit)) % 10) + 10) % 10;
+    if (!Number.isFinite(price)) return d;
+    const fixed = flipaaFormatQuoteForDigitContract(price, market);
+    return Number(fixed.slice(0, -1) + String(d));
+}
+
 function resolveTickNumber(value?: number | null, display?: string | null): number | null {
     if (value != null && Number.isFinite(value)) return value;
     if (display == null || display === '') return null;
