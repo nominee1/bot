@@ -1,9 +1,9 @@
 // Comprehensive Service Worker for Deriv Bot Offline Functionality
-const CACHE_NAME = 'deriv-bot-v1';
+const CACHE_NAME = 'deriv-bot-v3';
 const OFFLINE_URL = '/offline.html';
 
-// Files to cache immediately on install
-const PRECACHE_URLS = ['/', '/index.html', '/offline.html', '/manifest.json', '/deriv-logo.svg'];
+// Do not precache index.html — Android Chrome would keep serving a stale app shell.
+const PRECACHE_URLS = ['/offline.html', '/manifest.json', '/deriv-logo.svg'];
 
 console.log('[SW] Service worker script loaded');
 
@@ -153,13 +153,6 @@ async function handleNavigation(request) {
 
         // Try network first for navigation
         const networkResponse = await fetch(request, { timeout: 3000 });
-
-        if (networkResponse.ok) {
-            // Cache successful navigation responses
-            const cache = await caches.open(CACHE_NAME);
-            await cache.put(request, networkResponse.clone());
-            console.log('[SW] Cached navigation response');
-        }
 
         return networkResponse;
     } catch (error) {

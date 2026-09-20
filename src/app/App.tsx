@@ -459,11 +459,13 @@ function App() {
     }, []);
 
     return (
-        <Fragment>
-            {is_oauth_account_setup ? <OAuthAccountSetupOverlay /> : null}
-            <RouterProvider router={router} />
-            {hasBotStudioOAuthConfig() ? <ToastContainer limit={3} draggable={false} /> : null}
-        </Fragment>
+        <StoreProvider>
+            <Fragment>
+                {is_oauth_account_setup ? <OAuthAccountSetupOverlay /> : null}
+                <RouterProvider router={router} />
+                {hasBotStudioOAuthConfig() ? <ToastContainer limit={3} draggable={false} /> : null}
+            </Fragment>
+        </StoreProvider>
     );
 }
 

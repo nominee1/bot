@@ -6,6 +6,18 @@
     "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
     "headers": [
         {
+            "source": "/index.html",
+            "headers": [{ "key": "Cache-Control", "value": "no-store, must-revalidate" }]
+        },
+        {
+            "source": "/sw.js",
+            "headers": [{ "key": "Cache-Control", "value": "no-store, must-revalidate" }]
+        },
+        {
+            "source": "/",
+            "headers": [{ "key": "Cache-Control", "value": "no-store, must-revalidate" }]
+        },
+        {
             "source": "/(.*)",
             "headers": [
                 { "key": "Access-Control-Allow-Origin", "value": "https://deriv-1-beta.vercel.app" },

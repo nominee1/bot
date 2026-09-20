@@ -39,7 +39,8 @@ const Tutorial = lazy(() => import('../tutorials'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
-    const { dashboard, load_modal, run_panel, quick_strategy, summary_card } = useStore();
+    const store = useStore();
+    const { dashboard, load_modal, run_panel, quick_strategy, summary_card } = store;
     const {
         active_tab,
         active_tour,

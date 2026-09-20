@@ -65,8 +65,9 @@ class PWAManager {
         console.log('[PWA] Registering service worker for Chrome browser offline capabilities');
 
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js', {
+            const registration = await navigator.serviceWorker.register('/sw.js?v=3', {
                 scope: '/',
+                updateViaCache: 'none',
             });
 
             // Listen for updates
