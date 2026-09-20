@@ -136,7 +136,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         }
     };
 
-    if (!symbol) return null;
+    const chartSymbol = symbol || '1HZ100V';
     const is_connection_opened = !!chart_api?.api;
     return (
         <div
@@ -171,7 +171,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
                 requestForgetStream={() => {}}
                 requestSubscribe={requestSubscribe}
                 settings={settings}
-                symbol={symbol}
+                symbol={chartSymbol}
                 topWidgets={() => <ChartTitle onChange={onSymbolChange} />}
                 isConnectionOpened={is_connection_opened}
                 getMarketsOrder={getMarketsOrder}
