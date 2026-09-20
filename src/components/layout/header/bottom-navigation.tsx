@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { standalone_routes } from '@/components/shared';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
+import { isBotEmbed, requestDeriv1Home } from '@/utils/bot-embed';
 import {
     LabelPairedChartLineCaptionRegularIcon,
     LabelPairedObjectsColumnCaptionRegularIcon,
@@ -32,6 +33,10 @@ const BottomNavigation = observer(({ onMenuClick }: TBottomNavigationProps) => {
             label: <Localize i18n_default_text='Home' />,
             icon: <LegacyHomeNewIcon iconSize='xs' fill='var(--text-general)' />,
             onClick: () => {
+                if (isBotEmbed()) {
+                    requestDeriv1Home();
+                    return;
+                }
                 window.location.assign(standalone_routes.home);
             },
             active: false,

@@ -44,6 +44,7 @@ import { StoreProvider } from '@/hooks/useStore';
 import CallbackPage from '@/pages/callback';
 import Endpoint from '@/pages/endpoint';
 import { TAuthData } from '@/types/api-types';
+import { getBotRouterBasename } from '@/utils/bot-embed';
 import { writeCrShadow } from '@/utils/crVirtualBalanceShadow';
 import { consumeDeriv1Handoff, listenForDeriv1Session } from '@/utils/deriv1SessionHandoff';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
@@ -93,7 +94,8 @@ const router = createBrowserRouter(
             <Route path='endpoint' element={<Endpoint />} />
             <Route path='callback' element={<CallbackPage />} />
         </Route>
-    )
+    ),
+    { basename: getBotRouterBasename() || '/' }
 );
 
 function App() {

@@ -51,6 +51,15 @@ class PWAManager {
             return null;
         }
 
+        try {
+            if (window.self !== window.top || new URLSearchParams(window.location.search).get('embed') === '1') {
+                console.log('[PWA] Service worker skipped inside deriv-1 embed');
+                return null;
+            }
+        } catch {
+            return null;
+        }
+
         // Only enable PWA service workers on Chrome browsers
         const isChrome = /Chrome/.test(navigator.userAgent) && !isFirefox() && !isSafari();
         if (!isChrome) {

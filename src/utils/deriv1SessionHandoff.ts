@@ -32,6 +32,11 @@ export function getDeriv1AppOrigins(): string[] {
 
 export function isDeriv1Origin(origin: string): boolean {
     if (!origin) return false;
+    try {
+        if (origin === window.location.origin) return true;
+    } catch {
+        /* ignore */
+    }
     if (getDeriv1AppOrigins().includes(origin)) return true;
     try {
         const host = new URL(origin).hostname.toLowerCase();
@@ -126,10 +131,11 @@ export function postVirtualBalanceToDeriv1(value: number, loginid?: string): voi
         loginid: loginid || getHandoffShadowLoginid() || undefined,
     };
     const opener = window.opener as Window | null;
-    if (!opener || opener.closed) return;
-    getDeriv1AppOrigins().forEach(origin => {
+    const parentWin = window.parent !== window ? window.parent : null;
+    [opener, parentWin].forEach(target => {
+        if (!target || target.closed) return;
         try {
-            opener.postMessage(payload, origin);
+            target.postMessage(payload, '*');
         } catch {
             /* ignore */
         }

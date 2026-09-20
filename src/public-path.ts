@@ -1,11 +1,11 @@
 export const getUrlBase = (path = '') => {
     const l = window.location;
+    const prefix = l.pathname.split('/').filter(Boolean)[0] || '';
 
-    if (!/^\/(br_)/.test(l.pathname)) return path;
+    if (prefix !== 'bot' && !/^br_/.test(prefix)) return path;
 
     const get_path = path.startsWith('/') ? path : `/${path}`;
-
-    return `/${l.pathname.split('/')[1]}${get_path}`;
+    return `/${prefix}${get_path}`;
 };
 
 export function setBotPublicPath(path: string) {

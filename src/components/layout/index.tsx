@@ -11,6 +11,7 @@ import { useOfflineDetection } from '@/hooks/useOfflineDetection';
 import { useStore } from '@/hooks/useStore';
 import useTMB from '@/hooks/useTMB';
 import { handleOidcAuthFailure, isDemoAccount } from '@/utils/auth-utils';
+import { isBotEmbed } from '@/utils/bot-embed';
 import { requestOidcAuthentication } from '@deriv-com/auth-client';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
@@ -27,7 +28,7 @@ const Layout = observer(() => {
     const store = useStore();
     const is_quick_strategy_active = store?.quick_strategy?.is_open;
 
-    const isCallbackPage = window.location.pathname === '/callback';
+    const isCallbackPage = window.location.pathname === '/callback' || window.location.pathname === '/bot/callback';
     const { onRenderTMBCheck, is_tmb_enabled: tmb_enabled_from_hook, isTmbEnabled } = useTMB();
     const is_tmb_enabled = useMemo(
         () => window.is_tmb_enabled === true || tmb_enabled_from_hook,
@@ -261,7 +262,7 @@ const Layout = observer(() => {
 
     return (
         <>
-            <ChromeUrlBars />
+            {!isBotEmbed() ? <ChromeUrlBars /> : null}
             <div
                 className={clsx('layout', {
                     responsive: isDesktop,

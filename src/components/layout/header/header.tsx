@@ -5,6 +5,7 @@ import { useOauth2 } from '@/hooks/auth/useOauth2';
 import { useApiBase } from '@/hooks/useApiBase';
 import useModalManager from '@/hooks/useModalManager';
 import { useStore } from '@/hooks/useStore';
+import { isBotEmbed, requestDeriv1Home } from '@/utils/bot-embed';
 import { getActiveTabUrl } from '@/utils/getActiveTabUrl';
 import { LANGUAGES } from '@/utils/languages';
 import {
@@ -57,7 +58,16 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                     <div className='app-header__top-section'>
                         <AppLogo />
                         <div className='app-header__nav-item'>
-                            <a href={homeHref} className='app-header__nav-link' aria-label={localize('Home')}>
+                            <a
+                                href={homeHref}
+                                className='app-header__nav-link'
+                                aria-label={localize('Home')}
+                                onClick={event => {
+                                    if (!isBotEmbed()) return;
+                                    event.preventDefault();
+                                    requestDeriv1Home();
+                                }}
+                            >
                                 <StandaloneHouseBlankRegularIcon width={24} height={24} fill='var(--text-general)' />
                                 <span className='app-header__nav-text'>
                                     <Localize i18n_default_text='Home' />
