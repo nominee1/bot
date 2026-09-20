@@ -35,7 +35,7 @@ import {
     syncMoonVirtLedgerToHeaderIfNeeded,
     writeCrShadow,
 } from '@/utils/crVirtualBalanceShadow';
-import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
+import { getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
 import { fetchSharedVirtualLedgerBalance, hasPendingSharedVirtualLedgerSync } from '@/utils/sharedVirtualLedgerSync';
 import type { Balance } from '@deriv/api-types';
 import { useTranslations } from '@deriv-com/translations';
@@ -186,6 +186,9 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     useEffect(() => {
         if (!client) return undefined;
         const loginid = String(activeAccount?.loginid || client.loginid || '').trim();
+        // While Demo is selected, keep the Real shared ledger updated in storage only —
+        // never push it onto the Demo header balance.
+        if (isDeriv1DemoLoginid(loginid)) return undefined;
         const ledgerLogin = getHandoffShadowLoginid() || loginid;
         if (!ledgerLogin || !isCrVirtualShadowLogin(ledgerLogin)) return undefined;
 
@@ -215,13 +218,23 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             client?.setLoginId(activeLoginid);
             client?.setAccountList(accountList);
             client?.setIsLoggedIn(true);
-        } else if (!accountList?.length && !isAuthorizing) {
+            client?.setOptionsOAuthSessionReady();
+            const acc = accountList?.find(a => a.loginid === activeLoginid) ?? activeAccount;
+            if (acc?.currency) client?.setCurrency(acc.currency);
+            if (isDeriv1DemoLoginid(activeLoginid)) {
+                client.setBalance('10000.00');
+                return;
+            }
+            const ledgerId = getHandoffShadowLoginid() || activeLoginid;
+            if (ledgerId) syncCrShadowBalanceIfNeeded(client, ledgerId);
+        } else if (!accountList?.length && !isAuthorizing && !getHandoffShadowLoginid()) {
             client.resetAfterOptionsAuthExpiry();
         }
     }, [accountList, activeAccount, activeLoginid, client, isAuthorizing]);
 
     useEffect(() => {
         if (!client || isAuthorizing) return;
+        if (getHandoffShadowLoginid()) return;
         if (!isAuthorized && !activeLoginid && client.is_logged_in) {
             client.resetAfterOptionsAuthExpiry();
         }
@@ -382,8 +395,8 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     );
 
     useEffect(() => {
-        if (!isAuthorizing && client) {
-            const subscription = api_base?.api?.onMessage().subscribe(handleMessages);
+        if (!isAuthorizing && client && api_base?.api?.onMessage) {
+            const subscription = api_base.api.onMessage().subscribe(handleMessages);
             msg_listener.current = { unsubscribe: subscription?.unsubscribe };
         }
 
@@ -398,7 +411,12 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
         if (!isAuthorizing && isAuthorized && !accountInitialization.current && client) {
             accountInitialization.current = true;
 
-            if (isDerivOptionsOAuthSession()) {
+            if (isDerivOptionsOAuthSession() || getHandoffShadowLoginid()) {
+                client.setOptionsOAuthSessionReady();
+                return;
+            }
+
+            if (!api_base.api?.getSettings) {
                 client.setOptionsOAuthSessionReady();
                 return;
             }

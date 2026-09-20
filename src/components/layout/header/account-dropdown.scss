@@ -1,0 +1,123 @@
+.acc-dropdown__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 998;
+}
+
+.acc-dropdown__container {
+    z-index: 999;
+    border: 1px solid var(--general-section-1);
+    background: var(--general-main-1);
+    border-radius: 16px;
+    width: 19.6rem;
+    padding: 0;
+    position: fixed;
+    top: calc(5.6rem + var(--site-url-bars-h, 0px) + 8px);
+    right: 12px;
+    overflow: hidden;
+    box-shadow: rgb(0 0 0 / 25%) 0 8px 16px;
+}
+
+.acc-dropdown__list {
+    background: var(--general-main-1);
+    border-radius: 4px;
+    flex-flow: column;
+    gap: 0.4rem;
+    width: 100%;
+    height: 100%;
+    padding: 0.8rem;
+    display: flex;
+}
+
+.acc-dropdown__account-wrapper {
+    cursor: pointer;
+    width: 100%;
+    position: relative;
+}
+
+.acc-dropdown__account {
+    background: var(--general-main-1);
+    border-radius: 8px;
+    flex-direction: column;
+    padding: 8px 16px;
+    display: flex;
+
+    &--selected {
+        background: var(--general-section-1, #f2f3f4);
+    }
+
+    &:hover:not(.acc-dropdown__account--selected) {
+        background-color: var(--general-section-1, #f2f3f4);
+    }
+}
+
+.acc-dropdown__account-name {
+    text-transform: none;
+    font-weight: 400;
+    text-align: start;
+    margin-bottom: 0.3rem;
+    font-size: 1.4rem;
+
+    &--real {
+        color: #85acb0;
+    }
+
+    &--demo {
+        color: #ffad3a;
+    }
+}
+
+.acc-dropdown__account-balance {
+    color: var(--text-prominent, #333);
+    text-transform: none;
+    text-align: start;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.action-sheet {
+    background: var(--general-main-1);
+    z-index: 999;
+    width: 100%;
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+    border-radius: 16px 16px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    box-shadow: rgb(0 0 0 / 16%) 0 -4px 16px;
+}
+
+.action-sheet__overlay {
+    z-index: 998;
+    touch-action: none;
+    background-color: rgb(0 0 0 / 50%);
+    position: fixed;
+    inset: 0;
+}
+
+.action-sheet__header {
+    width: 100%;
+}
+
+.action-sheet__drag-handle {
+    cursor: pointer;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 24px;
+    padding: 8px 0;
+    display: flex;
+}
+
+.action-sheet__drag-indicator {
+    background: var(--general-section-1, #f2f3f4);
+    border-radius: 4px;
+    width: 36px;
+    height: 4px;
+}
+
+.action-sheet__content {
+    padding: 0 0.8rem 0.8rem;
+}

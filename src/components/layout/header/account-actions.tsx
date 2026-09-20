@@ -11,6 +11,7 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import useTMB from '@/hooks/useTMB';
 import { clearAuthData, handleOidcAuthFailure } from '@/utils/auth-utils';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { requestOidcAuthentication } from '@deriv-com/auth-client';
 import { Localize, useTranslations } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
@@ -78,11 +79,11 @@ const AccountActions = observer(({ isAuthenticating }: TAccountActionsProps) => 
         return <AccountsInfoLoader isLoggedIn isMobile={!isDesktop} speed={3} />;
     }
 
-    if (activeLoginid) {
+    if (activeLoginid || client?.is_logged_in || getHandoffShadowLoginid()) {
         return (
             <div className='auth-actions'>
                 <AccountSwitcher activeAccount={activeAccount} />
-                {has_wallet ? (
+                {has_wallet && !getHandoffShadowLoginid() ? (
                     <Button
                         className='manage-funds-button'
                         has_effect

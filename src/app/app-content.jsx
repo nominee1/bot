@@ -20,7 +20,9 @@ import { useOfflineDetection } from '@/hooks/useOfflineDetection';
 import { useStore } from '@/hooks/useStore';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import useTrackjs from '@/hooks/useTrackjs';
+import { isBotEmbed } from '@/utils/bot-embed';
 import initDatadog from '@/utils/datadog';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import initHotjar from '@/utils/hotjar';
 import { setSmartChartsPublicPath } from '@deriv/deriv-charts';
 import { ThemeProvider } from '@deriv-com/quill-ui';
@@ -70,6 +72,8 @@ const AppContent = observer(() => {
     const token = V2GetActiveToken() ?? null;
     useIntercom(token);
 
+    const is_virtual_handoff = Boolean(getHandoffShadowLoginid()) || isBotEmbed();
+
     useEffect(() => {
         if (connectionStatus === CONNECTION_STATUS.OPENED) {
             setIsApiInitialized(true);
@@ -79,15 +83,17 @@ const AppContent = observer(() => {
                 clearTimeout(offline_timeout);
                 setOfflineTimeout(null);
             }
-        } else if (!isAuthorizing && !isAuthorized) {
-            // Expired Options OAuth or logged-out classic session — socket never opens; still show dashboard.
+        } else if (is_virtual_handoff || (!isAuthorizing && !isAuthorized)) {
+            // Virtual ledger embed hydrates auth without live authorize; public WS still loads symbols.
             common.setSocketOpened(false);
             setIsApiInitialized(true);
-            setIsLoading(false);
+            if (!is_virtual_handoff) {
+                setIsLoading(false);
+            }
         } else if (connectionStatus !== CONNECTION_STATUS.OPENED) {
             common.setSocketOpened(false);
         }
-    }, [common, connectionStatus, offline_timeout, isAuthorizing, isAuthorized]);
+    }, [common, connectionStatus, offline_timeout, isAuthorizing, isAuthorized, is_virtual_handoff]);
 
     // Handle offline scenarios - don't wait indefinitely for API
     useEffect(() => {
@@ -133,6 +139,11 @@ const AppContent = observer(() => {
     useEffect(() => {
         const bot_restricted_countries = BOT_RESTRICTED_COUNTRIES_LIST();
 
+        if (is_virtual_handoff) {
+            setIsEuErrorLoading(false);
+            return;
+        }
+
         if (!client.is_logged_in) {
             // For logged out users
             if (clients_logged_out_country_code) {
@@ -146,7 +157,18 @@ const AppContent = observer(() => {
                 setIsEuErrorLoading(is_restricted);
             }
         }
-    }, [is_eu_country, clients_logged_out_country_code, clients_logged_in_country_code, is_client_logged_in]);
+    }, [
+        is_eu_country,
+        clients_logged_out_country_code,
+        clients_logged_in_country_code,
+        is_client_logged_in,
+        is_virtual_handoff,
+    ]);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => setIsLoading(false), 12000);
+        return () => clearTimeout(timeout);
+    }, []);
 
     const handleMessage = React.useCallback(
         ({ data }) => {
@@ -201,7 +223,7 @@ const AppContent = observer(() => {
         init();
 
         const optionsOAuth = isDerivOptionsOAuthSession();
-        const LOADER_CAP_MS = optionsOAuth ? 10000 : 0;
+        const LOADER_CAP_MS = optionsOAuth || is_virtual_handoff ? 8000 : 0;
         let loaderCapTimer = null;
 
         const finishLoading = () => {

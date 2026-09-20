@@ -1,5 +1,5 @@
 import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
-import APIMiddleware from './api-middleware';
+import APIMiddleware, { transformOptionsWsRequest } from './api-middleware';
 
 /** Public Options market-data socket (no auth). v3 ws.derivws.com returns empty active_symbols here. */
 export const PUBLIC_OPTIONS_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
@@ -11,6 +11,19 @@ export const generateDerivApiInstance = () => {
 /** Options API OTP URL — authenticated `proposal` / `buy` / `sell` per Deriv docs. */
 export const generateDerivApiInstanceFromUrl = socket_url => {
     const deriv_socket = new WebSocket(socket_url);
+    const raw_send = deriv_socket.send.bind(deriv_socket);
+    deriv_socket.send = function sendOptionsWs(data) {
+        if (typeof data === 'string') {
+            try {
+                data = JSON.stringify(transformOptionsWsRequest(JSON.parse(data)));
+            } catch {
+                /* keep original frame */
+            }
+        } else if (data && typeof data === 'object') {
+            data = JSON.stringify(transformOptionsWsRequest(data));
+        }
+        return raw_send(data);
+    };
     const deriv_api = new DerivAPIBasic({
         connection: deriv_socket,
         middleware: new APIMiddleware({}),

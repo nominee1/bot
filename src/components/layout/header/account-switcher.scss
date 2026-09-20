@@ -177,11 +177,14 @@
     }
 
     @include mobile-screen {
-        padding: 0 1rem;
-        margin-right: -0.8rem;
+        padding: 0;
+        margin-right: 0;
 
         &__balance {
             font-size: 1.4rem;
+            line-height: 2.1rem;
+            margin-right: 0;
+            color: var(--text-prominent, #333);
 
             &--no-currency {
                 white-space: nowrap;
@@ -189,10 +192,40 @@
         }
     }
 
+    &__content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        margin-inline-start: 1rem;
+    }
+
+    &__account-type-header {
+        display: flex;
+        align-items: center;
+        margin: 0 0 0.2rem;
+    }
+
+    &__account-type {
+        font-size: 1.4rem !important;
+        line-height: 1.4rem !important;
+        font-weight: 400;
+        color: var(--text-profit-success, #4bb4b3) !important;
+        margin: 0;
+    }
+
     &--is-virtual {
-        .acc-info__balance {
-            color: var(--text-profit-success);
+        .acc-info__account-type {
+            color: #ffad3a !important;
         }
+
+        .acc-info__balance {
+            color: var(--text-prominent, #333);
+        }
+    }
+
+    &__balance-section {
+        display: flex;
+        align-items: center;
     }
 
     &--is-disabled {
@@ -247,6 +280,21 @@
             color: var(--text-general);
             margin-right: 0;
         }
+    }
+}
+
+.acc-info-live {
+    display: flex;
+    align-items: center;
+    height: 100%;
+
+    &__hidden-switcher {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
     }
 }
 

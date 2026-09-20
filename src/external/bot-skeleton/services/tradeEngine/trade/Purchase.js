@@ -3,11 +3,13 @@ import {
     sendDerivSessionContractPurchase,
     tradeOptionsToDerivBuyIntent,
 } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
+import { isBotEmbed } from '@/utils/bot-embed';
 import {
     executeBotEngineCrShadowPurchase,
     resolveCrShadowWalletLoginid,
     shouldUseCrShadowLiveFills,
 } from '@/utils/botEngineCrShadowPurchase';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { LogTypes } from '../../../constants/messages';
 import DBotStore from '../../../scratch/dbot-store';
 import { api_base } from '../../api/api-base';
@@ -140,6 +142,11 @@ export default Engine =>
 
             return tryCrShadowVirtual().then(handled => {
                 if (handled) return undefined;
+
+                // Embed / virtual-ledger sessions must never hit live Options buy (InputValidationFailed).
+                if (getHandoffShadowLoginid() || isBotEmbed() || shouldUseCrShadowLiveFills()) {
+                    throw new Error('Virtual settlement could not start. Check market / stake, then try Run again.');
+                }
 
                 if (this.is_proposal_subscription_required) {
                     const { id, askPrice } = this.selectProposal(contract_type);

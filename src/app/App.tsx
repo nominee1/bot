@@ -44,7 +44,7 @@ import { StoreProvider } from '@/hooks/useStore';
 import CallbackPage from '@/pages/callback';
 import Endpoint from '@/pages/endpoint';
 import { TAuthData } from '@/types/api-types';
-import { getBotRouterBasename } from '@/utils/bot-embed';
+import { getBotRouterBasename, isBotEmbed } from '@/utils/bot-embed';
 import { writeCrShadow } from '@/utils/crVirtualBalanceShadow';
 import { consumeDeriv1Handoff, listenForDeriv1Session } from '@/utils/deriv1SessionHandoff';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
@@ -108,7 +108,7 @@ function App() {
     React.useLayoutEffect(() => {
         const session = consumeDeriv1Handoff(writeCrShadow);
         const stop = listenForDeriv1Session(writeCrShadow);
-        if (session?.oauthToken) {
+        if (session?.oauthToken && !isBotEmbed()) {
             void applyDerivOAuthAccessTokenToFirstUsd(session.oauthToken).then(async result => {
                 if (result.ok) await api_base.init(true);
             });

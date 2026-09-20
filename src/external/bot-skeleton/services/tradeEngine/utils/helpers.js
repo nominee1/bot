@@ -16,20 +16,28 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
             currency: trade_option.currency,
             duration: trade_option.duration,
             duration_unit: trade_option.duration_unit,
-            multiplier: trade_option.multiplier,
             passthrough: {
                 contract_type: type,
                 purchase_reference,
             },
             proposal: 1,
         };
-        applyDerivSessionMarketField(proposal, market);
-        if (trade_option.prediction !== undefined) {
-            proposal.selected_tick = trade_option.prediction;
+        // Options public WS rejects `multiplier: null` / empty — only send for multipliers.
+        if (['MULTUP', 'MULTDOWN'].includes(type) && trade_option.multiplier != null) {
+            proposal.multiplier = trade_option.multiplier;
         }
-        if (!['TICKLOW', 'TICKHIGH'].includes(type) && trade_option.prediction !== undefined) {
+        applyDerivSessionMarketField(proposal, market);
+        if (['TICKLOW', 'TICKHIGH'].includes(type) && trade_option.prediction !== undefined) {
+            proposal.selected_tick = trade_option.prediction;
+        } else if (
+            ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type) &&
+            trade_option.prediction !== undefined
+        ) {
             proposal.barrier = trade_option.prediction;
-        } else if (trade_option.barrierOffset !== undefined) {
+        } else if (
+            !['CALL', 'PUT', 'CALLE', 'PUTE', 'ONETOUCH', 'NOTOUCH', 'ASIANU', 'ASIAND'].includes(type) &&
+            trade_option.barrierOffset !== undefined
+        ) {
             proposal.barrier = trade_option.barrierOffset;
         }
         if (trade_option.secondBarrierOffset !== undefined) {

@@ -8,6 +8,8 @@ import {
 import CommonStore from '@/stores/common-store';
 import { TAuthData } from '@/types/api-types';
 import { clearAuthData } from '@/utils/auth-utils';
+import { isBotEmbed } from '@/utils/bot-embed';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { observer as globalObserver } from '../../utils/observer';
 import { doUntilDone, socket_state } from '../tradeEngine/utils/helpers';
 import {
@@ -301,7 +303,10 @@ class APIBase {
         if (this.time_interval) clearInterval(this.time_interval);
         this.time_interval = null;
 
-        if (isDerivOptionsOAuthSession() && getDerivOAuthAccessToken()) {
+        const skipLiveAuthorize = Boolean(getHandoffShadowLoginid()) || isBotEmbed();
+        if (skipLiveAuthorize) {
+            setIsAuthorizing(false);
+        } else if (isDerivOptionsOAuthSession() && getDerivOAuthAccessToken()) {
             setIsAuthorizing(true);
             await this.connectOptionsOAuthAndSubscribe();
         } else if (V2GetActiveToken()) {

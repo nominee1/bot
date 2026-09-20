@@ -67,7 +67,9 @@ export default defineConfig({
         },
     },
     output: {
-        assetPrefix: 'auto',
+        // Use BOT_ASSET_PREFIX=/bot/ when building for deriv-1 embed (see copy:bot).
+        // Default `auto` for local/dev and root deploys (bot-zyqc).
+        assetPrefix: process.env.BOT_ASSET_PREFIX || 'auto',
         copy: [
             {
                 from: 'node_modules/@deriv/deriv-charts/dist/*',

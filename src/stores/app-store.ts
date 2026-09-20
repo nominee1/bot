@@ -1,3 +1,4 @@
+import { resolveBotAssetPrefix } from '@/public-path';
 import Cookies from 'js-cookie';
 import { action, makeObservable, reaction, when } from 'mobx';
 import { BOT_RESTRICTED_COUNTRIES_LIST } from '@/components/layout/header/utils';
@@ -193,7 +194,13 @@ export default class AppStore {
 
         blockly_store.setLoading(true);
         try {
-            await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
+            await DBot.initWorkspace(
+                resolveBotAssetPrefix(),
+                this.dbot_store,
+                this.api_helpers_store,
+                ui.is_mobile,
+                false
+            );
             blockly_store.setContainerSize();
             onWorkspaceResize();
             this.refreshTradeDefinitionMarkets();

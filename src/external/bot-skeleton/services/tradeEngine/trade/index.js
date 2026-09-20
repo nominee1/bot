@@ -2,6 +2,9 @@ import { applyMiddleware, createStore } from 'redux';
 import { thunk } from 'redux-thunk';
 import { isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
 import { resolveTradableDigitMarket } from '@/components/shared/utils/trading/deriv-session-markets';
+import { isBotEmbed } from '@/utils/bot-embed';
+import { shouldUseCrShadowLiveFills } from '@/utils/crShadowVirtualFill';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { localize } from '@deriv-com/translations';
 import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
@@ -157,7 +160,10 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     makeDirectPurchaseDecision() {
         const { has_payout_block, is_basis_payout } = checkBlocksForProposalRequest();
         const optionsOAuth = isDerivOptionsOAuthSession();
-        this.is_proposal_subscription_required = optionsOAuth || has_payout_block || is_basis_payout;
+        const use_virtual_fill = shouldUseCrShadowLiveFills() || Boolean(getHandoffShadowLoginid()) || isBotEmbed();
+        // Public Options WS rejects v3 `loginid`/`symbol`; virtual ledger fills do not need live proposals.
+        this.is_proposal_subscription_required =
+            !use_virtual_fill && (optionsOAuth || has_payout_block || is_basis_payout);
 
         if (this.is_proposal_subscription_required) {
             this.makeProposals({ ...this.options, ...this.tradeOptions, symbol: this.tradeOptions.symbol });

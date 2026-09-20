@@ -24,11 +24,8 @@ type TSendWire = (data: Record<string, unknown>) => Promise<unknown>;
 export function applyDerivSessionMarketField(payload: Record<string, unknown>, market: string) {
     delete payload.symbol;
     delete payload.underlying_symbol;
-    if (isDerivOptionsOAuthSession()) {
-        payload.underlying_symbol = market;
-    } else {
-        payload.symbol = market;
-    }
+    // Default bot socket is Options WS (public + OTP), which expects `underlying_symbol`.
+    payload.underlying_symbol = market;
 }
 
 export function buildDerivSessionProposalPayload(

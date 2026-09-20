@@ -10,11 +10,35 @@ export const REQUESTS = [
     'history',
 ];
 
+/** Public/OTP Options WS rejects v3 `loginid` and `symbol`; market is `underlying_symbol`. */
+export function transformOptionsWsRequest(request) {
+    if (!request || typeof request !== 'object') return request;
+    const next = { ...request };
+    delete next.loginid;
+    if (next.symbol && !next.underlying_symbol) {
+        next.underlying_symbol = next.symbol;
+    }
+    delete next.symbol;
+    if (next.parameters && typeof next.parameters === 'object') {
+        next.parameters = { ...next.parameters };
+        if (next.parameters.symbol && !next.parameters.underlying_symbol) {
+            next.parameters.underlying_symbol = next.parameters.symbol;
+        }
+        delete next.parameters.symbol;
+        delete next.parameters.loginid;
+        if (next.parameters.multiplier == null) delete next.parameters.multiplier;
+    }
+    if (next.multiplier == null) delete next.multiplier;
+    return next;
+}
+
 class APIMiddleware {
     constructor(config) {
         this.config = config;
         this.debounced_calls = {};
     }
+
+    requestDataTransformer = request => transformOptionsWsRequest(request);
 
     getRequestType = request => {
         let req_type;

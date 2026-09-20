@@ -3,7 +3,7 @@ import {
     isDerivOptionsOAuthSession,
 } from '@/components/shared/utils/login/deriv-oauth-storage';
 import type ClientStore from '@/stores/client-store';
-import { getHandoffShadowLoginid, isHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
+import { DERIV1_DEMO_LOGINID,getHandoffShadowLoginid, isHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import type { Balance } from '@deriv/api-types';
 
 /** Real-money wallet used by BotIframe virtual pipeline (shadow balance in localStorage). */
@@ -198,7 +198,10 @@ export function isMoonLeadVirtualTradeLoginid(loginid: string | undefined | null
 /** Header balance replaced by shadow map — ROT90381442 (Options), CR7557018 (legacy WS), or tenant deploy loginid. */
 export function isShadowDisplayManagedLoginid(loginid: string): boolean {
     const key = loginid.trim().toUpperCase();
-    if (!key || key.startsWith('VRT') || key.startsWith('VRW') || key.startsWith('VRTC')) return false;
+    if (!key) return false;
+    // Embed Demo ledger (fixed 10,000 starting balance).
+    if (key === DERIV1_DEMO_LOGINID.toUpperCase() && getHandoffShadowLoginid()) return true;
+    if (key.startsWith('VRT') || key.startsWith('VRW') || key.startsWith('VRTC')) return false;
     if (key === OPTIONS_VIRTUAL_SHADOW_LOGINID.toUpperCase()) return true;
     if (key === ALLOWED_BOT_IFRAME_LOGINID.toUpperCase() && !isDerivOptionsOAuthSession()) return true;
     if (isTenantVirtualShadowLoginid(loginid)) return true;
@@ -400,6 +403,9 @@ export function writeCrShadow(loginid: string, value: number) {
             /* ignore */
         }
     });
+    // Never broadcast Demo ledger updates to the parent Real virtual balance.
+    const isDemoOnly = writeKeys.every(key => String(key).trim().toUpperCase().startsWith('VRT'));
+    if (isDemoOnly) return;
     void import('@/utils/deriv1SessionHandoff').then(({ postVirtualBalanceToDeriv1 }) => {
         postVirtualBalanceToDeriv1(value, loginid);
     });
@@ -526,6 +532,24 @@ export function tryDebitCrShadowSync(client: ClientStore, loginKey: string, ask:
     if (!isCrVirtualShadowLogin(loginKey)) return false;
     if (!Number.isFinite(ask) || ask < 0) return false;
 
+    // Embed Demo: fixed 10,000 display — allow fills without mutating Real ledger.
+    if (String(loginKey).trim().toUpperCase() === DERIV1_DEMO_LOGINID.toUpperCase()) {
+        writeCrShadow(loginKey, 10000);
+        try {
+            patchOneAccountBalance(client, loginKey, 10000, String(client.currency || 'USD'));
+            if (
+                String(client.loginid || '')
+                    .trim()
+                    .toUpperCase() === DERIV1_DEMO_LOGINID.toUpperCase()
+            ) {
+                client.setBalance('10000.00');
+            }
+        } catch {
+            /* ignore */
+        }
+        return true;
+    }
+
     if (isMoonLeadVirtualTradeLoginid(loginKey)) {
         seedMoonVirtLedgerIfAbsent(client, loginKey);
         const cur = moonVirtLedgerBalance(client, loginKey);
@@ -563,6 +587,12 @@ export function tryDebitCrShadowSync(client: ClientStore, loginKey: string, ask:
 /** Apply delta to CR shadow with floor at 0 (for settlement credits / misc). */
 export function applyCrShadowDeltaSync(client: ClientStore, loginKey: string, delta: number): void {
     if (!isCrVirtualShadowLogin(loginKey)) return;
+
+    // Embed Demo stays at 10,000 — ignore settlement deltas.
+    if (String(loginKey).trim().toUpperCase() === DERIV1_DEMO_LOGINID.toUpperCase()) {
+        writeCrShadow(loginKey, 10000);
+        return;
+    }
 
     if (isMoonLeadVirtualTradeLoginid(loginKey)) {
         const cur = moonVirtLedgerBalance(client, loginKey);
@@ -659,6 +689,18 @@ function patchShadowHeaderBalance(client: ClientStore, loginid: string, amount: 
     const rounded = Number(amount.toFixed(dec));
     patchPairedShadowAccountBalances(client, loginid, rounded, currency);
     const formatted = rounded.toFixed(dec);
+    const active = String(client.loginid || '')
+        .trim()
+        .toUpperCase();
+    const target = String(loginid || '')
+        .trim()
+        .toUpperCase();
+    // Do not overwrite Demo header with Real ledger (or vice versa).
+    const activeIsDemo = active.startsWith('VRT');
+    const targetIsDemo = target.startsWith('VRT');
+    if (active && target && activeIsDemo !== targetIsDemo) {
+        return;
+    }
     if (client.balance !== formatted || client.currency !== currency) {
         client.setBalance(formatted);
         client.setCurrency(currency);
@@ -672,6 +714,25 @@ function patchShadowHeaderBalance(client: ClientStore, loginid: string, amount: 
 export function seedCrShadowLedgerIfAbsent(client: ClientStore, loginid: string, realBalanceHint?: number): number {
     if (!isShadowDisplayManagedLoginid(loginid)) {
         return readDisplayedRealBalance(client, loginid);
+    }
+
+    // Embed Demo ledger — always 10,000 (display only; never touch Real ledger).
+    if (loginid.trim().toUpperCase() === DERIV1_DEMO_LOGINID.toUpperCase()) {
+        writeCrShadow(loginid, 10000);
+        // Patch demo account row only — do not setBalance if Real is active.
+        try {
+            patchOneAccountBalance(client, loginid, 10000, String(client.currency || 'USD'));
+            if (
+                String(client.loginid || '')
+                    .trim()
+                    .toUpperCase() === DERIV1_DEMO_LOGINID.toUpperCase()
+            ) {
+                client.setBalance('10000.00');
+            }
+        } catch {
+            /* ignore */
+        }
+        return 10000;
     }
 
     // Shared CR7557018 ↔ ROT90381442 ledger. bot-1 has no Railway capital poll —

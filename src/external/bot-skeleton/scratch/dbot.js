@@ -98,6 +98,19 @@ class DBot {
 
         return new Promise((resolve, reject) => {
             __webpack_public_path__ = public_path; // eslint-disable-line no-global-assign
+            try {
+                // Blockly media path only — never collapse embed asset prefix to `/`
+                // (that 404s async chunks at /static/js/... instead of /bot/static/js/...).
+                if (
+                    typeof window !== 'undefined' &&
+                    (window.location.pathname === '/bot' || window.location.pathname.startsWith('/bot/')) &&
+                    (!public_path || public_path === '/')
+                ) {
+                    __webpack_public_path__ = '/bot/'; // eslint-disable-line no-global-assign
+                }
+            } catch {
+                /* ignore */
+            }
             ApiHelpers.setInstance(api_helpers_store);
             DBotStore.setInstance(store);
             const window_width = window.innerWidth;

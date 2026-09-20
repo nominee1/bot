@@ -11,6 +11,7 @@ import { useOfflineDetection } from '@/hooks/useOfflineDetection';
 import { useStore } from '@/hooks/useStore';
 import useTMB from '@/hooks/useTMB';
 import { handleOidcAuthFailure, isDemoAccount } from '@/utils/auth-utils';
+import { isBotEmbed } from '@/utils/bot-embed';
 import { requestOidcAuthentication } from '@deriv-com/auth-client';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
@@ -141,7 +142,7 @@ const Layout = observer(() => {
 
     useEffect(() => {
         // Bot Studio Options OAuth uses PKCE — skip classic Hydra OIDC auto-login from `logged_state` cookie.
-        if (isBotStudioDeploy()) {
+        if (isBotStudioDeploy() || isBotEmbed()) {
             setIsAuthenticating(false);
             setClientHasCurrency(true);
             return;

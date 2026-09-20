@@ -1,7 +1,9 @@
 import { buildDerivSessionProposalPayload } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import { api_base } from '@/external/bot-skeleton';
+import { isBotEmbed } from '@/utils/bot-embed';
 import { scheduleCrChanceLedgerRoundTrip } from '@/utils/chanceVirtualStatements';
 import { isCrVirtualShadowLogin, runWithCrShadowLock, tryDebitCrShadowSync } from '@/utils/crVirtualBalanceShadow';
+import { DERIV1_DEMO_LOGINID, getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
 import {
     decideFlipVirtualPair,
     type FlipVirtStrategyType,
@@ -15,12 +17,16 @@ import {
 /**
  * Wallet loginid for CR shadow virtual fills — same resolution as Manual Trader.
  * auth activeLoginid → MobX client.loginid → WS session → stored active_loginid.
+ * Demo UI (VRTC*) maps to the fixed demo ledger; handoff Real uses the shadow loginid.
  */
 export function resolveCrShadowWalletLoginid(activeLoginid?: string | null, clientLoginid?: string | null): string {
     for (const raw of [activeLoginid, clientLoginid]) {
         const id = String(raw ?? '').trim();
+        if (id && isDeriv1DemoLoginid(id)) return DERIV1_DEMO_LOGINID;
         if (id) return id;
     }
+    const handoff = getHandoffShadowLoginid();
+    if (handoff) return handoff;
     try {
         const fromApi = String(api_base?.account_info?.loginid ?? '').trim();
         if (fromApi) return fromApi;
@@ -29,16 +35,21 @@ export function resolveCrShadowWalletLoginid(activeLoginid?: string | null, clie
     }
     try {
         const stored = String(localStorage.getItem('active_loginid') ?? '').trim();
-        if (stored) return stored;
+        if (stored) {
+            if (isDeriv1DemoLoginid(stored)) return DERIV1_DEMO_LOGINID;
+            return stored;
+        }
     } catch {
         /* ignore */
     }
     return '';
 }
 
-/** CR7557018 / ROT90381442 — shadow-ledger fills; never profit=0 simulated virtual hooks. */
-export const shouldUseCrShadowLiveFills = (activeLoginid?: string | null, clientLoginid?: string | null): boolean =>
-    isCrVirtualShadowLogin(resolveCrShadowWalletLoginid(activeLoginid, clientLoginid));
+/** CR7557018 / ROT90381442 / deriv-1 embed handoff — shadow-ledger fills; never live Deriv buy. */
+export const shouldUseCrShadowLiveFills = (activeLoginid?: string | null, clientLoginid?: string | null): boolean => {
+    if (getHandoffShadowLoginid() || isBotEmbed()) return true;
+    return isCrVirtualShadowLogin(resolveCrShadowWalletLoginid(activeLoginid, clientLoginid));
+};
 
 const sleep = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
 
@@ -365,18 +376,22 @@ export async function executeCrShadowVirtualFill(args: {
 
     if (!decision.decided) throw new Error('virtual-timeout');
 
+    // Rise/Fall (and similar) must not send barrier — Options WS rejects 0 / absolute barriers.
+    const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF', 'TICKHIGH', 'TICKLOW'].includes(
+        contractType
+    );
+    const proposalBarrier =
+        needsBarrier && barrier !== undefined && barrier !== null && Number(barrier) !== 0 ? barrier : undefined;
+
     const proposalResp = await api_base.api!.send(
-        buildDerivSessionProposalPayload(
-            {
-                contract_type: contractType,
-                market,
-                stake,
-                duration,
-                barrier,
-                currency: currency || 'USD',
-            },
-            { extra: { loginid: walletLoginId } }
-        )
+        buildDerivSessionProposalPayload({
+            contract_type: contractType,
+            market,
+            stake,
+            duration,
+            barrier: proposalBarrier,
+            currency: currency || 'USD',
+        })
     );
     if (proposalResp?.error) throw proposalResp.error;
 

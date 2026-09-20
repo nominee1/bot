@@ -1,4 +1,6 @@
 import { isDerivOptionsOAuthSession } from '@/components/shared/utils/login/deriv-oauth-storage';
+import { isBotEmbed } from '@/utils/bot-embed';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 
 /** Underlyings that accept digit proposals on the Options trading WebSocket (`underlying_symbol`). */
 export const DERIV_OPTIONS_DIGIT_UNDERLYINGS = [
@@ -26,7 +28,10 @@ export function isDerivOptionsDigitUnderlying(symbol: string): boolean {
 }
 
 export function isOptionsSessionActive(options?: { optionsSession?: boolean }): boolean {
-    return options?.optionsSession ?? isDerivOptionsOAuthSession();
+    if (options?.optionsSession != null) return options.optionsSession;
+    // Embed / virtual-ledger always talks to Options public WS (`underlying_symbol`).
+    if (getHandoffShadowLoginid() || isBotEmbed()) return true;
+    return isDerivOptionsOAuthSession();
 }
 
 /** Map legacy-only markets to the closest Options-supported symbol when on Options OAuth. */

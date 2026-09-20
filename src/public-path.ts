@@ -8,9 +8,26 @@ export const getUrlBase = (path = '') => {
     return `/${prefix}${get_path}`;
 };
 
+/** Absolute asset prefix for `/bot` embed — must end with `/` so async chunks resolve. */
+export function resolveBotAssetPrefix(): string {
+    try {
+        const prefix = window.location.pathname.split('/').filter(Boolean)[0] || '';
+        if (prefix === 'bot' || /^br_/.test(prefix)) {
+            return `/${prefix}/`;
+        }
+    } catch {
+        /* ignore */
+    }
+    return getUrlBase('/') || '/';
+}
+
+declare let __webpack_public_path__: string;
+
 export function setBotPublicPath(path: string) {
-    window.__webpack_public_path__ = '';
-    window.__webpack_public_path__ = path; // eslint-disable-line no-global-assign
+    const normalized = path.endsWith('/') ? path : `${path}/`;
+    // Magic assignment — rspack/webpack rewrites this to update the runtime public path (`s.p`).
+    __webpack_public_path__ = normalized; // eslint-disable-line no-global-assign
+    window.__webpack_public_path__ = __webpack_public_path__;
 }
 
 export const getImageLocation = (image_name: string) => `assets/images/${image_name}`;
@@ -76,4 +93,22 @@ const initSurvicate = () => {
 
 export { initSurvicate, setSurvicateCalledValue };
 
-setBotPublicPath(getUrlBase('/'));
+/** Keep `/bot/` trailing slash so relative async chunks resolve under `/bot/static/…`. */
+function ensureBotTrailingSlash() {
+    try {
+        const { pathname, search, hash } = window.location;
+        if (pathname === '/bot') {
+            window.history.replaceState({}, '', `/bot/${search}${hash}`);
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+ensureBotTrailingSlash();
+setBotPublicPath(resolveBotAssetPrefix());
+// Re-assert after other scripts — `assetPrefix: 'auto'` can reset to `/` when currentScript is null.
+if (typeof window !== 'undefined') {
+    queueMicrotask(() => setBotPublicPath(resolveBotAssetPrefix()));
+    window.addEventListener('load', () => setBotPublicPath(resolveBotAssetPrefix()));
+}
