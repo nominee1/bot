@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { standalone_routes } from '@/components/shared';
 import { useChromeCollapse } from '@/hooks/use-chrome-collapse';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
-import { getLiveDbotDisplayRoute } from '@/utils/bot-embed';
+import { getLiveDbotDisplayRoute, isBotEmbed } from '@/utils/bot-embed';
 
 const DISPLAY_HOST = 'bot.deriv.com';
 const BAR_POS_KEY = 'chrome-url-bar-position';
@@ -93,6 +93,7 @@ const IconBtn = ({
 
 const ChromeUrlBars = () => {
     const location = useLocation();
+    const embedded = isBotEmbed();
     const [starred, setStarred] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [barPosition, setBarPosition] = useState<BarPosition>('top');
@@ -104,21 +105,36 @@ const ChromeUrlBars = () => {
     const href = `https://${host}${route}`;
 
     useEffect(() => {
+        // Parent (deriv-1) owns the single Chrome omnibox when DBot is iframe-embedded.
+        const root = document.documentElement;
+        if (!embedded) {
+            root.classList.remove('dbot-embed-guest');
+            return;
+        }
+        root.classList.add('dbot-embed-guest');
+        return () => root.classList.remove('dbot-embed-guest');
+    }, [embedded]);
+
+    useEffect(() => {
+        if (embedded) return;
         const next = readBarPosition();
         setBarPosition(next);
         applyBarPosition(next);
         applyThemeColor();
-    }, []);
+    }, [embedded]);
 
     useEffect(() => {
+        if (embedded) return;
         applyThemeColor();
-    }, [location.pathname, location.search, location.hash]);
+    }, [embedded, location.pathname, location.search, location.hash]);
 
     const setPosition = (next: BarPosition) => {
         setBarPosition(next);
         applyBarPosition(next);
         setMenuOpen(false);
     };
+
+    if (embedded) return null;
 
     return (
         <>
@@ -257,7 +273,7 @@ const ChromeUrlBars = () => {
                     </svg>
                 </IconBtn>
                 <div className='chrome-url-bars-mobile__tabs' aria-label='Tabs'>
-                    <span className='chrome-url-bars-mobile__tab-count'>1</span>
+                    <span className='chrome-url-bars-mobile__tab-count'>3</span>
                 </div>
                 <IconBtn
                     label='Menu'

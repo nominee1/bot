@@ -27,6 +27,17 @@ html[data-chrome-bar='bottom'] {
     }
 }
 
+/* Parent owns the omnibox — zero iframe chrome spacing when embedded. */
+html.dbot-embed-guest,
+html.dbot-embed-guest[data-chrome-bar],
+html.dbot-embed-guest[data-chrome-bar='top'],
+html.dbot-embed-guest[data-chrome-bar='bottom'] {
+    --site-url-bars-h: 0px;
+    --chrome-mobile-bar-h: 0px;
+    --chrome-bar-top: 0px;
+    --chrome-bar-bottom: 0px;
+}
+
 html,
 body {
     background: #fff;
