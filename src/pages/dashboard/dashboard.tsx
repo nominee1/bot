@@ -5,19 +5,14 @@ import Text from '@/components/shared_ui/text';
 import { useStore } from '@/hooks/useStore';
 import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
-import Announcements from './announcements';
 import Cards from './cards';
 
-type TMobileIconGuide = {
-    handleTabChange: (active_number: number) => void;
-};
-
-const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
-    const { load_modal, dashboard, client } = useStore();
+const DashboardComponent = observer(() => {
+    const { load_modal, dashboard } = useStore();
     const { dashboard_strategies } = load_modal;
     const { active_tour } = dashboard;
     const has_dashboard_strategies = !!dashboard_strategies?.length;
-    const { isDesktop, isTablet } = useDevice();
+    const { isDesktop } = useDevice();
 
     return (
         <React.Fragment>
@@ -27,9 +22,6 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
                 })}
             >
                 <div className='tab__dashboard__content'>
-                    {client.is_logged_in && (
-                        <Announcements is_mobile={!isDesktop} is_tablet={isTablet} handleTabChange={handleTabChange} />
-                    )}
                     <div className='quick-panel'>
                         <div
                             className={classNames('tab__dashboard__header', {
