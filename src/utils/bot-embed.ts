@@ -1,4 +1,5 @@
 export const DERIV1_BOT_HOME_MSG = 'deriv1-bot-home';
+export const DERIV1_BOT_ROUTE_MSG = 'deriv1-bot-route';
 
 export function isBotSubpath(): boolean {
     try {
@@ -46,4 +47,14 @@ export function getLiveDbotDisplayRoute(pathname: string, _search: string, hash:
     const raw = (hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
     const tab = LIVE_TAB_HASHES.includes(raw as (typeof LIVE_TAB_HASHES)[number]) ? raw : 'bot_builder';
     return `/#${tab}`;
+}
+
+/** Tell parent (deriv-1) Chrome omnibox which bot tab/route to show. */
+export function notifyDeriv1BotRoute(route: string): void {
+    if (!isBotEmbed()) return;
+    try {
+        window.parent.postMessage({ type: DERIV1_BOT_ROUTE_MSG, source: 'bot-1', route }, '*');
+    } catch {
+        /* ignore */
+    }
 }

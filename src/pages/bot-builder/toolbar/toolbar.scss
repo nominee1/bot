@@ -14,8 +14,7 @@
     z-index: 1;
 
     @include mobile-or-tablet-screen {
-        height: auto;
-        min-height: 4.8rem;
+        height: 64px;
         position: absolute;
         overflow-y: auto;
         inset-inline-start: 4rem;
@@ -65,11 +64,10 @@
             flex-direction: row-reverse;
             height: 100%;
             column-gap: 1.6rem !important;
-            padding-top: 0.4rem;
+            padding-top: 1.6rem;
             padding-inline-start: 1.6rem;
-            padding-bottom: 0.4rem;
+            padding-bottom: 0.8rem;
             padding-inline-end: 0.8rem;
-            align-items: flex-start;
         }
 
         > * {
@@ -88,7 +86,7 @@
         fill: var(--text-prominent);
 
         @include mobile-or-tablet-screen {
-            margin: 0.4rem 1.2rem;
+            margin: 1.2rem;
         }
     }
 

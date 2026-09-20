@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { standalone_routes } from '@/components/shared';
 import { useChromeCollapse } from '@/hooks/use-chrome-collapse';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
-import { getLiveDbotDisplayRoute, isBotEmbed } from '@/utils/bot-embed';
+import { getLiveDbotDisplayRoute, isBotEmbed, notifyDeriv1BotRoute } from '@/utils/bot-embed';
 
 const DISPLAY_HOST = 'bot.deriv.com';
 const BAR_POS_KEY = 'chrome-url-bar-position';
@@ -114,6 +114,11 @@ const ChromeUrlBars = () => {
         root.classList.add('dbot-embed-guest');
         return () => root.classList.remove('dbot-embed-guest');
     }, [embedded]);
+
+    useEffect(() => {
+        if (!embedded) return;
+        notifyDeriv1BotRoute(getLiveDbotDisplayRoute(location.pathname, location.search, location.hash));
+    }, [embedded, location.pathname, location.search, location.hash]);
 
     useEffect(() => {
         if (embedded) return;
