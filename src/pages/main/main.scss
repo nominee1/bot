@@ -16,6 +16,10 @@
     z-index: 1;
     pointer-events: none;
 
+    @include mobile-or-tablet-screen {
+        display: none;
+    }
+
     &--left {
         left: 0;
         background: linear-gradient(-88.07deg, transparent 1.63%, var(--general-section-1) 50.02%);
@@ -35,9 +39,16 @@
     padding: 1.6rem 0 3.6rem 7.2rem;
 
     @include mobile-or-tablet-screen {
-        height: calc(100vh - 5.6rem - 6rem - var(--chrome-bar-top, 0px) - var(--chrome-bar-bottom, 0px));
+        height: calc(100vh - 5.6rem - 6rem);
         padding: 0;
         padding-bottom: env(safe-area-inset-bottom, 0);
+
+        .dc-tabs__list {
+            display: none !important;
+            height: 0 !important;
+            overflow: hidden;
+            padding: 0;
+        }
     }
 
     &__workspace {
@@ -143,15 +154,10 @@
                 padding-inline-end: 0;
 
                 @include mobile-or-tablet-screen {
-                    padding-inline-end: 0;
-                    overflow-x: auto;
-                    overflow-y: hidden;
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-
-                    &::-webkit-scrollbar {
-                        display: none;
-                    }
+                    display: none;
+                    height: 0;
+                    overflow: hidden;
+                    padding: 0;
                 }
 
                 &--header {
@@ -514,9 +520,9 @@
     }
 
     @include mobile-or-tablet-screen {
-        top: 5.6rem;
+        top: 0;
         inset-inline-start: 0;
-        width: 100vw;
+        width: 100%;
         height: var(--tab-content-height-mobile);
         padding-inline-start: 0;
     }

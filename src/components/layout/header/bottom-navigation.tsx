@@ -19,10 +19,12 @@ type TBottomNavigationProps = {
 
 const BottomNavigation = observer(({ onMenuClick }: TBottomNavigationProps) => {
     const { isDesktop } = useDevice();
-    const { dashboard } = useStore();
-    const { active_tab, setActiveTab } = dashboard;
+    const store = useStore();
+    const dashboard = store?.dashboard;
 
-    if (isDesktop) return null;
+    if (isDesktop || !dashboard) return null;
+
+    const { active_tab, setActiveTab } = dashboard;
 
     const items = [
         {

@@ -5,23 +5,29 @@ import Bot from '../external/bot-skeleton/scratch/dbot';
 
 const StoreContext = createContext<null | RootStore>(null);
 
+let rootStoreSingleton: RootStore | null = null;
+
+export const getRootStore = (mockStore?: RootStore): RootStore => {
+    if (mockStore) return mockStore;
+    if (!rootStoreSingleton) {
+        rootStoreSingleton = new RootStore(Bot);
+    }
+    return rootStoreSingleton;
+};
+
 type TStoreProvider = {
     children: React.ReactNode;
     mockStore?: RootStore;
 };
 
 const StoreProvider: React.FC<TStoreProvider> = ({ children, mockStore }) => {
-    const [store] = useState(() => mockStore ?? new RootStore(Bot));
+    const [store] = useState(() => getRootStore(mockStore));
 
     return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 };
 
 const useStore = () => {
-    const store = useContext(StoreContext);
-    if (!store) {
-        throw new Error('useStore must be used within StoreProvider');
-    }
-    return store;
+    return useContext(StoreContext) ?? getRootStore();
 };
 
 export { StoreProvider, useStore };
