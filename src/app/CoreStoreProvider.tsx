@@ -193,10 +193,14 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
         if (!ledgerLogin || !isCrVirtualShadowLogin(ledgerLogin)) return undefined;
 
         let cancelled = false;
+        let pullTicket = 0;
         const pull = async () => {
             if (hasPendingSharedVirtualLedgerSync()) return;
+            const ticket = ++pullTicket;
             const bal = await fetchSharedVirtualLedgerBalance();
-            if (cancelled || bal == null) return;
+            // Drop stale responses. A slower capital read must not overwrite a newer one,
+            // and an in-flight read must not clobber a trade that landed while it was waiting.
+            if (cancelled || bal == null || ticket !== pullTicket || hasPendingSharedVirtualLedgerSync()) return;
             writeCrShadow(ledgerLogin, bal);
             syncCrShadowBalanceIfNeeded(client, ledgerLogin, bal);
             if (!isCrVirtualShadowLogin(loginid)) {

@@ -110,7 +110,10 @@
 
         &--mobile {
             width: 100%;
+
+            /* Drawer bottom now meets the run bar, so the full won/lost row stays visible. */
             bottom: 0;
+            z-index: 7;
         }
     }
 

@@ -1,6 +1,5 @@
 import type ClientStore from '@/stores/client-store';
-import { isCrVirtualShadowLogin, syncCrShadowBalanceIfNeeded, writeCrShadow } from '@/utils/crVirtualBalanceShadow';
-import { postVirtualBalanceToDeriv1 } from '@/utils/deriv1SessionHandoff';
+import { isCrVirtualShadowLogin } from '@/utils/crVirtualBalanceShadow';
 import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { getDeriv1LedgerProxyUrl, getPaApiBaseUrl } from '@/utils/pa-api-base';
 
@@ -117,11 +116,9 @@ export function scheduleSharedVirtualLedgerPnlSync(
     pendingSharedVirtualLedgerSyncs += 1;
     ledgerAdjustChain = ledgerAdjustChain
         .then(async () => {
-            const next = await pushSharedVirtualLedgerPnl(delta);
-            if (next == null) return;
-            writeCrShadow(String(walletLoginId), next);
-            syncCrShadowBalanceIfNeeded(client, String(walletLoginId), next);
-            postVirtualBalanceToDeriv1(next, String(walletLoginId));
+            // Local shadow already includes this delta. Do not write the server absolute
+            // back — that races the capital poll and flashes a second balance.
+            await pushSharedVirtualLedgerPnl(delta);
         })
         .catch(() => undefined)
         .finally(() => {
