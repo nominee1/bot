@@ -75,7 +75,7 @@
         position: relative;
 
         .auth-actions {
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             display: flex;
             align-items: center;
             justify-content: flex-start;
@@ -99,7 +99,7 @@
                 height: 3.2rem !important;
                 min-height: 3.2rem;
                 border-radius: 1.6rem !important;
-                margin-inline-start: 0;
+                margin-inline-start: auto;
                 margin-inline-end: 1.2rem;
                 padding: 0 1.6rem;
                 font-weight: 400;
