@@ -357,7 +357,8 @@ export function applyDeriv1SessionPayload(
     session: Deriv1BotSessionPayload,
     writeShadow: (loginid: string, value: number) => void
 ): void {
-    const loginKey = session.loginid || 'ROT90381442';
+    const loginKey = String(session.loginid || '').trim();
+    if (!loginKey) return;
     const next = { ...session, loginid: loginKey };
     rememberHandoffShadowLoginid(loginKey);
     persistDeriv1Session(next);
@@ -416,7 +417,11 @@ export function listenForDeriv1Session(writeShadow: (loginid: string, value: num
         if (data?.type === DERIV1_BOT_BALANCE_MSG) {
             const next = Number(data.value);
             if (!Number.isFinite(next)) return;
-            const loginKey = String(data.loginid || getHandoffShadowLoginid() || 'ROT90381442').trim();
+            const incoming = String(data.loginid || '').trim();
+            const handoff = getHandoffShadowLoginid();
+            const loginKey = incoming || handoff;
+            if (!loginKey) return;
+            if (handoff && incoming && incoming.toUpperCase() !== handoff.toUpperCase()) return;
             rememberHandoffShadowLoginid(loginKey);
             lastPostedToDeriv1 = Math.round(next * 100) / 100;
             writeShadow(loginKey, next);

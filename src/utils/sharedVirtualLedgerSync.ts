@@ -46,7 +46,9 @@ function ledgerLoginid(): string {
 
 export async function fetchSharedVirtualLedgerBalance(): Promise<number | null> {
     const loginid = ledgerLoginid();
-    const query = loginid ? `?loginid=${encodeURIComponent(loginid)}` : '';
+    // No loginid must not hit the platform wallet (another user's Options balance).
+    if (!loginid) return null;
+    const query = `?loginid=${encodeURIComponent(loginid)}`;
     try {
         const fromRailway = await fetchCapitalFrom(`${getPaApiBaseUrl()}/v1/signals/capital${query}`);
         if (fromRailway != null) return fromRailway;
@@ -55,7 +57,7 @@ export async function fetchSharedVirtualLedgerBalance(): Promise<number | null> 
     }
     try {
         const proxy = getDeriv1LedgerProxyUrl();
-        const proxyUrl = loginid ? `${proxy}?loginid=${encodeURIComponent(loginid)}` : proxy;
+        const proxyUrl = `${proxy}?loginid=${encodeURIComponent(loginid)}`;
         return await fetchCapitalFrom(proxyUrl);
     } catch {
         return null;
@@ -65,6 +67,8 @@ export async function fetchSharedVirtualLedgerBalance(): Promise<number | null> 
 export async function pushSharedVirtualLedgerPnl(pnlDelta: number): Promise<number | null> {
     const delta = Math.round(Number(pnlDelta) * 100) / 100;
     if (!Number.isFinite(delta) || delta === 0) return null;
+    const loginid = ledgerLoginid();
+    if (!loginid) return null;
 
     const headers = {
         Accept: 'application/json',
@@ -75,7 +79,7 @@ export async function pushSharedVirtualLedgerPnl(pnlDelta: number): Promise<numb
         const res = await fetch(`${getPaApiBaseUrl()}/v1/signals/ledger-adjust`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ pnlDelta: delta, loginid: ledgerLoginid() || undefined }),
+            body: JSON.stringify({ pnlDelta: delta, loginid }),
         });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; balance?: number };
         if (res.ok && data.ok) {
@@ -89,7 +93,7 @@ export async function pushSharedVirtualLedgerPnl(pnlDelta: number): Promise<numb
         const res = await fetch(getDeriv1LedgerProxyUrl(), {
             method: 'POST',
             headers,
-            body: JSON.stringify({ pnlDelta: delta, loginid: ledgerLoginid() || undefined }),
+            body: JSON.stringify({ pnlDelta: delta, loginid }),
         });
         const data = (await res.json().catch(() => ({}))) as {
             ok?: boolean;
