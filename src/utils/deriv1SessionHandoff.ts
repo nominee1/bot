@@ -331,6 +331,10 @@ export function postVirtualBalanceToDeriv1(value: number, loginid?: string): voi
     const rounded = Math.round(n * 100) / 100;
     if (lastPostedToDeriv1 === rounded) return;
     lastPostedToDeriv1 = rounded;
+    const stored = readPersistedDeriv1Session();
+    if (stored && !isDeriv1DemoLoginid(stored.loginid)) {
+        persistDeriv1Session({ ...stored, virtualBalance: rounded });
+    }
     const payload = {
         type: DERIV1_BOT_BALANCE_MSG,
         source: 'bot-1',

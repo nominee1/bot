@@ -1,6 +1,7 @@
 import type ClientStore from '@/stores/client-store';
 import { isCrVirtualShadowLogin, syncCrShadowBalanceIfNeeded, writeCrShadow } from '@/utils/crVirtualBalanceShadow';
 import { postVirtualBalanceToDeriv1 } from '@/utils/deriv1SessionHandoff';
+import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { getDeriv1LedgerProxyUrl, getPaApiBaseUrl } from '@/utils/pa-api-base';
 
 let pendingSharedVirtualLedgerSyncs = 0;
@@ -40,15 +41,23 @@ async function fetchCapitalFrom(url: string): Promise<number | null> {
     return parseManagedBalance(data);
 }
 
+function ledgerLoginid(): string {
+    return getHandoffShadowLoginid();
+}
+
 export async function fetchSharedVirtualLedgerBalance(): Promise<number | null> {
+    const loginid = ledgerLoginid();
+    const query = loginid ? `?loginid=${encodeURIComponent(loginid)}` : '';
     try {
-        const fromRailway = await fetchCapitalFrom(`${getPaApiBaseUrl()}/v1/signals/capital`);
+        const fromRailway = await fetchCapitalFrom(`${getPaApiBaseUrl()}/v1/signals/capital${query}`);
         if (fromRailway != null) return fromRailway;
     } catch {
-        /* try deriv-1 CORS proxy */
+        /* try same-origin deriv-1 proxy */
     }
     try {
-        return await fetchCapitalFrom(getDeriv1LedgerProxyUrl());
+        const proxy = getDeriv1LedgerProxyUrl();
+        const proxyUrl = loginid ? `${proxy}?loginid=${encodeURIComponent(loginid)}` : proxy;
+        return await fetchCapitalFrom(proxyUrl);
     } catch {
         return null;
     }
@@ -67,7 +76,7 @@ export async function pushSharedVirtualLedgerPnl(pnlDelta: number): Promise<numb
         const res = await fetch(`${getPaApiBaseUrl()}/v1/signals/ledger-adjust`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ pnlDelta: delta }),
+            body: JSON.stringify({ pnlDelta: delta, loginid: ledgerLoginid() || undefined }),
         });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; balance?: number };
         if (res.ok && data.ok) {
@@ -81,7 +90,7 @@ export async function pushSharedVirtualLedgerPnl(pnlDelta: number): Promise<numb
         const res = await fetch(getDeriv1LedgerProxyUrl(), {
             method: 'POST',
             headers,
-            body: JSON.stringify({ pnlDelta: delta }),
+            body: JSON.stringify({ pnlDelta: delta, loginid: ledgerLoginid() || undefined }),
         });
         const data = (await res.json().catch(() => ({}))) as {
             ok?: boolean;

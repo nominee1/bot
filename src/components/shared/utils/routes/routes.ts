@@ -47,7 +47,8 @@ const domains: Record<Service, DomainConfig> = {
 
 const getDeriv1HomeUrl = (): string => {
     const fromEnv = typeof process.env.DERIV1_APP_ORIGIN === 'string' ? process.env.DERIV1_APP_ORIGIN.trim() : '';
-    return (fromEnv || 'https://deriv-1-beta.vercel.app').replace(/\/+$/, '');
+    const liveOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    return (fromEnv || liveOrigin || 'https://bot.deriv.com').replace(/\/+$/, '');
 };
 
 const getDerivDomain = (service: Service): string => {

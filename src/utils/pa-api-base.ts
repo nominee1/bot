@@ -5,6 +5,7 @@ export function getPaApiBaseUrl(): string {
 
 export function getDeriv1LedgerProxyUrl(): string {
     const fromEnv = typeof process.env.DERIV1_APP_ORIGIN === 'string' ? process.env.DERIV1_APP_ORIGIN.trim() : '';
-    const origin = (fromEnv || 'https://deriv-1-beta.vercel.app').replace(/\/+$/, '');
+    const liveOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const origin = (fromEnv || liveOrigin || 'https://bot.deriv.com').replace(/\/+$/, '');
     return `${origin}/api/virtual-ledger`;
 }

@@ -46,6 +46,109 @@
                 } catch (e) {}
             })();
         </script>
+        <script>
+            (function () {
+                var TITLE = 'bot.deriv.com says';
+                var style = document.createElement('style');
+                style.textContent =
+                    '#bot-deriv-says{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:flex-end;justify-content:center;background:rgba(32,33,36,.45);padding:16px;font-family:Roboto,Arial,sans-serif}' +
+                    '#bot-deriv-says .card{width:min(100%,420px);margin-bottom:12px;background:#fff;color:#202124;border-radius:28px;padding:22px 22px 16px;box-shadow:0 12px 40px rgba(0,0,0,.28)}' +
+                    '#bot-deriv-says h2{margin:0 0 14px;font-size:16px;font-weight:500;line-height:1.3}' +
+                    '#bot-deriv-says p{margin:0 0 16px;font-size:16px;line-height:1.4;white-space:pre-wrap}' +
+                    '#bot-deriv-says input{width:100%;box-sizing:border-box;border:none;border-bottom:2px solid #1a73e8;font-size:16px;padding:8px 2px;outline:none;background:transparent;color:#202124}' +
+                    '#bot-deriv-says .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}' +
+                    '#bot-deriv-says button{border:0;background:transparent;color:#1a73e8;font-size:14px;font-weight:600;letter-spacing:.04em;padding:10px 12px;border-radius:8px}' +
+                    '@media(min-width:840px){#bot-deriv-says{align-items:center}#bot-deriv-says .card{margin-bottom:0}}';
+                document.head.appendChild(style);
+
+                function openSays(options) {
+                    var existing = document.getElementById('bot-deriv-says');
+                    if (existing) existing.remove();
+                    var root = document.createElement('div');
+                    root.id = 'bot-deriv-says';
+                    var card = document.createElement('div');
+                    card.className = 'card';
+                    var title = document.createElement('h2');
+                    title.textContent = TITLE;
+                    card.appendChild(title);
+                    if (options.message) {
+                        var message = document.createElement('p');
+                        message.textContent = String(options.message);
+                        card.appendChild(message);
+                    }
+                    var field = null;
+                    if (options.mode === 'prompt') {
+                        field = document.createElement('input');
+                        field.type = 'text';
+                        field.value = options.value == null ? '' : String(options.value);
+                        field.setAttribute('enterkeyhint', 'done');
+                        card.appendChild(field);
+                    }
+                    var actions = document.createElement('div');
+                    actions.className = 'actions';
+                    function close(result) {
+                        root.remove();
+                        if (typeof options.callback === 'function') options.callback(result);
+                    }
+                    if (options.mode !== 'alert') {
+                        var cancel = document.createElement('button');
+                        cancel.type = 'button';
+                        cancel.textContent = 'CANCEL';
+                        cancel.onclick = function () {
+                            close(options.mode === 'confirm' ? false : null);
+                        };
+                        actions.appendChild(cancel);
+                    }
+                    var ok = document.createElement('button');
+                    ok.type = 'button';
+                    ok.textContent = 'OK';
+                    ok.onclick = function () {
+                        if (options.mode === 'prompt') close(field ? field.value : '');
+                        else if (options.mode === 'confirm') close(true);
+                        else close(undefined);
+                    };
+                    actions.appendChild(ok);
+                    card.appendChild(actions);
+                    root.appendChild(card);
+                    root.addEventListener('click', function (event) {
+                        if (event.target === root)
+                            close(options.mode === 'confirm' ? false : options.mode === 'prompt' ? null : undefined);
+                    });
+                    (document.body || document.documentElement).appendChild(root);
+                    if (field) {
+                        setTimeout(function () {
+                            field.focus();
+                            field.select();
+                        }, 30);
+                    }
+                }
+
+                function install() {
+                    var dialog = window.Blockly && window.Blockly.dialog;
+                    if (!dialog || typeof dialog.setPrompt !== 'function' || dialog.__botDerivSays) return false;
+                    dialog.__botDerivSays = true;
+                    dialog.setPrompt(function (message, defaultValue, callback) {
+                        openSays({ mode: 'prompt', message: message, value: defaultValue, callback: callback });
+                    });
+                    if (typeof dialog.setAlert === 'function') {
+                        dialog.setAlert(function (message, callback) {
+                            openSays({ mode: 'alert', message: message, callback: callback });
+                        });
+                    }
+                    if (typeof dialog.setConfirm === 'function') {
+                        dialog.setConfirm(function (message, callback) {
+                            openSays({ mode: 'confirm', message: message, callback: callback });
+                        });
+                    }
+                    return true;
+                }
+                var tries = 0;
+                var timer = setInterval(function () {
+                    tries += 1;
+                    if (install() || tries > 150) clearInterval(timer);
+                }, 200);
+            })();
+        </script>
     </head>
 
     <body class="body theme theme--light">

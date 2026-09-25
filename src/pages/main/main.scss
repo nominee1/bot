@@ -57,6 +57,16 @@
         height: 100%;
     }
 
+    &__tabs {
+        .dc-tabs__list {
+            padding-inline-start: 28rem;
+
+            @include mobile-or-tablet-screen {
+                padding-inline-start: 0;
+            }
+        }
+    }
+
     &__tabs-account-section {
         z-index: 3;
         align-items: center;
@@ -65,7 +75,8 @@
         display: flex;
         position: absolute;
         top: 0;
-        inset-inline-end: 1.6rem;
+        inset-inline-start: 0;
+        inset-inline-end: auto;
         pointer-events: none;
 
         .auth-actions {
