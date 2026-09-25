@@ -24,19 +24,10 @@
     @include mobile-or-tablet-screen {
         width: 100vw !important;
 
-        /* Above the run-button animation (z-index 8), below the header (20) and bottom nav (149). */
-        z-index: 12 !important;
-        pointer-events: none;
-
-        /* Closed sheet only paints the handle, so the running animation stays visible underneath. */
-        clip-path: inset(0 0 calc(100% - 3.6rem) 0);
-
-        /* Open panel fills the space under the 5.6rem header and above the
-           6rem run bar, which itself sits above the 6rem bottom nav. */
-        height: calc(100% - 17.6rem - env(safe-area-inset-bottom, 0)) !important;
-
-        /* Closed: only the 3.6rem handle remains, sitting over the run bar. */
-        top: calc(100% - 15.6rem - env(safe-area-inset-bottom, 0)) !important;
+        /* Same open sheet as bot.deriv.com (height 17.7rem, top 15.8rem, slide -100% + 3.6rem),
+           plus the 5.6rem chrome bar that sits above our header. */
+        height: calc(100% - 23.3rem) !important;
+        top: calc(100% - 15.8rem) !important;
     }
 
     &__container {
@@ -97,7 +88,6 @@
             justify-content: center;
             background-color: var(--general-main-1);
             border-top: solid 1px var(--general-section-1);
-            pointer-events: auto;
         }
 
         svg {
@@ -133,11 +123,7 @@
 
     &--open {
         @include mobile-or-tablet-screen {
-            pointer-events: auto;
-            clip-path: none;
-
-            /* Lands the top edge on the bottom of the header, not over it. */
-            transform: translateY(calc(-100% + 21.2rem + env(safe-area-inset-bottom, 0)));
+            transform: translateY(calc(-100% + 3.6rem));
         }
     }
 }
