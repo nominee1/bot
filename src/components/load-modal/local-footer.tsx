@@ -22,9 +22,7 @@ const LocalFooter = observer(() => {
 
     return (
         <Wrapper>
-            {!isDesktop && (
-                <Button text={localize('Cancel')} onClick={() => setLoadedLocalFile(null)} has_effect secondary large />
-            )}
+            <Button text={localize('Cancel')} onClick={() => setLoadedLocalFile(null)} has_effect secondary large />
             <Button
                 text={localize('Open')}
                 onClick={() => {

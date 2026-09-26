@@ -9,7 +9,6 @@ import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import { botNotification } from '../bot-notification/bot-notification';
 import { notification_message } from '../bot-notification/bot-notification-utils';
-import LocalFooter from './local-footer';
 import SectionMessage from './section-message';
 import WorkspaceControl from './workspace-control';
 
@@ -61,11 +60,6 @@ const LocalComponent = observer(() => {
                         </div>
                     </div>
                 </div>
-                {!isDesktop && (
-                    <div className='load-strategy__local-footer'>
-                        <LocalFooter />
-                    </div>
-                )}
             </div>
         );
     }

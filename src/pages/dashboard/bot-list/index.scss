@@ -5,12 +5,20 @@
     &__wrapper {
         position: fixed;
         top: 4rem;
-        z-index: 10;
+        z-index: 200;
         width: 100%;
 
         .dc-mobile-full-page-modal {
+            z-index: 200;
+
             @include mobile-or-tablet-screen {
                 width: 100%;
+            }
+
+            &__footer {
+                flex: 0 0 auto;
+                background: var(--general-main-1);
+                padding-bottom: calc(1.6rem + env(safe-area-inset-bottom, 0px));
             }
 
             &__body {
@@ -32,6 +40,23 @@
                     height: calc(100% - 4rem);
                 }
             }
+        }
+    }
+
+    /* The mobile URL bar covers the top of this title. Start the header at the
+       bottom of that bar so "Load strategy" is fully visible. */
+    @at-root html[data-chrome-bar='top'] .load-strategy__wrapper {
+        .dc-page-overlay__header {
+            top: var(--chrome-bar-top);
+        }
+
+        .dc-page-overlay__content,
+        .dc-page-overlay__content > .dc-mobile-full-page-modal {
+            top: calc(var(--chrome-bar-top) + #{$MOBILE_WRAPPER_HEADER_HEIGHT});
+        }
+
+        .dc-page-overlay__content > .dc-mobile-full-page-modal {
+            height: calc(100vh - var(--chrome-bar-top) - #{$MOBILE_WRAPPER_HEADER_HEIGHT}) !important;
         }
     }
 
@@ -65,6 +90,28 @@
         @include mobile-or-tablet-screen {
             height: 100%;
             overflow: hidden;
+
+            &--has-footer {
+                display: flex;
+                flex-direction: column;
+
+                .load-strategy__local-preview {
+                    flex: 1 1 auto;
+                    height: auto;
+                    min-height: 0;
+                }
+
+                .load-strategy__preview-workspace {
+                    flex: 1 1 auto;
+                    height: auto;
+                    min-height: 12rem;
+                    margin-bottom: 0;
+                }
+
+                .load-strategy__local-footer {
+                    flex: 0 0 auto;
+                }
+            }
         }
     }
 

@@ -40,9 +40,11 @@ const LoadModal: React.FC = observer(() => {
     };
 
     if (!isDesktop) {
+        const show_local_footer = !!loaded_local_file && active_index === 0;
         return (
             <MobileFullPageModal
                 is_modal_open={is_load_modal_open}
+                is_flex
                 className='load-strategy__wrapper'
                 header={header_text}
                 onClickClose={() => {
@@ -55,6 +57,7 @@ const LoadModal: React.FC = observer(() => {
                 }}
                 height_offset='80px'
                 page_overlay
+                renderPageFooterChildren={show_local_footer ? () => <LocalFooter /> : undefined}
             >
                 <Tabs active_index={active_index} onTabItemClick={handleTabItemClick} top>
                     <div label={localize('Local')}>

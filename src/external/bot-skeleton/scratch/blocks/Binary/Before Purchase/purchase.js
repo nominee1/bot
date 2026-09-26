@@ -6,8 +6,10 @@ window.Blockly.Blocks.purchase = {
     init() {
         this.jsonInit(this.definition());
 
-        // Ensure one of this type per statement-stack
-        this.setNextStatement(false);
+        // Imported strategies (for example stacked Even then Odd) connect Purchase
+        // blocks with <next>. A disabled next connection makes Blockly throw and the
+        // file is reported as invalid XML.
+        this.setNextStatement(true);
     },
     definition() {
         return {
@@ -61,8 +63,10 @@ window.Blockly.Blocks.purchase = {
 
         if (trade_definition_block) {
             const trade_type_block = trade_definition_block.getChildByType('trade_definition_tradetype');
-            const trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
             const contract_type_block = trade_definition_block.getChildByType('trade_definition_contracttype');
+            if (!trade_type_block || !contract_type_block) return;
+
+            const trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
             const contract_type = contract_type_block.getFieldValue('TYPE_LIST');
             const purchase_type_list = this.getField('PURCHASE_LIST');
             const purchase_type = purchase_type_list.getValue();
