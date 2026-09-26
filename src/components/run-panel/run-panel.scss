@@ -207,9 +207,10 @@
             bottom: calc(6rem + env(safe-area-inset-bottom, 0));
         }
 
+        /* Keep the run bar above the tab bar. Pinning it to the screen bottom covers the
+           tab bar on an iPhone home-screen app, where the home-indicator inset is non-zero. */
         &--ios-pwa {
-            bottom: 0 !important;
-            padding-bottom: unset !important;
+            bottom: calc(6rem + env(safe-area-inset-bottom, 0px)) !important;
         }
     }
 

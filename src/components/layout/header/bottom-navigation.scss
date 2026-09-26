@@ -2,7 +2,10 @@
     background: var(--general-main-1);
     border-top: 1px solid var(--general-section-1);
     z-index: 149;
-    height: 6rem;
+    box-sizing: border-box;
+
+    /* Extra height sits below the icons, in the home-indicator inset. Safari's inset is 0. */
+    height: calc(6rem + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0);
     justify-content: space-around;
     align-items: center;

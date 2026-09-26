@@ -311,6 +311,16 @@
     }
 }
 
+/* iPhone Add to Home Screen. Safari's safe-area insets stay 0 because the browser
+   chrome already clears the status bar and home indicator. */
+html.ios-standalone .main {
+    @include mobile-or-tablet-screen {
+        box-sizing: border-box;
+        height: calc(100vh - 5.6rem - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        padding: 0;
+    }
+}
+
 .animation__wrapper {
     .animation {
         &__button#db-animation {

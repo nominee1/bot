@@ -24,9 +24,11 @@
     @include mobile-or-tablet-screen {
         width: 100vw !important;
 
-        /* Live bot.deriv.com sheet. The chrome bar is outside this iframe, so do not inset for it. */
+        /* Live bot.deriv.com sheet. The chrome bar is outside this iframe, so do not inset for it.
+           iPhone home-screen (standalone) extends under the home indicator; shift the sheet up by
+           that inset so the summary line stays above the tab bar. Safari's inset is 0. */
         height: calc(100% - 17.7rem) !important;
-        top: calc(100% - 15.8rem) !important;
+        top: calc(100% - 15.8rem - env(safe-area-inset-bottom, 0px)) !important;
     }
 
     &__container {
