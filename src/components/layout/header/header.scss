@@ -66,13 +66,12 @@
         align-items: center;
         justify-content: flex-start;
 
-        /* Live bot.deriv.com: logo inset 12px, then 12px to the account switcher. */
-        gap: 1.2rem;
+        /* Match bot.deriv.com mobile logo: 32px mark, 12px margin. */
+        gap: 0;
         width: 100%;
         height: 5.6rem;
         min-height: 5.6rem;
         padding: 0;
-        padding-inline-start: 1.2rem;
         border-bottom: 1px solid var(--general-section-1);
         z-index: 20;
         position: sticky;
@@ -149,10 +148,18 @@
     }
 
     &--mobile &__logo-container {
-        width: auto;
-        height: 5.6rem;
-        padding: 0 1.2rem;
-        flex: 0 0 auto;
+        /* Same as bot.deriv.com .app-header__mobile-logo: 32px, margin 12px. */
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        margin: 12px;
+        flex: 0 0 32px;
+
+        svg {
+            width: 32px;
+            height: 32px;
+            flex: none;
+        }
     }
 
     &__nav-item {
