@@ -27,11 +27,69 @@ let purchase_reference;
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
-            // Prevent calling purchase twice
+            // Stacked Purchase blocks buy together. The first buy must not
+            // leave BEFORE_PURCHASE or the hedge leg never gets sent.
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
             }
 
+            if (!this._purchaseRoundOpen) {
+                this._purchaseRoundOpen = true;
+                this._roundPurchases = [];
+                this.hedgeLegs = [];
+                this._bufferedContractUpdates = [];
+            }
+
+            this._roundPurchases.push(this._executePurchase(contract_type));
+            return Promise.resolve();
+        }
+
+        commitPurchases() {
+            const tasks = this._roundPurchases || [];
+            this._roundPurchases = [];
+
+            return Promise.allSettled(tasks).then(results => {
+                this._purchaseRoundOpen = false;
+                const rejected = results.find(result => result.status === 'rejected');
+                const bought = (this.hedgeLegs || []).length;
+                const stillBefore = this.store.getState().scope === BEFORE_PURCHASE;
+
+                if (bought && stillBefore) {
+                    this.store.dispatch(purchaseSuccessful());
+                    if (this.is_proposal_subscription_required) {
+                        this.renewProposalsOnPurchase();
+                    }
+                }
+
+                const buffered = this._bufferedContractUpdates || [];
+                this._bufferedContractUpdates = [];
+                buffered.forEach(({ raw, accountID, options }) => {
+                    this.processContractUpdate(raw, accountID, options);
+                });
+
+                if (typeof this.finishHedgeIfReady === 'function') {
+                    this.finishHedgeIfReady();
+                }
+
+                if (rejected && !bought) {
+                    throw rejected.reason;
+                }
+            });
+        }
+
+        _rememberPurchase(buy) {
+            const id = buy.contract_id;
+            if (!this.hedgeLegs) this.hedgeLegs = [];
+            if (this.hedgeLegs.length === 0) {
+                this._roundRuns = this.updateAndReturnTotalRuns();
+            }
+            this.hedgeLegs.push({ id, settled: null });
+            if (!this.contractId || String(this.contractId).startsWith('v-pending')) {
+                this.contractId = id;
+            }
+        }
+
+        _executePurchase(contract_type) {
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
@@ -42,18 +100,13 @@ export default Engine =>
                     buy,
                 });
 
-                this.contractId = buy.contract_id;
-                this.store.dispatch(purchaseSuccessful());
-
-                if (this.is_proposal_subscription_required) {
-                    this.renewProposalsOnPurchase();
-                }
+                this._rememberPurchase(buy);
 
                 delayIndex = 0;
                 log(LogTypes.PURCHASE, { longcode: buy.longcode, transaction_id: buy.transaction_id });
                 info({
                     accountID: this.accountInfo.loginid,
-                    totalRuns: this.updateAndReturnTotalRuns(),
+                    totalRuns: this._roundRuns,
                     transaction_ids: { buy: buy.transaction_id },
                     contract_type,
                     buy_price: buy.buy_price,
@@ -70,7 +123,6 @@ export default Engine =>
 
                 this.isSold = false;
                 this.contractId = `v-pending-${Date.now()}`;
-                this.store.dispatch(purchaseSuccessful());
                 contractStatus({
                     id: 'contract.purchase_sent',
                     data: this.tradeOptions?.amount,
@@ -122,9 +174,7 @@ export default Engine =>
                 }
 
                 const openDisplayMs = 120;
-                clearTimeout(this._crShadowSettleTimer);
-                this._crShadowSettleTimer = window.setTimeout(() => {
-                    this._crShadowSettleTimer = null;
+                window.setTimeout(() => {
                     try {
                         if (typeof this.processContractUpdate !== 'function') return;
                         if (!api_base?.is_running) return;

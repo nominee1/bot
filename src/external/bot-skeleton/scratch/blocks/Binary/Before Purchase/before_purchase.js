@@ -82,6 +82,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.before_purchase = block =
     const code = `BinaryBotPrivateBeforePurchase = function BinaryBotPrivateBeforePurchase() {
         Bot.highlightBlock('${block.id}');
         ${stack}
+        Bot.commitPurchases();
     };\n`;
     return code;
 };

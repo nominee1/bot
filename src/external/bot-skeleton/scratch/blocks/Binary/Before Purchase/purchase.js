@@ -33,7 +33,7 @@ window.Blockly.Blocks.purchase = {
         return {
             display_name: localize('Purchase'),
             description: localize(
-                'Use this block to purchase the specific contract you want. You may add multiple Purchase blocks together with conditional blocks to define your purchase conditions. This block can only be used within the Purchase conditions block.'
+                'Use this block to purchase the specific contract you want. Stack more than one Purchase block to buy those contracts together, as a hedge. You may also use conditional blocks to define your purchase conditions. This block can only be used within the Purchase conditions block.'
             ),
             key_words: localize('buy'),
         };

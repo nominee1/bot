@@ -89,7 +89,12 @@ export function tradeOptionsToDerivBuyIntent(
         intent.duration = tradeOptions.duration;
     }
 
-    if (tradeOptions.prediction !== undefined && tradeOptions.prediction !== null) {
+    const digit_types = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'];
+    if (digit_types.includes(contract_type)) {
+        const n = Number(tradeOptions.prediction);
+        const digit = Number.isFinite(n) ? ((Math.round(n) % 10) + 10) % 10 : 0;
+        intent.barrier = String(digit);
+    } else if (tradeOptions.prediction !== undefined && tradeOptions.prediction !== null) {
         intent.barrier = tradeOptions.prediction as number | string;
     } else if (tradeOptions.barrierOffset !== undefined && tradeOptions.barrierOffset !== null) {
         intent.barrier = tradeOptions.barrierOffset as number | string;

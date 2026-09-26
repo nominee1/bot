@@ -2,6 +2,36 @@ import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { openContractReceived, sell } from './state/actions';
+import { DURING_PURCHASE } from './state/constants';
+
+const contractIdsMatch = (expected, incoming) => {
+    if (expected == null || incoming == null) return false;
+    const left = String(expected);
+    const right = String(incoming);
+    if (left.startsWith('v-') || right.startsWith('v-')) return left === right;
+    return Number(expected) === Number(incoming);
+};
+
+const isContractSold = contract => {
+    const { is_sold, status } = contract || {};
+    return Boolean(is_sold) || status === 'sold' || status === 'won' || status === 'lost' || status === 'cancelled';
+};
+
+const mergeHedgeContracts = contracts => {
+    const first = contracts[0] || {};
+    const buyPrice = contracts.reduce((sum, contract) => sum + Number(contract.buy_price || 0), 0);
+    const sellPrice = contracts.reduce((sum, contract) => sum + Number(contract.sell_price || 0), 0);
+    return {
+        ...first,
+        buy_price: buyPrice,
+        sell_price: sellPrice,
+        profit: sellPrice - buyPrice,
+        contract_type: contracts
+            .map(contract => contract.contract_type)
+            .filter(Boolean)
+            .join('+'),
+    };
+};
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -23,7 +53,19 @@ export default Engine =>
         }
 
         processContractUpdate(raw, accountID, options = {}) {
+            if (this._purchaseRoundOpen) {
+                if (!this._bufferedContractUpdates) this._bufferedContractUpdates = [];
+                this._bufferedContractUpdates.push({ raw, accountID, options });
+                return;
+            }
+
             const contract = raw;
+            const legs = this.hedgeLegs || [];
+            if (legs.length > 1) {
+                this._applyHedgeUpdate(contract, accountID, options);
+                return;
+            }
+
             this.setContractFlags(contract);
             this.data.contract = contract;
             broadcastContract({ accountID, ...contract });
@@ -34,6 +76,7 @@ export default Engine =>
             }
 
             this.contractId = '';
+            this.hedgeLegs = [];
             clearTimeout(this.transaction_recovery_timeout);
             this.updateTotals(contract);
             contractStatus({
@@ -42,6 +85,49 @@ export default Engine =>
                 contract,
             });
 
+            this._finishPurchaseCycle(options);
+        }
+
+        _applyHedgeUpdate(contract, accountID, options) {
+            const leg = (this.hedgeLegs || []).find(item => contractIdsMatch(item.id, contract?.contract_id));
+            if (!leg) return;
+
+            broadcastContract({ accountID, ...contract });
+            const sold = isContractSold(contract);
+            if (!sold) {
+                this.data.contract = contract;
+                this.setContractFlags(contract);
+                this.store.dispatch(openContractReceived());
+                return;
+            }
+
+            leg.settled = contract;
+            this.finishHedgeIfReady(options);
+        }
+
+        finishHedgeIfReady(options = {}) {
+            const legs = this.hedgeLegs || [];
+            if (legs.length < 2 || legs.some(leg => !leg.settled)) return false;
+            if (this.store.getState().scope !== DURING_PURCHASE) return false;
+
+            const merged = mergeHedgeContracts(legs.map(leg => leg.settled));
+            this.hedgeLegs = [];
+            this.contractId = '';
+            this.isSold = true;
+            this.data.contract = merged;
+            clearTimeout(this.transaction_recovery_timeout);
+            this.updateTotals(merged);
+            broadcastContract({ accountID: this.accountInfo?.loginid, ...merged });
+            contractStatus({
+                id: 'contract.sold',
+                data: merged.transaction_ids?.sell,
+                contract: merged,
+            });
+            this._finishPurchaseCycle(options);
+            return true;
+        }
+
+        _finishPurchaseCycle(options = {}) {
             const finishCycle = () => {
                 if (this.afterPromise) {
                     const resolve = this.afterPromise;
@@ -86,13 +172,13 @@ export default Engine =>
         }
 
         expectedContractId(contractId) {
-            if (!this.contractId || contractId == null) return false;
-            const expected = String(this.contractId);
-            const incoming = String(contractId);
-            if (expected.startsWith('v-') || incoming.startsWith('v-')) {
-                return expected === incoming;
-            }
-            return Number(contractId) === Number(this.contractId);
+            const ids = [];
+            if (this.contractId) ids.push(this.contractId);
+            (this.hedgeLegs || []).forEach(leg => {
+                if (leg?.id != null) ids.push(leg.id);
+            });
+            if (!ids.length || contractId == null) return false;
+            return ids.some(id => contractIdsMatch(id, contractId));
         }
 
         getSellPrice() {

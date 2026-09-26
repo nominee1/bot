@@ -6,6 +6,15 @@ import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
 
+const DIGIT_PREDICTION_TYPES = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'];
+
+/** Digit contracts require a last digit 0–9. An unset strategy variable is not a digit. */
+export const resolveDigitPrediction = prediction => {
+    const n = Number(prediction);
+    if (!Number.isFinite(n)) return 0;
+    return ((Math.round(n) % 10) + 10) % 10;
+};
+
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
         const market = resolveTradableDigitMarket(trade_option.symbol);
@@ -29,11 +38,8 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
         applyDerivSessionMarketField(proposal, market);
         if (['TICKLOW', 'TICKHIGH'].includes(type) && trade_option.prediction !== undefined) {
             proposal.selected_tick = trade_option.prediction;
-        } else if (
-            ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type) &&
-            trade_option.prediction !== undefined
-        ) {
-            proposal.barrier = trade_option.prediction;
+        } else if (DIGIT_PREDICTION_TYPES.includes(type)) {
+            proposal.barrier = String(resolveDigitPrediction(trade_option.prediction));
         } else if (
             !['CALL', 'PUT', 'CALLE', 'PUTE', 'ONETOUCH', 'NOTOUCH', 'ASIANU', 'ASIAND'].includes(type) &&
             trade_option.barrierOffset !== undefined
@@ -71,7 +77,9 @@ export const tradeOptionToBuy = (contract_type, trade_option) => {
     if (trade_option.prediction !== undefined) {
         buy.parameters.selected_tick = trade_option.prediction;
     }
-    if (!['TICKLOW', 'TICKHIGH'].includes(contract_type) && trade_option.prediction !== undefined) {
+    if (DIGIT_PREDICTION_TYPES.includes(contract_type)) {
+        buy.parameters.barrier = String(resolveDigitPrediction(trade_option.prediction));
+    } else if (!['TICKLOW', 'TICKHIGH'].includes(contract_type) && trade_option.prediction !== undefined) {
         buy.parameters.barrier = trade_option.prediction;
     } else if (trade_option.barrierOffset !== undefined) {
         buy.parameters.barrier = trade_option.barrierOffset;

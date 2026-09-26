@@ -133,6 +133,11 @@ const Interpreter = () => {
         );
         js_interpreter.setProperty(
             pseudo_bot_interface,
+            'commitPurchases',
+            createAsync(js_interpreter, bot_interface.commitPurchases)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
             'sellAtMarket',
             createAsync(js_interpreter, bot_interface.sellAtMarket)
         );
