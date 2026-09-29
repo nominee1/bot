@@ -21,15 +21,14 @@ const mergeHedgeContracts = contracts => {
     const first = contracts[0] || {};
     const buyPrice = contracts.reduce((sum, contract) => sum + Number(contract.buy_price || 0), 0);
     const sellPrice = contracts.reduce((sum, contract) => sum + Number(contract.sell_price || 0), 0);
+    // Keep the first leg's contract_type — joining as "HIGHER+LOWER" overwrites the
+    // transaction row and paints the wrong TradeTypeIcon. Each leg is already broadcast.
     return {
         ...first,
         buy_price: buyPrice,
         sell_price: sellPrice,
         profit: sellPrice - buyPrice,
-        contract_type: contracts
-            .map(contract => contract.contract_type)
-            .filter(Boolean)
-            .join('+'),
+        contract_type: first.contract_type,
     };
 };
 
@@ -116,8 +115,8 @@ export default Engine =>
             this.isSold = true;
             this.data.contract = merged;
             clearTimeout(this.transaction_recovery_timeout);
+            // Totals only — do not re-broadcast merged to the journal (would clobber a leg's type/icon).
             this.updateTotals(merged);
-            broadcastContract({ accountID: this.accountInfo?.loginid, ...merged });
             contractStatus({
                 id: 'contract.sold',
                 data: merged.transaction_ids?.sell,

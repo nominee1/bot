@@ -130,8 +130,10 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     // 2. There are no bots
     const should_show_tooltip = !is_stop_button_visible && !is_bot_builder_tab && has_no_bots;
 
+    // Always show Stop while the bot is running / has an open contract.
+    // is_stop_button_disabled only blocks clicks mid-purchase — it must not flip the label back to Run.
     const button_props = React.useMemo(() => {
-        if (is_stop_button_visible && !is_stop_button_disabled) {
+        if (is_stop_button_visible) {
             return {
                 id: 'db-animation__stop-button',
                 class: 'animation__stop-button',
@@ -211,7 +213,10 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                 </div>
             ) : (
                 <Button
-                    is_disabled={(is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3}
+                    is_disabled={
+                        (is_disabled && !is_unavailable_for_payment_agent) ||
+                        (is_stop_button_visible && is_stop_button_disabled)
+                    }
                     className={button_props.class}
                     id={button_props.id}
                     icon={button_props.icon}

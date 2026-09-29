@@ -5,6 +5,7 @@ import { ProposalOpenContract } from '@deriv/api-types';
 import { TPortfolioPosition, TStores } from '@deriv/stores/types';
 import { TContractInfo } from '../components/summary/summary-card.types';
 import { transaction_elements } from '../constants/transactions';
+import { flipaaFormatTickForDisplay } from '../utils/flipaaTickDigitFormat';
 import { getStoredItemsByKey, getStoredItemsByUser, setStoredItemsByKey } from '../utils/session-storage';
 import RootStore from './root-store';
 
@@ -107,15 +108,40 @@ export default class TransactionsStore {
         const is_completed = isEnded(data as ProposalOpenContract);
         const { run_id } = this.root_store.run_panel;
         const current_account = this.core?.client?.loginid as string;
+        const data_any = data as TContractInfo & {
+            underlying?: string;
+            underlying_symbol?: string;
+            symbol?: string;
+            entry_spot?: number | string;
+            exit_spot?: number | string;
+            entry_spot_display_value?: string;
+            exit_spot_display_value?: string;
+        };
+        const market = data_any.underlying || data_any.underlying_symbol || data_any.symbol || '';
+        const formatSpot = (value: unknown, display: unknown) => {
+            if (value == null && (display == null || display === '')) return undefined;
+            const formatted = flipaaFormatTickForDisplay(
+                typeof value === 'number' ? value : Number(value),
+                market,
+                display != null && display !== '' ? String(display) : null
+            );
+            return formatted === '—' ? undefined : formatted;
+        };
 
         const contract: TContractInfo = {
             ...data,
             is_completed,
             run_id,
             date_start: formatDate(data.date_start, 'YYYY-M-D HH:mm:ss [GMT]'),
-            entry_tick: data.entry_tick_display_value,
+            entry_tick: formatSpot(
+                data.entry_tick ?? data_any.entry_spot,
+                data.entry_tick_display_value ?? data_any.entry_spot_display_value
+            ),
             entry_tick_time: data.entry_tick_time && formatDate(data.entry_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
-            exit_tick: data.exit_tick_display_value,
+            exit_tick: formatSpot(
+                data.exit_tick ?? data_any.exit_spot,
+                data.exit_tick_display_value ?? data_any.exit_spot_display_value
+            ),
             exit_tick_time: data.exit_tick_time && formatDate(data.exit_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
             profit: is_completed ? data.profit : 0,
         };

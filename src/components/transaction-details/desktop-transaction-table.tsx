@@ -2,7 +2,7 @@ import { ReactElement } from 'react';
 import classNames from 'classnames';
 import ContentLoader from 'react-content-loader';
 import { transaction_elements } from '@/constants/transactions';
-import { getContractTypeName } from '@/external/bot-skeleton';
+import { getContractTypeName, resolveTradeTypeIconKey } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { MarketIcon } from '../market/market-icon';
 import { convertDateFormat } from '../shared';
@@ -104,12 +104,18 @@ export default function DesktopTransactionTable({
                                     label={
                                         <IconWrapper
                                             message={getContractTypeName(data)}
-                                            icon={<TradeTypeIcon type={data?.contract_type} size='sm' />}
+                                            icon={<TradeTypeIcon type={resolveTradeTypeIconKey(data)} size='sm' />}
                                         />
                                     }
                                 />
-                                <TableCell label={data?.entry_tick} loader={!data?.entry_tick} />
-                                <TableCell label={data?.exit_tick} loader={!data.exit_tick} />
+                                <TableCell
+                                    label={data?.entry_tick}
+                                    loader={data?.entry_tick == null || data?.entry_tick === ''}
+                                />
+                                <TableCell
+                                    label={data?.exit_tick}
+                                    loader={data?.exit_tick == null || data?.exit_tick === ''}
+                                />
                                 <TableCell label={Math.abs(data?.buy_price ?? 0).toFixed(2)} />
                                 <TableCell
                                     label={

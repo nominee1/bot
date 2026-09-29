@@ -4,7 +4,7 @@ import ContentLoader from 'react-content-loader';
 import Money from '@/components/shared_ui/money';
 import { TContractInfo } from '@/components/summary/summary-card.types';
 import { popover_zindex } from '@/constants/z-indexes';
-import { getContractTypeName } from '@/external/bot-skeleton';
+import { getContractTypeName, resolveTradeTypeIconKey } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { LegacyRadioOffIcon, LegacyRadioOnIcon } from '@deriv/quill-icons';
 import { Localize, localize } from '@deriv-com/translations';
@@ -107,7 +107,7 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
                 <div className='transactions__popover-value'>{`${contract.tick_count} ${localize('ticks')}`}</div>
             </PopoverItem>
         )}
-        {(contract.barrier && (
+        {(contract.barrier != null && contract.barrier !== '' && (
             <PopoverItem title={localize('Barrier')}>
                 <div className='transactions__popover-value'>{contract.barrier}</div>
             </PopoverItem>
@@ -127,7 +127,7 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
                 </div>
             </PopoverItem>
         )}
-        {contract.entry_tick && (
+        {contract.entry_tick != null && contract.entry_tick !== '' && (
             <PopoverItem title={localize('Entry spot')}>
                 <div className='transactions__popover-value'>{contract.entry_tick}</div>
                 {contract.entry_tick_time && (
@@ -141,7 +141,7 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
                 )}
             </PopoverItem>
         )}
-        {(contract.exit_tick && contract.exit_tick_time && (
+        {(contract.exit_tick != null && contract.exit_tick !== '' && contract.exit_tick_time && (
             <PopoverItem title={localize('Exit spot')}>
                 <div className='transactions__popover-value'>{contract.exit_tick}</div>
                 <div className='transactions__popover-value'>
@@ -149,7 +149,7 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
                 </div>
             </PopoverItem>
         )) ||
-            (contract.exit_tick && (
+            (contract.exit_tick != null && contract.exit_tick !== '' && (
                 <PopoverItem title={localize('Exit time')}>
                     <div className='transactions__popover-value'>{contract.exit_tick}</div>
                 </PopoverItem>
@@ -185,7 +185,7 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     <div className='transactions__loader-container'>
                         {contract ? (
                             <TransactionIconWithText
-                                icon={<TradeTypeIcon type={contract.contract_type || ''} size='sm' />}
+                                icon={<TradeTypeIcon type={resolveTradeTypeIconKey(contract)} size='sm' />}
                                 title={getContractTypeName(contract)}
                             />
                         ) : (

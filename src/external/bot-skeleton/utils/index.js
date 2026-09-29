@@ -1,5 +1,5 @@
 export { setColors } from '../scratch/hooks/colours';
-export { getContractTypeName } from './contract';
+export { getContractTypeName, resolveTradeTypeIconKey } from './contract';
 export { timeSince } from './date-time-helper';
 export { createError, trackAndEmitError } from './error';
 export { handleError, initErrorHandlingListener, removeErrorHandlingEventListener } from './error-handling';

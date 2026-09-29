@@ -40,10 +40,9 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
             proposal.selected_tick = trade_option.prediction;
         } else if (DIGIT_PREDICTION_TYPES.includes(type)) {
             proposal.barrier = String(resolveDigitPrediction(trade_option.prediction));
-        } else if (
-            !['CALL', 'PUT', 'CALLE', 'PUTE', 'ONETOUCH', 'NOTOUCH', 'ASIANU', 'ASIAND'].includes(type) &&
-            trade_option.barrierOffset !== undefined
-        ) {
+        } else if (trade_option.barrierOffset !== undefined) {
+            // Higher/Lower, Touch, etc. — CALL/PUT with barrierOffset must keep the barrier
+            // (Rise/Fall leave barrierOffset undefined).
             proposal.barrier = trade_option.barrierOffset;
         }
         if (trade_option.secondBarrierOffset !== undefined) {
@@ -74,7 +73,7 @@ export const tradeOptionToBuy = (contract_type, trade_option) => {
             symbol: trade_option.symbol,
         },
     };
-    if (trade_option.prediction !== undefined) {
+    if (['TICKLOW', 'TICKHIGH'].includes(contract_type) && trade_option.prediction !== undefined) {
         buy.parameters.selected_tick = trade_option.prediction;
     }
     if (DIGIT_PREDICTION_TYPES.includes(contract_type)) {
@@ -139,10 +138,9 @@ export const getDirection = ticks => {
 };
 
 export const getLastDigit = tick => {
-    let number_string = tick;
-    if (typeof number_string === 'number') {
-        number_string = String(number_string);
-    }
+    // Callers must pass a pip-formatted string (e.g. tick.toFixed(pipSize)).
+    // String(number) drops trailing zeros (1.20 → "1.2"), which hides last digit 0.
+    const number_string = typeof tick === 'number' ? String(tick) : String(tick ?? '');
     return Number(number_string[number_string.length - 1]);
 };
 
@@ -335,9 +333,9 @@ export const createDetails = contract => {
         profit,
         contract.contract_type,
         formatTime(parseInt(`${contract.entry_tick_time}000`), 'HH:mm:ss'),
-        +contract.entry_tick,
+        contract.entry_tick_display_value ?? contract.entry_tick,
         formatTime(parseInt(`${contract.exit_tick_time}000`), 'HH:mm:ss'),
-        +contract.exit_tick,
+        contract.exit_tick_display_value ?? contract.exit_tick,
         +(contract.barrier ? contract.barrier : 0),
         result,
     ];

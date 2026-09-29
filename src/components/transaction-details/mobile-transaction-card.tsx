@@ -1,7 +1,7 @@
 import { ReactElement } from 'react';
 import classNames from 'classnames';
 import ContentLoader from 'react-content-loader';
-import { getContractTypeName } from '@/external/bot-skeleton';
+import { getContractTypeName, resolveTradeTypeIconKey } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { localize } from '@deriv-com/translations';
 import { MarketIcon } from '../market/market-icon';
@@ -83,7 +83,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                             />
                             <IconContainer
                                 message={getContractTypeName(transaction)}
-                                icon={<TradeTypeIcon type={transaction?.contract_type} size='md' />}
+                                icon={<TradeTypeIcon type={resolveTradeTypeIconKey(transaction)} size='md' />}
                             />
                         </div>
                     }
@@ -105,7 +105,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                     title='Entry Spot'
                     label={transaction?.entry_tick}
                     right_aligned
-                    loader={!transaction.entry_tick}
+                    loader={transaction.entry_tick == null || transaction.entry_tick === ''}
                 />
             </div>
             <div className={`${PARENT_CLASS}__card__row`}>
@@ -114,7 +114,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                     title='Exit Spot'
                     label={transaction?.exit_tick}
                     right_aligned
-                    loader={!transaction.exit_tick}
+                    loader={transaction.exit_tick == null || transaction.exit_tick === ''}
                 />
             </div>
 

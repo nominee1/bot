@@ -11,9 +11,58 @@ import {
     MAX_SESSION_LOSSES,
     ONLY_RUN_MAX_CONSECUTIVE_LOSSES,
     updateAfterFactGovernor,
+    type VirtFlipDecision,
     type VirtFlipDecisionRefs,
     type VirtTick,
+    windowWinsForStrategy,
 } from '@/utils/flipaaVirtualDecision';
+
+/** Shared entry/exit for stacked hedge purchases (Higher+Lower) within a few seconds. */
+let hedgeWindowCache: {
+    key: string;
+    entry: VirtTick;
+    exit: VirtTick;
+    at: number;
+} | null = null;
+
+const HEDGE_WINDOW_REUSE_MS = 8000;
+
+function hedgeWindowKey(market: string, duration: number, barrier: number | string | undefined): string {
+    return `${market}|${duration}|${barrier ?? ''}`;
+}
+
+async function decideFlipVirtualPairWithHedgeReuse(
+    refs: VirtFlipDecisionRefs,
+    st: FlipVirtStrategyType,
+    barrier: number | string | undefined,
+    duration: number,
+    market: string
+): Promise<VirtFlipDecision> {
+    const key = hedgeWindowKey(market, duration, barrier);
+    const cached = hedgeWindowCache;
+    if (cached && cached.key === key && Date.now() - cached.at < HEDGE_WINDOW_REUSE_MS) {
+        const win = windowWinsForStrategy(st, barrier, [cached.entry, cached.exit], market);
+        return {
+            decided: true,
+            win: !!win,
+            fabricated: false,
+            sourceMode: 'natural',
+            entry: cached.entry,
+            exit: cached.exit,
+        };
+    }
+
+    const decision = await decideFlipVirtualPair(refs, st, barrier, duration, market);
+    if (decision.decided) {
+        hedgeWindowCache = {
+            key,
+            entry: decision.entry,
+            exit: decision.exit,
+            at: Date.now(),
+        };
+    }
+    return decision;
+}
 
 /**
  * Wallet loginid for CR shadow virtual fills — same resolution as Manual Trader.
@@ -114,6 +163,10 @@ export const CONTRACT_TO_FLIP_STRATEGY: Record<string, FlipVirtStrategyType> = S
     },
     {} as Record<string, FlipVirtStrategyType>
 );
+
+// Options public API uses HIGHER/LOWER (not CALL/PUT) for Higher/Lower contracts.
+CONTRACT_TO_FLIP_STRATEGY.HIGHER = 'rise';
+CONTRACT_TO_FLIP_STRATEGY.LOWER = 'fall';
 
 /** Rise/fall-style contracts show different entry vs exit; digit contracts show one settlement spot. */
 export function isDirectionalVirtStrategy(st: FlipVirtStrategyType): boolean {
@@ -340,7 +393,7 @@ export async function executeCrShadowVirtualFill(args: {
     stake: number;
     market: string;
     duration: number;
-    barrier?: number;
+    barrier?: number | string;
     currency?: string;
     ensureApiReady: () => Promise<unknown>;
     ensureTicks: (symbol: string) => Promise<void>;
@@ -367,13 +420,8 @@ export async function executeCrShadowVirtualFill(args: {
     await ensureTicks(market);
 
     // Flipaa Instant Fill order: resolve after-fact outcome on live ticks, then price via proposal.
-    const decision = await decideFlipVirtualPair(
-        refs,
-        st,
-        typeof barrier === 'number' ? barrier : undefined,
-        duration,
-        market
-    );
+    // Hedge legs (HIGHER+LOWER in one commit) reuse the same entry/exit window.
+    const decision = await decideFlipVirtualPairWithHedgeReuse(refs, st, barrier, duration, market);
 
     if (!decision.decided) throw new Error('virtual-timeout');
 
@@ -391,21 +439,52 @@ export async function executeCrShadowVirtualFill(args: {
         };
     }
 
-    // Rise/Fall (and similar) must not send barrier — Options WS rejects 0 / absolute barriers.
-    const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF', 'TICKHIGH', 'TICKLOW'].includes(
-        contractType
-    );
-    const proposalBarrier =
-        needsBarrier && barrier !== undefined && barrier !== null && Number(barrier) !== 0 ? barrier : undefined;
+    // Digits need barrier; High/Low Ticks need selected_tick (barrier → BarrierNotAllowed).
+    // Higher/Lower (HIGHER/LOWER or legacy CALL/PUT+offset) need barrier on the proposal.
+    const digitBarrierTypes = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'];
+    const tickTypes = ['TICKHIGH', 'TICKLOW'];
+    const hlTypes = ['HIGHER', 'LOWER'];
+    const isHl = hlTypes.includes(contractType);
+    // Always send Higher/Lower barrier as a signed relative offset ("+0.37"), never a bare number.
+    let proposalBarrier: number | string | undefined;
+    if (digitBarrierTypes.includes(contractType)) {
+        proposalBarrier =
+            barrier !== undefined && barrier !== null && Number.isFinite(Number(barrier)) ? barrier : undefined;
+    } else if (isHl) {
+        if (barrier !== undefined && barrier !== null && Number.isFinite(Number(barrier))) {
+            if (typeof barrier === 'string' && /^[+-]/.test(barrier.trim())) {
+                proposalBarrier = barrier.trim();
+            } else {
+                const n = Number(barrier);
+                proposalBarrier = n === 0 ? '+0' : n > 0 ? `+${n}` : `${n}`;
+            }
+        }
+    } else if (
+        !tickTypes.includes(contractType) &&
+        barrier !== undefined &&
+        barrier !== null &&
+        Number.isFinite(Number(barrier))
+    ) {
+        proposalBarrier = barrier;
+    }
+    const selectedTick =
+        tickTypes.includes(contractType) &&
+        barrier !== undefined &&
+        barrier !== null &&
+        Number.isFinite(Number(barrier))
+            ? Number(barrier)
+            : undefined;
 
     const proposalResp = await api_base.api!.send(
         buildDerivSessionProposalPayload({
             contract_type: contractType,
             market,
             stake,
-            duration,
+            duration: tickTypes.includes(contractType) ? Math.max(5, duration || 5) : duration,
             barrier: proposalBarrier,
             currency: currency || 'USD',
+            basis: 'stake',
+            extras: selectedTick !== undefined ? { selected_tick: selectedTick } : undefined,
         })
     );
     if (proposalResp?.error) throw proposalResp.error;
@@ -416,8 +495,14 @@ export async function executeCrShadowVirtualFill(args: {
         longcode?: string;
         shortcode?: string;
     };
-    const ask = Number(pr.ask_price ?? stake);
-    const payout = Number(pr.payout ?? stake * 1.95);
+    // Hedge / virtual fills must debit the configured stake on both legs (never drift to 1 vs 2).
+    const rawAsk = Number(pr.ask_price ?? stake);
+    const rawPayout = Number(pr.payout ?? stake * 1.95);
+    const ask = stake;
+    const payout =
+        Number.isFinite(rawAsk) && rawAsk > 0
+            ? Number(((rawPayout / rawAsk) * stake).toFixed(2))
+            : Number(rawPayout.toFixed(2));
     const longcode = typeof pr.longcode === 'string' ? pr.longcode.trim() : '';
     const shortcode = typeof pr.shortcode === 'string' ? pr.shortcode.trim() : '';
 
@@ -440,9 +525,17 @@ export async function executeCrShadowVirtualFill(args: {
 
     if (net < 0) {
         const nextLosses = Math.min(MAX_SESSION_LOSSES, refs.sessionLossesVirtRef.current + 1);
-        refs.sessionLossesVirtRef.current = nextLosses;
+        if (refs.sessionLossesVirtRef && typeof refs.sessionLossesVirtRef === 'object') {
+            refs.sessionLossesVirtRef.current = nextLosses;
+        }
         // Flipaa Matches: force-win after MAX_SESSION_LOSSES reads sessionLossesRef.
-        refs.sessionLossesRef.current = nextLosses;
+        if (
+            refs.sessionLossesRef &&
+            typeof refs.sessionLossesRef === 'object' &&
+            refs.sessionLossesRef !== refs.sessionLossesVirtRef
+        ) {
+            refs.sessionLossesRef.current = nextLosses;
+        }
     }
 
     if (st === 'only_up' || st === 'only_down') {

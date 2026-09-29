@@ -14,6 +14,7 @@ import {
     shouldUseCrShadowLiveFills,
 } from '@/utils/crShadowVirtualFill';
 import { checkMoonLeadWallet, seedCrShadowLedgerIfAbsent } from '@/utils/crVirtualBalanceShadow';
+import { flipaaFormatQuoteForDigitContract } from '@/utils/flipaaTickDigitFormat';
 
 type VirtTick = { epoch: number; quote: number };
 
@@ -58,11 +59,29 @@ const isRunningRef = {
 
 const sleep = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
 
-function resolveBarrier(tradeOptions: Record<string, unknown> | undefined): number | undefined {
+function resolveBarrier(tradeOptions: Record<string, unknown> | undefined): number | string | undefined {
     if (!tradeOptions) return undefined;
     const raw = tradeOptions.prediction ?? tradeOptions.barrier ?? tradeOptions.barrier_1 ?? tradeOptions.barrierOffset;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    // Higher/Lower relative offsets must keep "+" / "-" (Number("+0.37") → 0.37 → Invalid barrier).
+    if (typeof raw === 'string' && /^[+-]\d/.test(raw.trim())) {
+        return raw.trim();
+    }
     const n = Number(raw);
-    return Number.isFinite(n) ? n : undefined;
+    if (!Number.isFinite(n)) return undefined;
+    // Blockly sometimes stores barrier offset as a plain number — keep HL-relative sign.
+    if (n === 0) return '+0';
+    return n > 0 ? `+${n}` : `${n}`;
+}
+
+/** Keep Higher/Lower proposal barrier as a signed relative offset string. */
+function formatHlRelativeBarrier(barrier: number | string | undefined): string | undefined {
+    if (barrier === undefined || barrier === null || barrier === '') return undefined;
+    if (typeof barrier === 'string' && /^[+-]/.test(barrier.trim())) return barrier.trim();
+    const n = Number(barrier);
+    if (!Number.isFinite(n)) return undefined;
+    if (n === 0) return '+0';
+    return n > 0 ? `+${n}` : `${n}`;
 }
 
 /** Normalize Blockly / proposal contract type aliases → Flipaa strategy keys. */
@@ -81,8 +100,6 @@ function normalizeContractType(contractType: string): string {
         DIFFER: 'DIGITDIFF',
         RISE: 'CALL',
         FALL: 'PUT',
-        HIGHER: 'CALL',
-        LOWER: 'PUT',
         ONLYUP: 'RUNHIGH',
         ONLY_UP: 'RUNHIGH',
         ONLYDOWN: 'RUNLOW',
@@ -94,15 +111,17 @@ function normalizeContractType(contractType: string): string {
 export type BotEngineCrShadowPurchaseResult = {
     buyResponse: { buy: Record<string, unknown> };
     fill: CrShadowVirtFillResult;
+    /** Stake row only — entry/exit skeleton until first tick elapses. */
+    pendingContract: Record<string, unknown>;
     openContract: Record<string, unknown>;
     soldContract: Record<string, unknown>;
     walletLoginId: string;
 };
 
-/** Demo-style buy ids: constant head `27674`, rotating middle, trailing `9` (e.g. 2767405699). */
+/** Demo-style buy ids: constant head `47674`, rotating middle, trailing `9` (e.g. 4767405699). */
 let virtBuyIdSeq = 0;
 function nextVirtualBuyTransactionId(): number {
-    const PREFIX = 27674;
+    const PREFIX = 47674;
     virtBuyIdSeq = (virtBuyIdSeq + 1) % 10000;
     const middle = (Math.floor(Date.now() / 1000) + virtBuyIdSeq * 37) % 10000;
     return PREFIX * 100000 + middle * 10 + 9;
@@ -134,7 +153,12 @@ function symbolDisplayName(symbol: string): string {
 }
 
 /** Fallback when proposal omits longcode — mirrors Deriv digit / rise-fall wording. */
-function buildFallbackLongcode(contractType: string, symbol: string, duration: number, barrier?: number): string {
+function buildFallbackLongcode(
+    contractType: string,
+    symbol: string,
+    duration: number,
+    barrier?: number | string
+): string {
     const name = symbolDisplayName(symbol);
     const ticks = Math.max(1, duration);
     const tickWord = ticks === 1 ? 'tick' : 'ticks';
@@ -153,13 +177,23 @@ function buildFallbackLongcode(contractType: string, symbol: string, duration: n
         case 'DIGITODD':
             return `Win payout if the last digit of ${name} is odd after ${ticks} ${tickWord}.`;
         case 'CALL':
-            return `Win payout if ${name} is strictly higher than entry spot after ${ticks} ${tickWord}.`;
+        case 'HIGHER':
+            return barrier !== undefined && barrier !== null && `${barrier}` !== ''
+                ? `Win payout if ${name} after ${ticks} ${tickWord} is strictly higher than entry spot plus ${String(barrier).replace(/^\+/, '')}.`
+                : `Win payout if ${name} is strictly higher than entry spot after ${ticks} ${tickWord}.`;
         case 'PUT':
-            return `Win payout if ${name} is strictly lower than entry spot after ${ticks} ${tickWord}.`;
+        case 'LOWER':
+            return barrier !== undefined && barrier !== null && `${barrier}` !== ''
+                ? `Win payout if ${name} after ${ticks} ${tickWord} is strictly lower than entry spot plus ${String(barrier).replace(/^\+/, '')}.`
+                : `Win payout if ${name} is strictly lower than entry spot after ${ticks} ${tickWord}.`;
         case 'RUNHIGH':
             return `Win payout if ${name} only goes up after ${ticks} ${tickWord}.`;
         case 'RUNLOW':
             return `Win payout if ${name} only goes down after ${ticks} ${tickWord}.`;
+        case 'TICKHIGH':
+            return `Win payout if tick number ${b} is the highest among the next ${Math.max(5, ticks)} ticks of ${name}.`;
+        case 'TICKLOW':
+            return `Win payout if tick number ${b} is the lowest among the next ${Math.max(5, ticks)} ticks of ${name}.`;
         default:
             return `Win payout if ${name} meets ${contractType} conditions after ${ticks} ${tickWord}.`;
     }
@@ -171,16 +205,30 @@ function buildContracts(
     symbol: string,
     currency: string,
     duration: number,
-    barrier?: number
-): Pick<BotEngineCrShadowPurchaseResult, 'buyResponse' | 'openContract' | 'soldContract'> {
+    barrier?: number | string
+): Pick<BotEngineCrShadowPurchaseResult, 'buyResponse' | 'pendingContract' | 'openContract' | 'soldContract'> {
     const buyTx = nextVirtualBuyTransactionId();
     const sellTx = nextVirtualSellTransactionId(buyTx);
     const purchaseTime = Math.floor(Date.now() / 1000);
-    const entryDisplay = String(fill.entry.quote);
-    const exitDisplay = String(fill.exit.quote);
-    const shortcode = fill.shortcode || `${contractType}_${symbol}_${purchaseTime}_${Math.max(1, duration)}T_S0P_0`;
+    // Keep market pip decimals so a last digit of 0 stays visible (String(1.20) → "1.2").
+    const entryDisplay = flipaaFormatQuoteForDigitContract(fill.entry.quote, symbol);
+    const exitDisplay = flipaaFormatQuoteForDigitContract(fill.exit.quote, symbol);
+    const isHl = contractType === 'HIGHER' || contractType === 'LOWER';
+    const hlBarrier = formatHlRelativeBarrier(barrier);
+    const hlBarrierToken = hlBarrier ? hlBarrier.replace(/^\+/, '') : '0';
+    const fallbackShortcode = isHl
+        ? `${contractType}_${symbol}_${purchaseTime}_${Math.max(1, duration)}T_${hlBarrierToken}`
+        : `${contractType}_${symbol}_${purchaseTime}_${Math.max(1, duration)}T_S0P_0`;
+    // Prefer proposal shortcode, but never let CALL/PUT + S0P paint Higher as Rise.
+    let shortcode = fill.shortcode || fallbackShortcode;
+    if (isHl && /^(CALL|PUT)_/i.test(shortcode)) {
+        shortcode = shortcode.replace(/^(CALL|PUT)_/i, `${contractType}_`);
+    }
+    if (isHl && /_S0P_/i.test(shortcode)) {
+        shortcode = fallbackShortcode;
+    }
     // Prefer proposal longcode so journal matches real demo buys (Bought: … (ID: …)).
-    const longcode = fill.longcode || buildFallbackLongcode(contractType, symbol, duration, barrier);
+    const longcode = fill.longcode || buildFallbackLongcode(contractType, symbol, duration, hlBarrier ?? barrier);
     const buyResponse = {
         buy: {
             contract_id: fill.virtId,
@@ -192,7 +240,7 @@ function buildContracts(
         },
     };
 
-    const openContract = {
+    const baseContract = {
         contract_id: fill.virtId,
         contract_type: contractType,
         underlying_symbol: symbol,
@@ -207,28 +255,38 @@ function buildContracts(
         longcode,
         date_start: purchaseTime,
         tick_count: Math.max(1, duration),
+        barrier: hlBarrier ?? barrier ?? 0,
+        is_sold: false,
+        is_expired: false,
+        is_valid_to_sell: false,
+        status: 'open' as const,
+        transaction_ids: { buy: buyTx },
+    };
+
+    // Pending: stake visible, entry/exit/P&L skeleton (matches Deriv Bot first tick).
+    const pendingContract = {
+        ...baseContract,
+    };
+
+    const openContract = {
+        ...baseContract,
         entry_tick: fill.entry.quote,
         entry_spot: fill.entry.quote,
         entry_tick_display_value: entryDisplay,
         entry_spot_display_value: entryDisplay,
         entry_tick_time: fill.entry.epoch,
-        exit_tick: fill.exit.quote,
-        exit_spot: fill.exit.quote,
-        exit_tick_display_value: exitDisplay,
-        exit_spot_display_value: exitDisplay,
-        exit_tick_time: fill.exit.epoch,
-        barrier: barrier ?? 0,
-        current_spot: fill.exit.quote,
-        is_sold: false,
-        is_expired: false,
-        is_valid_to_sell: false,
-        status: 'open',
-        transaction_ids: { buy: buyTx },
+        current_spot: fill.entry.quote,
     };
 
     const sell_price = fill.win ? fill.payout : 0;
     const soldContract = {
         ...openContract,
+        exit_tick: fill.exit.quote,
+        exit_spot: fill.exit.quote,
+        exit_tick_display_value: exitDisplay,
+        exit_spot_display_value: exitDisplay,
+        exit_tick_time: fill.exit.epoch,
+        current_spot: fill.exit.quote,
         sell_price,
         bid_price: sell_price,
         profit: fill.net,
@@ -242,14 +300,18 @@ function buildContracts(
         },
     };
 
-    return { buyResponse, openContract, soldContract };
+    return { buyResponse, pendingContract, openContract, soldContract };
 }
 
-async function waitForFreshVirtTick(minEpoch: number | null, timeoutMs = 2500): Promise<void> {
+async function waitForFreshVirtTick(minEpoch: number | null, timeoutMs = 200): Promise<void> {
+    const last = tickBufferRef.current[tickBufferRef.current.length - 1];
+    if (last && tickBufferRef.current.length >= 2 && (minEpoch == null || last.epoch > minEpoch)) {
+        return;
+    }
     const t0 = Date.now();
     while (Date.now() - t0 < timeoutMs) {
-        const last = tickBufferRef.current[tickBufferRef.current.length - 1];
-        if (last && (minEpoch == null || last.epoch > minEpoch) && tickBufferRef.current.length >= 2) {
+        const tick = tickBufferRef.current[tickBufferRef.current.length - 1];
+        if (tick && (minEpoch == null || tick.epoch > minEpoch) && tickBufferRef.current.length >= 2) {
             return;
         }
         await sleep(25);
@@ -267,6 +329,9 @@ export async function executeBotEngineCrShadowPurchase(args: {
     tradeOptions: Record<string, any> | undefined;
     symbolFallback?: string;
     contractType: string;
+    /** Locked for the whole hedge round so Higher+Lower share stake/barrier. */
+    stakeOverride?: number;
+    barrierOverride?: number | string;
 }): Promise<BotEngineCrShadowPurchaseResult | null> {
     const { client, tradeOptions, symbolFallback } = args;
     const contractType = normalizeContractType(args.contractType);
@@ -298,13 +363,24 @@ export async function executeBotEngineCrShadowPurchase(args: {
         throw new Error('Missing market symbol for virtual settlement.');
     }
 
-    const stake = Number(tradeOptions?.amount);
+    const stakeRaw = args.stakeOverride;
+    const stakeFromOverride = Number(stakeRaw);
+    const stake =
+        stakeRaw !== undefined &&
+        stakeRaw !== null &&
+        stakeRaw !== '' &&
+        Number.isFinite(stakeFromOverride) &&
+        stakeFromOverride > 0
+            ? stakeFromOverride
+            : Number(tradeOptions?.amount);
     if (!Number.isFinite(stake) || stake <= 0) {
         throw new Error('Invalid stake for virtual settlement.');
     }
 
     const duration = Math.max(1, Number(tradeOptions?.duration) || 1);
-    const barrier = resolveBarrier(tradeOptions);
+    const isHl = contractType === 'HIGHER' || contractType === 'LOWER';
+    const barrierRaw = args.barrierOverride !== undefined ? args.barrierOverride : resolveBarrier(tradeOptions);
+    const barrier = isHl ? (formatHlRelativeBarrier(barrierRaw) ?? barrierRaw) : barrierRaw;
     const currency = String(client.currency || 'USD');
 
     fillInFlightRef.current = true;

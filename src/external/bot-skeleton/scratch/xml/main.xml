@@ -8,11 +8,11 @@
         <field name="SYMBOL_LIST"></field>
         <next>
           <block type="trade_definition_tradetype" deletable="false" movable="false">
-            <field name="TRADETYPECAT_LIST"></field>
-            <field name="TRADETYPE_LIST"></field>
+            <field name="TRADETYPECAT_LIST">callput</field>
+            <field name="TRADETYPE_LIST">higherlower</field>
             <next>
               <block type="trade_definition_contracttype" deletable="false" movable="false">
-                <field name="TYPE_LIST"></field>
+                <field name="TYPE_LIST">both</field>
                 <next>
                   <block type="trade_definition_candleinterval" deletable="false" movable="false">
                     <field name="CANDLEINTERVAL_LIST">60</field>
@@ -36,9 +36,10 @@
     </statement>
     <statement name="SUBMARKET">
       <block type="trade_definition_tradeoptions">
-        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
-        <field name="DURATIONTYPE_LIST"></field>
+        <mutation has_first_barrier="true" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
         <field name="CURRENCY_LIST">USD</field>
+        <field name="BARRIEROFFSETTYPE_LIST">+</field>
         <value name="DURATION">
           <shadow type="math_number_positive">
             <field name="NUM">5</field>
@@ -47,6 +48,11 @@
         <value name="AMOUNT">
           <shadow type="math_number_positive">
             <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="BARRIEROFFSET">
+          <shadow type="math_number_positive">
+            <field name="NUM">0.1</field>
           </shadow>
         </value>
         <field name="AMOUNT_LIMITS"></field>
@@ -70,7 +76,12 @@
   <block type="before_purchase" x="0" y="576">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="purchase">
-        <field name="PURCHASE_LIST"></field>
+        <field name="PURCHASE_LIST">HIGHER</field>
+        <next>
+          <block type="purchase">
+            <field name="PURCHASE_LIST">LOWER</field>
+          </block>
+        </next>
       </block>
     </statement>
   </block>

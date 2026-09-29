@@ -18,8 +18,11 @@ import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../uti
 import { purchaseSuccessful, sell } from './state/actions';
 import { BEFORE_PURCHASE, NEW_TICK } from './state/constants';
 
-/** Pause after virtual settle before STOP → trade_again (mirrors async real-bot spacing). */
-const CR_SHADOW_AFTER_COMPLETE_MS = 2000;
+/** Pause after virtual settle before STOP → trade_again. Keep near-zero so the next buy is immediate. */
+const CR_SHADOW_AFTER_COMPLETE_MS = 0;
+
+/** ~1s per tick — matches Volatility index tick cadence on Deriv Bot. */
+const CR_SHADOW_MS_PER_TICK = 1000;
 
 let delayIndex = 0;
 let purchase_reference;
@@ -27,30 +30,56 @@ let purchase_reference;
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
-            // Stacked Purchase blocks buy together. The first buy must not
-            // leave BEFORE_PURCHASE or the hedge leg never gets sent.
+            // Stacked Purchase blocks buy together. Queue types here and buy in
+            // commitPurchases so both legs share the round (true hedge) instead of
+            // racing two async fills where the second leg often fails.
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
             }
 
             if (!this._purchaseRoundOpen) {
                 this._purchaseRoundOpen = true;
-                this._roundPurchases = [];
+                this._roundPurchaseTypes = [];
                 this.hedgeLegs = [];
                 this._bufferedContractUpdates = [];
             }
 
-            this._roundPurchases.push(this._executePurchase(contract_type));
+            this._roundPurchaseTypes.push(contract_type);
             return Promise.resolve();
         }
 
         commitPurchases() {
-            const tasks = this._roundPurchases || [];
-            this._roundPurchases = [];
+            const types = this._roundPurchaseTypes || [];
+            this._roundPurchaseTypes = [];
+            // Lock stake + barrier once for the round so Both (Higher+Lower) cannot drift.
+            // Barrier stays the relative offset from trade options (e.g. +0.37 from the stake-1
+            // quote); both legs debit the current workspace stake (e.g. 2).
+            const hedgeStake = Number(this.tradeOptions?.amount);
+            const hedgeBarrier =
+                this.tradeOptions?.barrierOffset ??
+                this.tradeOptions?.barrier ??
+                this.tradeOptions?.barrier_1 ??
+                this.tradeOptions?.prediction;
 
-            return Promise.allSettled(tasks).then(results => {
+            if (Number.isFinite(hedgeStake) && hedgeStake > 0 && this.tradeOptions) {
+                this.tradeOptions.amount = hedgeStake;
+            }
+
+            const run = async () => {
+                for (const contract_type of types) {
+                    if (Number.isFinite(hedgeStake) && hedgeStake > 0 && this.tradeOptions) {
+                        this.tradeOptions.amount = hedgeStake;
+                    }
+                    // eslint-disable-next-line no-await-in-loop
+                    await this._executePurchase(contract_type, {
+                        stake: hedgeStake,
+                        barrier: hedgeBarrier,
+                    });
+                }
+            };
+
+            return run().then(() => {
                 this._purchaseRoundOpen = false;
-                const rejected = results.find(result => result.status === 'rejected');
                 const bought = (this.hedgeLegs || []).length;
                 const stillBefore = this.store.getState().scope === BEFORE_PURCHASE;
 
@@ -70,10 +99,6 @@ export default Engine =>
                 if (typeof this.finishHedgeIfReady === 'function') {
                     this.finishHedgeIfReady();
                 }
-
-                if (rejected && !bought) {
-                    throw rejected.reason;
-                }
             });
         }
 
@@ -89,7 +114,7 @@ export default Engine =>
             }
         }
 
-        _executePurchase(contract_type) {
+        _executePurchase(contract_type, hedgeLock = {}) {
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
@@ -144,6 +169,8 @@ export default Engine =>
                         tradeOptions: this.tradeOptions,
                         symbolFallback: this.options?.symbol,
                         contractType: contract_type,
+                        stakeOverride: hedgeLock?.stake,
+                        barrierOverride: hedgeLock?.barrier,
                     });
                 } catch (err) {
                     unstickScope();
@@ -168,24 +195,54 @@ export default Engine =>
                     }
                 };
 
-                if (typeof this.processContractUpdate === 'function') {
-                    this.processContractUpdate(shadow.openContract, shadow.walletLoginId);
+                const publish = contract => {
+                    if (typeof this.processContractUpdate !== 'function') return;
+                    this.processContractUpdate(contract, shadow.walletLoginId);
                     bumpTick();
-                }
+                };
 
-                const openDisplayMs = 120;
+                // Immediate row: stake only, entry/exit/P&L skeleton (Deriv Bot style).
+                publish(shadow.pendingContract || shadow.openContract);
+
+                const ticks = Math.max(1, Number(this.tradeOptions?.duration) || 1);
+                const unit = String(this.tradeOptions?.duration_unit || 't').toLowerCase();
+                const msPerUnit = unit === 'm' || unit === 'min' ? 60_000 : unit === 's' ? 1000 : CR_SHADOW_MS_PER_TICK;
+                const entryRevealMs = msPerUnit; // entry after 1 tick
+                const settleMs = ticks * msPerUnit; // exit + P/L after full duration
+
+                // After 1 tick: reveal entry (1-tick contracts also settle here).
                 window.setTimeout(() => {
                     try {
-                        if (typeof this.processContractUpdate !== 'function') return;
                         if (!api_base?.is_running) return;
-                        this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
-                            afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
-                        });
-                        bumpTick();
+                        if (ticks <= 1) {
+                            if (typeof this.processContractUpdate !== 'function') return;
+                            this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
+                                afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
+                            });
+                            bumpTick();
+                            return;
+                        }
+                        publish(shadow.openContract);
                     } catch {
-                        /* ignore settle races */
+                        /* ignore reveal races */
                     }
-                }, openDisplayMs);
+                }, entryRevealMs);
+
+                // Multi-tick: settle after full duration (exit + P/L).
+                if (ticks > 1) {
+                    window.setTimeout(() => {
+                        try {
+                            if (typeof this.processContractUpdate !== 'function') return;
+                            if (!api_base?.is_running) return;
+                            this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
+                                afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
+                            });
+                            bumpTick();
+                        } catch {
+                            /* ignore settle races */
+                        }
+                    }, settleMs);
+                }
 
                 return true;
             };

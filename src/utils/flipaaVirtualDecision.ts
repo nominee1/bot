@@ -117,7 +117,7 @@ export type VirtFlipDecisionRefs = {
 
 export function windowWinsForStrategy(
     st: FlipVirtStrategyType,
-    barrier: number | undefined,
+    barrier: number | string | undefined,
     window: VirtTick[],
     mkt: string
 ): boolean {
@@ -140,8 +140,21 @@ export function windowWinsForStrategy(
         case 'differs':
             return isNum(barrier) ? lastDigit !== barrier : false;
         case 'rise':
+            // Higher: barrier is relative offset (e.g. "+0.37") or absolute; Rise: no barrier.
+            if (barrier !== undefined && barrier !== null && `${barrier}` !== '') {
+                const offset = Number(barrier);
+                if (Number.isFinite(offset)) {
+                    return last.quote > first.quote + offset;
+                }
+            }
             return last.quote > first.quote;
         case 'fall':
+            if (barrier !== undefined && barrier !== null && `${barrier}` !== '') {
+                const offset = Number(barrier);
+                if (Number.isFinite(offset)) {
+                    return last.quote < first.quote + offset;
+                }
+            }
             return last.quote < first.quote;
         case 'rise_equals':
             return last.quote >= first.quote;
@@ -255,7 +268,7 @@ async function decideHighLowLikeDeriv(
 export async function decideFlipVirtualPair(
     refs: VirtFlipDecisionRefs,
     st: FlipVirtStrategyType,
-    barrier: number | undefined,
+    barrier: number | string | undefined,
     dur: number,
     mkt: string
 ): Promise<VirtFlipDecision> {

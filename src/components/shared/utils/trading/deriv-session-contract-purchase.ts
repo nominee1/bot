@@ -90,18 +90,24 @@ export function tradeOptionsToDerivBuyIntent(
     }
 
     const digit_types = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'];
+    const tick_types = ['TICKHIGH', 'TICKLOW'];
     if (digit_types.includes(contract_type)) {
         const n = Number(tradeOptions.prediction);
         const digit = Number.isFinite(n) ? ((Math.round(n) % 10) + 10) % 10 : 0;
         intent.barrier = String(digit);
-    } else if (tradeOptions.prediction !== undefined && tradeOptions.prediction !== null) {
-        intent.barrier = tradeOptions.prediction as number | string;
+    } else if (tick_types.includes(contract_type)) {
+        // High/Low Ticks use selected_tick — never barrier (API: BarrierNotAllowed).
+        if (tradeOptions.prediction !== undefined && tradeOptions.prediction !== null) {
+            intent.extras = { ...(intent.extras ?? {}), selected_tick: Number(tradeOptions.prediction) };
+        }
     } else if (tradeOptions.barrierOffset !== undefined && tradeOptions.barrierOffset !== null) {
         intent.barrier = tradeOptions.barrierOffset as number | string;
+    } else if (tradeOptions.prediction !== undefined && tradeOptions.prediction !== null) {
+        intent.barrier = tradeOptions.prediction as number | string;
     }
 
     if (tradeOptions.growth_rate !== undefined && tradeOptions.growth_rate !== null) {
-        intent.extras = { growth_rate: tradeOptions.growth_rate };
+        intent.extras = { ...(intent.extras ?? {}), growth_rate: tradeOptions.growth_rate };
     }
 
     return intent;
