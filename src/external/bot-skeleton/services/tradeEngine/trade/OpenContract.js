@@ -141,7 +141,8 @@ export default Engine =>
                 clearTimeout(this._crShadowAfterCompleteTimer);
                 this._crShadowAfterCompleteTimer = window.setTimeout(() => {
                     this._crShadowAfterCompleteTimer = null;
-                    if (!api_base?.is_running) return;
+                    // Always finish the purchase cycle for an already-open contract,
+                    // even if the user hit Stop mid-trade.
                     finishCycle();
                 }, delayMs);
                 return;

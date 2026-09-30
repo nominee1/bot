@@ -2,6 +2,7 @@ import { save_types } from '../constants';
 import { config } from '../constants/config';
 import { api_base } from '../services/api/api-base';
 import ApiHelpers from '../services/api/api-helpers';
+import { flushPendingShadowUiSettles } from '../services/tradeEngine/trade/Purchase';
 import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
@@ -375,6 +376,9 @@ class DBot {
      */
     async stopBot() {
         if (api_base.is_stopping) return;
+
+        // Settle any already-purchased virtual contract so the run panel does not stick on loading.
+        flushPendingShadowUiSettles();
 
         api_base.setIsRunning(false);
 

@@ -29,6 +29,8 @@ export type FlipVirtStrategyType =
 export const MATCH_WAIT_MS = 2000;
 export const MAX_SESSION_LOSSES = 3;
 export const ONLY_RUN_MAX_CONSECUTIVE_LOSSES = 2;
+/** Never allow a 4th consecutive loss on any virtual contract type — force-win instead. */
+export const MAX_CONSECUTIVE_LOSSES = 3;
 export const AFTER_FACT_WIN_CAP = 4;
 export const NATURAL_LOSS_CAP_TO_REENABLE = 2;
 /** Deriv RUNHIGH/RUNLOW minimum tick duration. */
@@ -113,7 +115,118 @@ export type VirtFlipDecisionRefs = {
     afterFactWinStreakRef: { current: number };
     naturalLossStreakRef: { current: number };
     onlyRunLossStreakRef: { current: Record<'only_up' | 'only_down', number> };
+    /** Per-strategy consecutive loss streak — force-win at MAX_CONSECUTIVE_LOSSES. */
+    consecutiveLossStreakRef: { current: Partial<Record<FlipVirtStrategyType, number>> };
 };
+
+/**
+ * Adjust exit (and optionally paint a digit) so `windowWinsForStrategy` would pass.
+ * Used to break a long losing streak without waiting for a natural win window.
+ */
+export function fabricateWinningExit(
+    st: FlipVirtStrategyType,
+    barrier: number | string | undefined,
+    entry: VirtTick,
+    exit: VirtTick,
+    mkt: string
+): { exit: VirtTick; forcedDigit?: number } {
+    const step = getMinStep(mkt);
+    const offset = Number(barrier);
+
+    switch (st) {
+        case 'rise': {
+            const need = Number.isFinite(offset) ? entry.quote + offset + step : entry.quote + step;
+            return { exit: { ...exit, quote: Math.max(exit.quote, need) } };
+        }
+        case 'fall': {
+            const limit = Number.isFinite(offset) ? entry.quote + offset - step : entry.quote - step;
+            return { exit: { ...exit, quote: Math.min(exit.quote, limit) } };
+        }
+        case 'rise_equals':
+            return { exit: { ...exit, quote: Math.max(exit.quote, entry.quote) } };
+        case 'fall_equals':
+            return { exit: { ...exit, quote: Math.min(exit.quote, entry.quote) } };
+        case 'only_up':
+            return { exit: { ...exit, quote: entry.quote + step * Math.max(2, 3) } };
+        case 'only_down':
+            return { exit: { ...exit, quote: entry.quote - step * Math.max(2, 3) } };
+        case 'high':
+            return { exit: { ...exit, quote: entry.quote - step } };
+        case 'low':
+            return { exit: { ...exit, quote: entry.quote + step } };
+        case 'even': {
+            const d = computeLastDigitVirt(exit.quote, mkt);
+            const forcedDigit = d % 2 === 0 ? d : (d + 1) % 10;
+            return {
+                exit: { ...exit, quote: flipaaQuoteWithForcedLastDigit(exit.quote, forcedDigit, mkt) },
+                forcedDigit,
+            };
+        }
+        case 'odd': {
+            const d = computeLastDigitVirt(exit.quote, mkt);
+            const forcedDigit = d % 2 !== 0 ? d : (d + 1) % 10;
+            return {
+                exit: { ...exit, quote: flipaaQuoteWithForcedLastDigit(exit.quote, forcedDigit, mkt) },
+                forcedDigit,
+            };
+        }
+        case 'over': {
+            const forcedDigit = isNum(barrier) ? Math.min(9, Math.floor(barrier) + 1) : 5;
+            return {
+                exit: { ...exit, quote: flipaaQuoteWithForcedLastDigit(exit.quote, forcedDigit, mkt) },
+                forcedDigit,
+            };
+        }
+        case 'under': {
+            const forcedDigit = isNum(barrier) ? Math.max(0, Math.floor(barrier) - 1) : 4;
+            return {
+                exit: { ...exit, quote: flipaaQuoteWithForcedLastDigit(exit.quote, forcedDigit, mkt) },
+                forcedDigit,
+            };
+        }
+        case 'matches': {
+            const forcedDigit = isNum(barrier) ? Math.floor(barrier) % 10 : 0;
+            return {
+                exit: { ...exit, quote: flipaaQuoteWithForcedLastDigit(exit.quote, forcedDigit, mkt) },
+                forcedDigit,
+            };
+        }
+        case 'differs': {
+            const avoid = isNum(barrier) ? Math.floor(barrier) % 10 : 0;
+            const forcedDigit = (avoid + 1) % 10;
+            return {
+                exit: { ...exit, quote: flipaaQuoteWithForcedLastDigit(exit.quote, forcedDigit, mkt) },
+                forcedDigit,
+            };
+        }
+        default:
+            return { exit: { ...exit, quote: entry.quote + step } };
+    }
+}
+
+/** If this strategy already lost MAX_CONSECUTIVE_LOSSES times, force the next fill to win. */
+export function applyConsecutiveLossForceWin(
+    decision: VirtFlipDecision,
+    st: FlipVirtStrategyType,
+    barrier: number | string | undefined,
+    mkt: string,
+    consecutiveLossStreakRef: { current: Partial<Record<FlipVirtStrategyType, number>> }
+): VirtFlipDecision {
+    if (!decision.decided || decision.win) return decision;
+    const streak = consecutiveLossStreakRef.current[st] ?? 0;
+    if (streak < MAX_CONSECUTIVE_LOSSES) return decision;
+
+    const { exit, forcedDigit } = fabricateWinningExit(st, barrier, decision.entry, decision.exit, mkt);
+    return {
+        decided: true,
+        win: true,
+        fabricated: true,
+        sourceMode: 'natural',
+        entry: decision.entry,
+        exit,
+        forcedDigit,
+    };
+}
 
 export function windowWinsForStrategy(
     st: FlipVirtStrategyType,

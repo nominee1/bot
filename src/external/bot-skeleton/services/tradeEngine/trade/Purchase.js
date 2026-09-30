@@ -24,6 +24,20 @@ const CR_SHADOW_AFTER_COMPLETE_MS = 0;
 /** ~1s per tick — matches Volatility index tick cadence on Deriv Bot. */
 const CR_SHADOW_MS_PER_TICK = 1000;
 
+/** Pending virtual UI settles — flushed on Stop so an open contract never sticks on loading. */
+const pendingShadowUiSettles = new Set();
+
+export function flushPendingShadowUiSettles() {
+    [...pendingShadowUiSettles].forEach(entry => {
+        try {
+            entry.flush();
+        } catch {
+            /* ignore settle races */
+        }
+    });
+    pendingShadowUiSettles.clear();
+}
+
 let delayIndex = 0;
 let purchase_reference;
 
@@ -210,16 +224,44 @@ export default Engine =>
                 const entryRevealMs = msPerUnit; // entry after 1 tick
                 const settleMs = ticks * msPerUnit; // exit + P/L after full duration
 
-                // After 1 tick: reveal entry (1-tick contracts also settle here).
-                window.setTimeout(() => {
+                const settleEntry = {
+                    entryTimer: null,
+                    settleTimer: null,
+                    flush: null,
+                };
+
+                const clearPending = () => {
+                    pendingShadowUiSettles.delete(settleEntry);
+                    if (settleEntry.entryTimer) clearTimeout(settleEntry.entryTimer);
+                    if (settleEntry.settleTimer) clearTimeout(settleEntry.settleTimer);
+                    settleEntry.entryTimer = null;
+                    settleEntry.settleTimer = null;
+                };
+
+                const settleSold = () => {
                     try {
-                        if (!api_base?.is_running) return;
+                        if (typeof this.processContractUpdate !== 'function') return;
+                        this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
+                            afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
+                        });
+                        bumpTick();
+                    } catch {
+                        /* ignore settle races */
+                    }
+                };
+
+                settleEntry.flush = () => {
+                    clearPending();
+                    settleSold();
+                };
+                pendingShadowUiSettles.add(settleEntry);
+
+                // After 1 tick: reveal entry (1-tick contracts also settle here).
+                // Always finish an already-purchased contract — even if the user hits Stop.
+                settleEntry.entryTimer = window.setTimeout(() => {
+                    try {
                         if (ticks <= 1) {
-                            if (typeof this.processContractUpdate !== 'function') return;
-                            this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
-                                afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
-                            });
-                            bumpTick();
+                            settleEntry.flush();
                             return;
                         }
                         publish(shadow.openContract);
@@ -230,17 +272,8 @@ export default Engine =>
 
                 // Multi-tick: settle after full duration (exit + P/L).
                 if (ticks > 1) {
-                    window.setTimeout(() => {
-                        try {
-                            if (typeof this.processContractUpdate !== 'function') return;
-                            if (!api_base?.is_running) return;
-                            this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
-                                afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
-                            });
-                            bumpTick();
-                        } catch {
-                            /* ignore settle races */
-                        }
+                    settleEntry.settleTimer = window.setTimeout(() => {
+                        settleEntry.flush();
                     }, settleMs);
                 }
 

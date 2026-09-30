@@ -6,8 +6,10 @@ import { isCrVirtualShadowLogin, runWithCrShadowLock, tryDebitCrShadowSync } fro
 import { DERIV1_DEMO_LOGINID, getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
 import { flipaaQuoteWithForcedLastDigit } from '@/utils/flipaaTickDigitFormat';
 import {
+    applyConsecutiveLossForceWin,
     decideFlipVirtualPair,
     type FlipVirtStrategyType,
+    MAX_CONSECUTIVE_LOSSES,
     MAX_SESSION_LOSSES,
     ONLY_RUN_MAX_CONSECUTIVE_LOSSES,
     updateAfterFactGovernor,
@@ -421,9 +423,12 @@ export async function executeCrShadowVirtualFill(args: {
 
     // Flipaa Instant Fill order: resolve after-fact outcome on live ticks, then price via proposal.
     // Hedge legs (HIGHER+LOWER in one commit) reuse the same entry/exit window.
-    const decision = await decideFlipVirtualPairWithHedgeReuse(refs, st, barrier, duration, market);
+    let decision = await decideFlipVirtualPairWithHedgeReuse(refs, st, barrier, duration, market);
 
     if (!decision.decided) throw new Error('virtual-timeout');
+
+    // Cap consecutive losses: never allow a 4th loss in a row on any contract type.
+    decision = applyConsecutiveLossForceWin(decision, st, barrier, market, refs.consecutiveLossStreakRef);
 
     // Ensure fabricated Matches exits paint the predicted last digit on the settlement spot.
     if (
@@ -536,6 +541,28 @@ export async function executeCrShadowVirtualFill(args: {
         ) {
             refs.sessionLossesRef.current = nextLosses;
         }
+    } else {
+        refs.sessionLossesVirtRef.current = 0;
+        if (
+            refs.sessionLossesRef &&
+            typeof refs.sessionLossesRef === 'object' &&
+            refs.sessionLossesRef !== refs.sessionLossesVirtRef
+        ) {
+            refs.sessionLossesRef.current = 0;
+        }
+    }
+
+    // Track per-strategy consecutive losses for all virtual contract types.
+    if (!refs.consecutiveLossStreakRef.current) {
+        refs.consecutiveLossStreakRef.current = {};
+    }
+    if (net >= 0) {
+        refs.consecutiveLossStreakRef.current[st] = 0;
+    } else {
+        refs.consecutiveLossStreakRef.current[st] = Math.min(
+            MAX_CONSECUTIVE_LOSSES,
+            (refs.consecutiveLossStreakRef.current[st] ?? 0) + 1
+        );
     }
 
     if (st === 'only_up' || st === 'only_down') {

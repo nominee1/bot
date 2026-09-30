@@ -15,6 +15,7 @@ import {
 } from '@/utils/crShadowVirtualFill';
 import { checkMoonLeadWallet, seedCrShadowLedgerIfAbsent } from '@/utils/crVirtualBalanceShadow';
 import { flipaaFormatQuoteForDigitContract } from '@/utils/flipaaTickDigitFormat';
+import type { FlipVirtStrategyType } from '@/utils/flipaaVirtualDecision';
 
 type VirtTick = { epoch: number; quote: number };
 
@@ -35,6 +36,8 @@ const onlyRunLossStreakRef: { current: Record<'only_up' | 'only_down', number> }
 const onlyRunLossStreakVirtRef: { current: Record<'only_up' | 'only_down', number> } = {
     current: { only_up: 0, only_down: 0 },
 };
+/** Per-strategy consecutive losses — force-win before a 4th loss in a row. */
+const consecutiveLossStreakRef: { current: Partial<Record<FlipVirtStrategyType, number>> } = { current: {} };
 
 /** Call when the user starts the bot so the next Matches trade is a predicted-digit win. */
 export function resetCrShadowMatchesFirstRun(): void {
@@ -69,9 +72,9 @@ function resolveBarrier(tradeOptions: Record<string, unknown> | undefined): numb
     }
     const n = Number(raw);
     if (!Number.isFinite(n)) return undefined;
-    // Blockly sometimes stores barrier offset as a plain number — keep HL-relative sign.
-    if (n === 0) return '+0';
-    return n > 0 ? `+${n}` : `${n}`;
+    // Keep a plain number here. High/Low Ticks use this as selected_tick (1–5);
+    // Higher/Lower signed offsets are applied in executeBotEngineCrShadowPurchase via formatHlRelativeBarrier.
+    return n;
 }
 
 /** Keep Higher/Lower proposal barrier as a signed relative offset string. */
@@ -434,6 +437,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
                 onlyRunLossStreakRef,
                 sessionLossesVirtRef,
                 onlyRunLossStreakVirtRef,
+                consecutiveLossStreakRef,
             },
         });
 
