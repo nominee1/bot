@@ -9,7 +9,6 @@
 
     @include mobile-or-tablet-screen {
         width: 100%;
-        height: 100%;
     }
 }
 
@@ -39,18 +38,5 @@
            are underneath it, so clicks never reach the fields. */
         margin-inline-start: 23.6rem;
         width: calc(100% - 23.6rem) !important;
-    }
-
-    @include mobile-or-tablet-screen {
-        height: 100%;
-
-        /* The number text is smaller than a finger. Keep the field as the hit target
-           so a tap opens the input instead of falling through to the block. */
-        .blocklyEditableText,
-        .blocklyEditableText > rect,
-        .blocklyEditableText > text,
-        .blocklyDropdownText {
-            pointer-events: auto;
-        }
     }
 }

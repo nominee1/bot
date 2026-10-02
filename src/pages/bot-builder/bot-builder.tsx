@@ -123,12 +123,13 @@ const BotBuilder = observer(() => {
             <div
                 className={classNames('bot-builder', {
                     'bot-builder--active': active_tab === 1 && !is_preview_on_popup,
+                    'bot-builder--inactive': is_preview_on_popup,
                     'bot-builder--tour-active': active_tour,
                 })}
             >
-                <div id='scratch_div' ref={el_ref}>
-                    <WorkspaceWrapper />
-                </div>
+                {/* Blockly injects into #scratch_div — keep React chrome as siblings so updates don't wipe the SVG. */}
+                <div id='scratch_div' ref={el_ref} />
+                <WorkspaceWrapper />
             </div>
             {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}

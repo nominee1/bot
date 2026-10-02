@@ -10,17 +10,26 @@ import './workspace.scss';
 const WorkspaceWrapper = observer(() => {
     const { blockly_store } = useStore();
     const { onMount, onUnmount, is_loading } = blockly_store;
+    // window.Blockly.derivWorkspace is not MobX-observable — mirror readiness when loading flips.
+    const [has_workspace, setHasWorkspace] = React.useState(() => Boolean(window.Blockly?.derivWorkspace));
 
     React.useEffect(() => {
         onMount();
         return () => {
             onUnmount();
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    React.useEffect(() => {
+        if (!is_loading) {
+            setHasWorkspace(Boolean(window.Blockly?.derivWorkspace));
+        }
+    }, [is_loading]);
 
     if (is_loading) return null;
 
-    if (window.Blockly?.derivWorkspace)
+    if (has_workspace)
         return (
             <React.Fragment>
                 <Toolbox />
