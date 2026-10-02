@@ -12,6 +12,17 @@ const useCenteredFieldModal = () => {
     return mobileAgent || window.innerWidth < 1280;
 };
 
+/** Same host line native window.prompt shows ("bot.deriv.com says"). */
+const promptHostLabel = () => {
+    const host = (window.location.hostname || '').trim() || 'localhost';
+    return localize('{{host}} says', { host });
+};
+
+const promptMessageText = title => {
+    const raw = String(title || window.Blockly?.Msg?.CHANGE_VALUE_TITLE || localize('Change value')).trim();
+    return raw.replace(/:\s*$/, '') || localize('Change value');
+};
+
 const syncModalToVisualViewport = root => {
     const vv = window.visualViewport;
     if (!vv || !root) return;
@@ -44,9 +55,15 @@ const openCenteredModal = ({ title, value = '', onDone }) => {
     const card = document.createElement('div');
     card.className = 'dbot-field-modal__card';
 
+    // Native-style: "hostname says" then message (Change value).
+    const hostLine = document.createElement('p');
+    hostLine.className = 'dbot-field-modal__host';
+    hostLine.textContent = promptHostLabel();
+    card.appendChild(hostLine);
+
     const heading = document.createElement('p');
     heading.className = 'dbot-field-modal__title';
-    heading.textContent = title || localize('Change value');
+    heading.textContent = promptMessageText(title);
     card.appendChild(heading);
 
     const input = document.createElement('input');
