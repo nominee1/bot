@@ -140,6 +140,10 @@ class DBot {
                     trashcan: !is_mobile,
                     zoom: { wheel: true, startScale: workspaceScale },
                     scrollbars: true,
+                    // Same in-place input as Denarabot. The default opens a browser
+                    // prompt on a phone user agent, and DevTools closes that prompt
+                    // on the extra click it sends after a tap.
+                    modalInputs: false,
                     theme: window.Blockly.Themes.zelos_renderer,
                 });
 

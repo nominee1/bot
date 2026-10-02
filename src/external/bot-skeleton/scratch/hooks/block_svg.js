@@ -172,3 +172,24 @@ window.Blockly.BlockSvg.prototype.onMouseDown_ = function (e) {
     // Call original handler to maintain drag functionality
     originalOnMouseDown.call(this, e);
 };
+
+// DevTools device mode sends a mouse event right after the touch tap. Blockly
+// treats that as a new click and closes the in-place editor Denarabot uses.
+let lastTouchAt = 0;
+document.addEventListener(
+    'pointerup',
+    event => {
+        if (isTouchPointer(event)) lastTouchAt = Date.now();
+    },
+    true
+);
+const keepFieldEditorOpen = event => {
+    if (!window.Blockly || isTouchPointer(event) || Date.now() - lastTouchAt > 700) return;
+    const widgetOpen = window.Blockly.WidgetDiv?.isVisible?.() || window.Blockly.DropDownDiv?.isVisible?.();
+    if (!widgetOpen) return;
+    const target = event.target;
+    if (target?.closest?.('.blocklyWidgetDiv, .blocklyDropDownDiv, .blocklyHtmlInput')) return;
+    event.stopPropagation();
+};
+document.addEventListener('pointerdown', keepFieldEditorOpen, true);
+document.addEventListener('mousedown', keepFieldEditorOpen, true);
