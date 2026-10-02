@@ -2,6 +2,42 @@ import { localize } from '@deriv-com/translations';
 import { getContractTypeOptions } from '../../../shared';
 import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils';
 
+const orderedPurchaseBlocks = workspace => {
+    const before = workspace.getAllBlocks(false).find(block => block.type === 'before_purchase');
+    if (!before) return [];
+    const found = [];
+    const walk = block => {
+        let current = block;
+        while (current) {
+            if (current.type === 'purchase') found.push(current);
+            (current.inputList || []).forEach(input => {
+                const child = input.connection && input.connection.targetBlock();
+                if (child) walk(child);
+            });
+            current = current.getNextBlock();
+        }
+    };
+    walk(before.getInputTargetBlock('BEFOREPURCHASE_STACK'));
+    return found;
+};
+
+/** Both + stacked purchases: first block takes side A, the next takes side B. */
+const hedgePurchaseValues = (blocks, options) => {
+    const used = new Set();
+    return blocks.map((block, index) => {
+        const current = block.getField('PURCHASE_LIST')?.getValue();
+        const available = options.some(option => option[1] === current);
+        if (available && current && !used.has(current)) {
+            used.add(current);
+            return current;
+        }
+        const free = options.find(option => !used.has(option[1]));
+        const picked = free ? free[1] : options[Math.min(index, options.length - 1)][1];
+        used.add(picked);
+        return picked;
+    });
+};
+
 window.Blockly.Blocks.purchase = {
     init() {
         this.jsonInit(this.definition());
@@ -71,6 +107,22 @@ window.Blockly.Blocks.purchase = {
             const purchase_type_list = this.getField('PURCHASE_LIST');
             const purchase_type = purchase_type_list.getValue();
             const contract_type_options = getContractTypeOptions(contract_type, trade_type);
+
+            // "Both" on a stacked hedge must stay one of each side. Otherwise every
+            // Purchase block falls back to the first option (two Only Ups).
+            if (this.type === 'purchase' && contract_type === 'both' && contract_type_options.length > 1) {
+                const purchases = orderedPurchaseBlocks(this.workspace);
+                const targets = purchases.length ? purchases : [this];
+                const values = hedgePurchaseValues(targets, contract_type_options);
+                targets.forEach((block, index) => {
+                    block.getField('PURCHASE_LIST').updateOptions(contract_type_options, {
+                        default_value: values[index],
+                        event_group: event && event.group,
+                        should_pretend_empty: true,
+                    });
+                });
+                return;
+            }
 
             purchase_type_list.updateOptions(contract_type_options, {
                 default_value: purchase_type,

@@ -54,22 +54,6 @@ export function pathDependentTimeoutMs(tickCount: number): number {
     return n * MS_PER_EXPECTED_TICK + 4000;
 }
 
-/**
- * Deriv RUNHIGH/RUNLOW: each tick after entry must be strictly higher (only up) or
- * lower (only down) than the previous. First reversal is the exit spot (early knockout).
- * Returns the knockout index, or null if the path is still valid.
- */
-export function onlyRunKnockoutIndex(st: 'only_up' | 'only_down', ticks: VirtTick[]): number | null {
-    for (let i = 1; i < ticks.length; i++) {
-        const prev = ticks[i - 1].quote;
-        const curr = ticks[i].quote;
-        if (!isNum(prev) || !isNum(curr)) return i;
-        if (st === 'only_up' ? curr <= prev : curr >= prev) return i;
-    }
-    return null;
-}
-
-/** Deriv TICKHIGH/TICKLOW: selected tick (1–5) must be the unique high or unique low. */
 export function highLowWins(st: 'high' | 'low', selectedTick: number, ticks: VirtTick[]): boolean {
     if (!isNum(selectedTick) || ticks.length < PATH_HL_TICK_COUNT) return false;
     const idx = Math.floor(selectedTick) - 1;
@@ -102,6 +86,8 @@ export type VirtFlipDecision =
           sourceMode: 'after_fact' | 'natural';
           entry: VirtTick;
           exit: VirtTick;
+          /** Full Only Ups / Only Downs path. A break in the run loses both sides. */
+          path?: VirtTick[];
           forcedDigit?: number;
       };
 
@@ -147,9 +133,9 @@ export function fabricateWinningExit(
         case 'fall_equals':
             return { exit: { ...exit, quote: Math.min(exit.quote, entry.quote) } };
         case 'only_up':
-            return { exit: { ...exit, quote: entry.quote + step * Math.max(2, 3) } };
+            return { exit: { ...exit, quote: Number((entry.quote + step).toFixed(10)) } };
         case 'only_down':
-            return { exit: { ...exit, quote: entry.quote - step * Math.max(2, 3) } };
+            return { exit: { ...exit, quote: Number((entry.quote - step).toFixed(10)) } };
         case 'high':
             return { exit: { ...exit, quote: entry.quote - step } };
         case 'low':
@@ -214,7 +200,9 @@ export function applyConsecutiveLossForceWin(
 ): VirtFlipDecision {
     if (!decision.decided || decision.win) return decision;
     const streak = consecutiveLossStreakRef.current[st] ?? 0;
-    if (streak < MAX_CONSECUTIVE_LOSSES) return decision;
+    // Flipaa Only Ups / Only Downs force a win after 2 losses; other types after 3.
+    const lossCap = st === 'only_up' || st === 'only_down' ? ONLY_RUN_MAX_CONSECUTIVE_LOSSES : MAX_CONSECUTIVE_LOSSES;
+    if (streak < lossCap) return decision;
 
     const { exit, forcedDigit } = fabricateWinningExit(st, barrier, decision.entry, decision.exit, mkt);
     return {
@@ -274,15 +262,30 @@ export function windowWinsForStrategy(
         case 'fall_equals':
             return last.quote <= first.quote;
         case 'only_up':
-            return window.length >= 2 && onlyRunKnockoutIndex('only_up', window) == null;
+            return onlyRunPathWins('only_up', window);
         case 'only_down':
-            return window.length >= 2 && onlyRunKnockoutIndex('only_down', window) == null;
+            return onlyRunPathWins('only_down', window);
         case 'high':
         case 'low':
             return highLowWins(st, Number(barrier), window);
         default:
             return false;
     }
+}
+
+/**
+ * Only Ups wins only when every step is strictly higher.
+ * Only Downs wins only when every step is strictly lower.
+ * A flat step or a reversal loses that side — so a chop loses both.
+ */
+export function onlyRunPathWins(st: 'only_up' | 'only_down', ticks: VirtTick[]): boolean {
+    if (ticks.length < 2) return false;
+    for (let i = 1; i < ticks.length; i += 1) {
+        const prev = ticks[i - 1].quote;
+        const curr = ticks[i].quote;
+        if (st === 'only_up' ? !(curr > prev) : !(curr < prev)) return false;
+    }
+    return true;
 }
 
 export function getRecentWindow(tickBufferRef: { current: VirtTick[] }, count: number): VirtTick[] | null {
@@ -334,32 +337,8 @@ async function collectForwardTicks(
     return collected;
 }
 
-function decidedNatural(win: boolean, entry: VirtTick, exit: VirtTick): VirtFlipDecision {
-    return { decided: true, win, fabricated: false, sourceMode: 'natural', entry, exit };
-}
-
-/**
- * Virtual Only Ups / Only Downs: same path as Deriv `proposal_open_contract`.
- * Entry is the next live tick after buy. Exit is the first reversing tick, or the
- * last tick if the successive path lasts the full duration.
- */
-async function decideOnlyRunLikeDeriv(
-    refs: VirtFlipDecisionRefs,
-    st: 'only_up' | 'only_down',
-    dur: number
-): Promise<VirtFlipDecision> {
-    const ticksNeeded = Math.max(ONLY_RUN_MIN_TICKS, Math.floor(dur) || ONLY_RUN_MIN_TICKS);
-    const deadline = Date.now() + pathDependentTimeoutMs(ticksNeeded);
-    const collected = await collectForwardTicks(refs, ticksNeeded, deadline, ticks => {
-        return onlyRunKnockoutIndex(st, ticks) != null;
-    });
-    if (collected.length < 2) return { decided: false };
-    const ko = onlyRunKnockoutIndex(st, collected);
-    if (ko != null) return decidedNatural(false, collected[0], collected[ko]);
-    if (collected.length >= ticksNeeded) {
-        return decidedNatural(true, collected[0], collected[collected.length - 1]);
-    }
-    return { decided: false };
+function decidedNatural(win: boolean, entry: VirtTick, exit: VirtTick, path?: VirtTick[]): VirtFlipDecision {
+    return { decided: true, win, fabricated: false, sourceMode: 'natural', entry, exit, path };
 }
 
 /**
@@ -388,7 +367,19 @@ export async function decideFlipVirtualPair(
     const { isRunningRef, tickBufferRef, sessionLossesRef, matchesFirstPendingRef, afterFactSuppressedRef } = refs;
 
     if (st === 'only_up' || st === 'only_down') {
-        return decideOnlyRunLikeDeriv(refs, st, dur);
+        // At least 3 ticks so the shared hedge path can break. A clean run wins one
+        // side. A flat step or a reversal loses Only Ups and Only Downs together.
+        const ticksNeeded = Math.max(3, Math.floor(dur) || 3);
+        const t0 = Date.now();
+        while (isRunningRef.current && Date.now() - t0 < MATCH_WAIT_MS) {
+            const path = getRecentWindow(tickBufferRef, ticksNeeded);
+            if (path) {
+                const win = onlyRunPathWins(st, path);
+                return decidedNatural(win, path[0], path[path.length - 1], path);
+            }
+            await sleep(25);
+        }
+        return { decided: false };
     }
     if (st === 'high' || st === 'low') {
         return decideHighLowLikeDeriv(refs, st, barrier);

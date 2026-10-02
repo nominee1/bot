@@ -525,8 +525,8 @@ const QSInput: React.FC<TQSInput> = observer(
                                         }}
                                         placeholder={is_exclusive_field ? '0.00' : ''}
                                         bottom_label={is_exclusive_field ? currency : ''}
-                                        max_characters={2}
-                                        maxLength={2}
+                                        max_characters={name === 'tick_count' ? 2 : 12}
+                                        maxLength={name === 'tick_count' ? 2 : 12}
                                         inputMode={name === 'tick_count' || name === 'duration' ? 'numeric' : undefined}
                                         pattern={name === 'tick_count' || name === 'duration' ? '[0-9]*' : undefined}
                                         onKeyPress={

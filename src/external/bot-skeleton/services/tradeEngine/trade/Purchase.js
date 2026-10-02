@@ -63,8 +63,25 @@ export default Engine =>
         }
 
         commitPurchases() {
-            const types = this._roundPurchaseTypes || [];
+            let types = this._roundPurchaseTypes || [];
             this._roundPurchaseTypes = [];
+            // Contract type "Both" lists both sides (RUNHIGH+RUNLOW). If every stacked
+            // Purchase collapsed onto the first side, buy one of each instead of two Only Ups.
+            const available = [
+                ...new Set(
+                    (this.options?.contractTypes || this.tradeOptions?.contractTypes || []).filter(
+                        type => type && type !== 'both'
+                    )
+                ),
+            ];
+            if (
+                types.length >= 2 &&
+                available.length >= 2 &&
+                types.every(type => type === types[0]) &&
+                available.includes(types[0])
+            ) {
+                types = types.map((_, index) => available[index % available.length]);
+            }
             // Lock stake + barrier once for the round so Both (Higher+Lower) cannot drift.
             // Barrier stays the relative offset from trade options (e.g. +0.37 from the stake-1
             // quote); both legs debit the current workspace stake (e.g. 2).
@@ -80,16 +97,18 @@ export default Engine =>
             }
 
             const run = async () => {
-                for (const contract_type of types) {
-                    if (Number.isFinite(hedgeStake) && hedgeStake > 0 && this.tradeOptions) {
-                        this.tradeOptions.amount = hedgeStake;
-                    }
-                    // eslint-disable-next-line no-await-in-loop
-                    await this._executePurchase(contract_type, {
-                        stake: hedgeStake,
-                        barrier: hedgeBarrier,
-                    });
-                }
+                // Start every leg together so Only Ups and Only Downs share one tick window.
+                await Promise.all(
+                    types.map(contract_type => {
+                        if (Number.isFinite(hedgeStake) && hedgeStake > 0 && this.tradeOptions) {
+                            this.tradeOptions.amount = hedgeStake;
+                        }
+                        return this._executePurchase(contract_type, {
+                            stake: hedgeStake,
+                            barrier: hedgeBarrier,
+                        });
+                    })
+                );
             };
 
             return run().then(() => {

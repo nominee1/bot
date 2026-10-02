@@ -33,6 +33,14 @@
     touch-action: none;
     overflow: hidden;
 
+    @include desktop-screen {
+        /* The blocks menu is 23.6rem and sits on top of the canvas.
+           Without this inset, duration/stake and the other trade inputs
+           are underneath it, so clicks never reach the fields. */
+        margin-inline-start: 23.6rem;
+        width: calc(100% - 23.6rem) !important;
+    }
+
     @include mobile-or-tablet-screen {
         height: 100%;
     }

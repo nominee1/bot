@@ -19,18 +19,46 @@ import {
     windowWinsForStrategy,
 } from '@/utils/flipaaVirtualDecision';
 
-/** Shared entry/exit for stacked hedge purchases (Higher+Lower) within a few seconds. */
+/** Shared tick path for stacked hedge purchases (both sides of one round). */
 let hedgeWindowCache: {
     key: string;
     entry: VirtTick;
     exit: VirtTick;
+    ticks: VirtTick[];
     at: number;
+} | null = null;
+
+type HedgeSharedPath = { entry: VirtTick; exit: VirtTick; ticks: VirtTick[] };
+
+/** In-flight path so Only Ups and Only Downs started together share one window. */
+let hedgeWindowInflight: {
+    key: string;
+    promise: Promise<HedgeSharedPath | null>;
 } | null = null;
 
 const HEDGE_WINDOW_REUSE_MS = 8000;
 
 function hedgeWindowKey(market: string, duration: number, barrier: number | string | undefined): string {
     return `${market}|${duration}|${barrier ?? ''}`;
+}
+
+function decisionFromSharedPair(
+    st: FlipVirtStrategyType,
+    barrier: number | string | undefined,
+    market: string,
+    shared: HedgeSharedPath
+): VirtFlipDecision {
+    const ticks = shared.ticks.length >= 2 ? shared.ticks : [shared.entry, shared.exit];
+    const win = windowWinsForStrategy(st, barrier, ticks, market);
+    return {
+        decided: true,
+        win: !!win,
+        fabricated: false,
+        sourceMode: 'natural',
+        entry: shared.entry,
+        exit: shared.exit,
+        path: ticks,
+    };
 }
 
 async function decideFlipVirtualPairWithHedgeReuse(
@@ -43,27 +71,41 @@ async function decideFlipVirtualPairWithHedgeReuse(
     const key = hedgeWindowKey(market, duration, barrier);
     const cached = hedgeWindowCache;
     if (cached && cached.key === key && Date.now() - cached.at < HEDGE_WINDOW_REUSE_MS) {
-        const win = windowWinsForStrategy(st, barrier, [cached.entry, cached.exit], market);
-        return {
-            decided: true,
-            win: !!win,
-            fabricated: false,
-            sourceMode: 'natural',
-            entry: cached.entry,
-            exit: cached.exit,
-        };
+        return decisionFromSharedPair(st, barrier, market, cached);
     }
 
-    const decision = await decideFlipVirtualPair(refs, st, barrier, duration, market);
-    if (decision.decided) {
-        hedgeWindowCache = {
-            key,
-            entry: decision.entry,
-            exit: decision.exit,
-            at: Date.now(),
-        };
+    if (hedgeWindowInflight && hedgeWindowInflight.key === key) {
+        const shared = await hedgeWindowInflight.promise;
+        if (shared) return decisionFromSharedPair(st, barrier, market, shared);
     }
-    return decision;
+
+    let resolveShared: (value: HedgeSharedPath | null) => void = () => undefined;
+    const promise = new Promise<HedgeSharedPath | null>(resolve => {
+        resolveShared = resolve;
+    });
+    hedgeWindowInflight = { key, promise };
+
+    try {
+        const decision = await decideFlipVirtualPair(refs, st, barrier, duration, market);
+        if (decision.decided) {
+            const ticks = decision.path && decision.path.length >= 2 ? decision.path : [decision.entry, decision.exit];
+            const shared = { entry: decision.entry, exit: decision.exit, ticks };
+            hedgeWindowCache = {
+                key,
+                ...shared,
+                at: Date.now(),
+            };
+            resolveShared(shared);
+        } else {
+            resolveShared(null);
+        }
+        return decision;
+    } catch (err) {
+        resolveShared(null);
+        throw err;
+    } finally {
+        if (hedgeWindowInflight?.promise === promise) hedgeWindowInflight = null;
+    }
 }
 
 /**
@@ -422,7 +464,7 @@ export async function executeCrShadowVirtualFill(args: {
     await ensureTicks(market);
 
     // Flipaa Instant Fill order: resolve after-fact outcome on live ticks, then price via proposal.
-    // Hedge legs (HIGHER+LOWER in one commit) reuse the same entry/exit window.
+    // Hedge legs in one commit (Higher+Lower, Only Ups+Only Downs) reuse the same entry/exit window.
     let decision = await decideFlipVirtualPairWithHedgeReuse(refs, st, barrier, duration, market);
 
     if (!decision.decided) throw new Error('virtual-timeout');
@@ -566,13 +608,12 @@ export async function executeCrShadowVirtualFill(args: {
     }
 
     if (st === 'only_up' || st === 'only_down') {
-        if (net >= 0) refs.onlyRunLossStreakVirtRef.current[st] = 0;
-        else {
-            refs.onlyRunLossStreakVirtRef.current[st] = Math.min(
-                ONLY_RUN_MAX_CONSECUTIVE_LOSSES,
-                refs.onlyRunLossStreakVirtRef.current[st] + 1
-            );
-        }
+        const next =
+            net >= 0
+                ? 0
+                : Math.min(ONLY_RUN_MAX_CONSECUTIVE_LOSSES, (refs.onlyRunLossStreakVirtRef.current[st] ?? 0) + 1);
+        refs.onlyRunLossStreakVirtRef.current[st] = next;
+        if (refs.onlyRunLossStreakRef?.current) refs.onlyRunLossStreakRef.current[st] = next;
     }
 
     scheduleCrChanceLedgerRoundTrip({
