@@ -423,6 +423,14 @@ export async function ensureCrShadowVirtTickBuffer(
     throw new Error('virtual-tick-timeout');
 }
 
+/** Match Purchase.js run-panel settle timing (~1s/tick or /second; minutes × 60s). */
+function uiSettleDelayMs(duration: number, durationUnit?: string): number {
+    const units = Math.max(1, Number(duration) || 1);
+    const unit = String(durationUnit || 't').toLowerCase();
+    const msPerUnit = unit === 'm' || unit === 'min' ? 60_000 : 1000;
+    return units * msPerUnit;
+}
+
 export async function executeCrShadowVirtualFill(args: {
     client: { loginid?: string; all_accounts_balance?: { accounts?: Record<string, { balance?: number }> } };
     walletLoginId: string;
@@ -430,6 +438,7 @@ export async function executeCrShadowVirtualFill(args: {
     stake: number;
     market: string;
     duration: number;
+    durationUnit?: string;
     barrier?: number | string;
     currency?: string;
     ensureApiReady: () => Promise<unknown>;
@@ -443,6 +452,7 @@ export async function executeCrShadowVirtualFill(args: {
         stake,
         market,
         duration,
+        durationUnit,
         barrier,
         currency,
         ensureApiReady,
@@ -615,6 +625,8 @@ export async function executeCrShadowVirtualFill(args: {
             settlementCredit: decision.win ? payout : 0,
             entryEpochSec: decision.entry.epoch,
             exitEpochSec: decision.exit.epoch,
+            // Credit with run-panel exit/P&L reveal (not the legacy 800ms marketing delay).
+            creditDelayMs: uiSettleDelayMs(duration, durationUnit),
         });
         settleScheduled = true;
 

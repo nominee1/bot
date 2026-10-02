@@ -382,6 +382,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
     }
 
     const duration = Math.max(1, Number(tradeOptions?.duration) || 1);
+    const durationUnit = String(tradeOptions?.duration_unit || 't');
     const isHl = contractType === 'HIGHER' || contractType === 'LOWER';
     const barrierRaw = args.barrierOverride !== undefined ? args.barrierOverride : resolveBarrier(tradeOptions);
     const barrier = isHl ? (formatHlRelativeBarrier(barrierRaw) ?? barrierRaw) : barrierRaw;
@@ -408,6 +409,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
             stake,
             market: symbol,
             duration,
+            durationUnit,
             barrier,
             currency,
             ensureApiReady: async () => {

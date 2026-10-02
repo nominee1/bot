@@ -58,7 +58,8 @@ export async function saveChanceVirtualStatement(payload: ChanceStatementPayload
 
 /**
  * Persist buy/sell rows for CR7557018 shadow round-trips only (same pattern as marketing BotIframe).
- * Buy row fires immediately after debit; sell row after 800ms once settlement credit is applied (if any).
+ * Buy row fires immediately after debit; sell/credit waits for `creditDelayMs` (default 800ms).
+ * Bot Builder passes the run-panel settle delay so P/L hits the balance with the sold row.
  * Do NOT snap to Railway absolute here — that races the next trade and makes the header bounce.
  */
 export function scheduleCrChanceLedgerRoundTrip(params: {
@@ -68,8 +69,11 @@ export function scheduleCrChanceLedgerRoundTrip(params: {
     settlementCredit: number;
     entryEpochSec: number;
     exitEpochSec: number;
+    /** ms until sell credit — match UI settle (e.g. 5s contract → 5000). Default 800. */
+    creditDelayMs?: number;
 }): void {
     const { client, walletLoginId, ask, settlementCredit, entryEpochSec, exitEpochSec } = params;
+    const creditDelayMs = Math.max(0, Number(params.creditDelayMs) || 800);
     if (!isCrVirtualShadowLogin(walletLoginId)) return;
 
     const debitLoginKey = isMoonLeadVirtualTradeLoginid(walletLoginId)
@@ -123,5 +127,5 @@ export function scheduleCrChanceLedgerRoundTrip(params: {
                 endVirtualSettlementHold();
             }
         })();
-    }, 800);
+    }, creditDelayMs);
 }
