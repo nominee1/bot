@@ -19,15 +19,48 @@ import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../uti
 import { purchaseSuccessful, sell } from './state/actions';
 import { BEFORE_PURCHASE, NEW_TICK } from './state/constants';
 
-/** Pause after virtual settle before STOP → trade_again. Keep near-zero so the next buy is immediate. */
-const CR_SHADOW_AFTER_COMPLETE_MS = 0;
+/** Pause after virtual settle before STOP → trade_again (gives balance UI time to settle). */
+const CR_SHADOW_AFTER_COMPLETE_MS = 1500;
 
 /** ~1s per tick — matches Volatility index tick cadence on Deriv Bot. */
 const CR_SHADOW_MS_PER_TICK = 1000;
 
-/** Pending virtual UI settles — flushed on Stop so an open contract never sticks on loading. */
+/** Pending virtual UI settles — timers finish entry/exit on schedule even after Stop. */
 const pendingShadowUiSettles = new Set();
+/** Fired once when the last pending settle clears (Stop keeps bot.contract until then). */
+const pendingShadowUiSettlesClearListeners = new Set();
 
+export function hasPendingShadowUiSettles() {
+    return pendingShadowUiSettles.size > 0;
+}
+
+/** Run `cb` when no virtual UI settles remain (immediately if already clear). */
+export function onPendingShadowUiSettlesClear(cb) {
+    if (typeof cb !== 'function') return () => {};
+    if (pendingShadowUiSettles.size === 0) {
+        cb();
+        return () => {};
+    }
+    pendingShadowUiSettlesClearListeners.add(cb);
+    return () => {
+        pendingShadowUiSettlesClearListeners.delete(cb);
+    };
+}
+
+function notifyPendingShadowUiSettlesClear() {
+    if (pendingShadowUiSettles.size > 0) return;
+    const listeners = [...pendingShadowUiSettlesClearListeners];
+    pendingShadowUiSettlesClearListeners.clear();
+    listeners.forEach(cb => {
+        try {
+            cb();
+        } catch {
+            /* ignore */
+        }
+    });
+}
+
+/** Emergency only (e.g. hard terminate). Stop must NOT call this — let open trades settle normally. */
 export function flushPendingShadowUiSettles() {
     [...pendingShadowUiSettles].forEach(entry => {
         try {
@@ -37,6 +70,7 @@ export function flushPendingShadowUiSettles() {
         }
     });
     pendingShadowUiSettles.clear();
+    notifyPendingShadowUiSettlesClear();
 }
 
 let delayIndex = 0;
@@ -258,6 +292,7 @@ export default Engine =>
                     if (settleEntry.settleTimer) clearTimeout(settleEntry.settleTimer);
                     settleEntry.entryTimer = null;
                     settleEntry.settleTimer = null;
+                    notifyPendingShadowUiSettlesClear();
                 };
 
                 const settleSold = () => {
@@ -273,8 +308,13 @@ export default Engine =>
                 };
 
                 settleEntry.flush = () => {
-                    clearPending();
-                    settleSold();
+                    // Publish sold first — clearPending notifies Stop handlers that unregister
+                    // bot.contract; doing clear first would drop the settle update.
+                    try {
+                        settleSold();
+                    } finally {
+                        clearPending();
+                    }
                 };
                 pendingShadowUiSettles.add(settleEntry);
 

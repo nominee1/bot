@@ -18,6 +18,7 @@ import {
     type VirtTick,
     windowWinsForStrategy,
 } from '@/utils/flipaaVirtualDecision';
+import { beginVirtualSettlementHold, endVirtualSettlementHold } from '@/utils/sharedVirtualLedgerSync';
 
 /** Shared tick path for stacked hedge purchases (both sides of one round). */
 type HedgeSharedPath = { entry: VirtTick; exit: VirtTick; ticks: VirtTick[] };
@@ -534,102 +535,105 @@ export async function executeCrShadowVirtualFill(args: {
         longcode?: string;
         shortcode?: string;
     };
-    // Hedge / virtual fills must debit the configured stake on both legs (never drift to 1 vs 2).
-    const rawAsk = Number(pr.ask_price ?? stake);
-    const rawPayout = Number(pr.payout ?? stake * 1.95);
-    const ask = stake;
-    const payout =
-        Number.isFinite(rawAsk) && rawAsk > 0
-            ? Number(((rawPayout / rawAsk) * stake).toFixed(2))
-            : Number(rawPayout.toFixed(2));
+    // Match Denarabot virtual settlement: debit proposal ask_price, credit proposal payout on win.
+    const ask = Number(pr.ask_price ?? stake);
+    const payout = Number(pr.payout ?? stake * 1.95);
     const longcode = typeof pr.longcode === 'string' ? pr.longcode.trim() : '';
     const shortcode = typeof pr.shortcode === 'string' ? pr.shortcode.trim() : '';
 
-    const debitOk = await runWithCrShadowLock(() => tryDebitCrShadowSync(client, walletLoginId, ask));
-    if (!debitOk) throw new Error('insufficient-balance');
+    // Hold capital poll / parent echoes until debit+credit+Railway reconcile finish.
+    beginVirtualSettlementHold();
+    let settleScheduled = false;
+    try {
+        const debitOk = await runWithCrShadowLock(() => tryDebitCrShadowSync(client, walletLoginId, ask));
+        if (!debitOk) throw new Error('insufficient-balance');
 
-    const net = decision.win ? payout - ask : -ask;
-    const virtId = `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const net = decision.win ? payout - ask : -ask;
+        const virtId = `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    updateAfterFactGovernor(
-        {
-            afterFactSuppressedRef: refs.afterFactSuppressedRef,
-            afterFactWinStreakRef: refs.afterFactWinStreakRef,
-            naturalLossStreakRef: refs.naturalLossStreakRef,
-        },
-        st,
-        decision.sourceMode ?? 'natural',
-        net
-    );
-
-    if (net < 0) {
-        const nextLosses = Math.min(MAX_SESSION_LOSSES, refs.sessionLossesVirtRef.current + 1);
-        if (refs.sessionLossesVirtRef && typeof refs.sessionLossesVirtRef === 'object') {
-            refs.sessionLossesVirtRef.current = nextLosses;
-        }
-        // Flipaa Matches: force-win after MAX_SESSION_LOSSES reads sessionLossesRef.
-        if (
-            refs.sessionLossesRef &&
-            typeof refs.sessionLossesRef === 'object' &&
-            refs.sessionLossesRef !== refs.sessionLossesVirtRef
-        ) {
-            refs.sessionLossesRef.current = nextLosses;
-        }
-    } else {
-        refs.sessionLossesVirtRef.current = 0;
-        if (
-            refs.sessionLossesRef &&
-            typeof refs.sessionLossesRef === 'object' &&
-            refs.sessionLossesRef !== refs.sessionLossesVirtRef
-        ) {
-            refs.sessionLossesRef.current = 0;
-        }
-    }
-
-    // Track per-strategy consecutive losses for all virtual contract types.
-    if (!refs.consecutiveLossStreakRef.current) {
-        refs.consecutiveLossStreakRef.current = {};
-    }
-    if (net >= 0) {
-        refs.consecutiveLossStreakRef.current[st] = 0;
-    } else {
-        refs.consecutiveLossStreakRef.current[st] = Math.min(
-            MAX_CONSECUTIVE_LOSSES,
-            (refs.consecutiveLossStreakRef.current[st] ?? 0) + 1
+        updateAfterFactGovernor(
+            {
+                afterFactSuppressedRef: refs.afterFactSuppressedRef,
+                afterFactWinStreakRef: refs.afterFactWinStreakRef,
+                naturalLossStreakRef: refs.naturalLossStreakRef,
+            },
+            st,
+            decision.sourceMode ?? 'natural',
+            net
         );
+
+        if (net < 0) {
+            const nextLosses = Math.min(MAX_SESSION_LOSSES, refs.sessionLossesVirtRef.current + 1);
+            if (refs.sessionLossesVirtRef && typeof refs.sessionLossesVirtRef === 'object') {
+                refs.sessionLossesVirtRef.current = nextLosses;
+            }
+            // Flipaa Matches: force-win after MAX_SESSION_LOSSES reads sessionLossesRef.
+            if (
+                refs.sessionLossesRef &&
+                typeof refs.sessionLossesRef === 'object' &&
+                refs.sessionLossesRef !== refs.sessionLossesVirtRef
+            ) {
+                refs.sessionLossesRef.current = nextLosses;
+            }
+        } else {
+            refs.sessionLossesVirtRef.current = 0;
+            if (
+                refs.sessionLossesRef &&
+                typeof refs.sessionLossesRef === 'object' &&
+                refs.sessionLossesRef !== refs.sessionLossesVirtRef
+            ) {
+                refs.sessionLossesRef.current = 0;
+            }
+        }
+
+        // Track per-strategy consecutive losses for all virtual contract types.
+        if (!refs.consecutiveLossStreakRef.current) {
+            refs.consecutiveLossStreakRef.current = {};
+        }
+        if (net >= 0) {
+            refs.consecutiveLossStreakRef.current[st] = 0;
+        } else {
+            refs.consecutiveLossStreakRef.current[st] = Math.min(
+                MAX_CONSECUTIVE_LOSSES,
+                (refs.consecutiveLossStreakRef.current[st] ?? 0) + 1
+            );
+        }
+
+        if (st === 'only_up' || st === 'only_down') {
+            const next =
+                net >= 0
+                    ? 0
+                    : Math.min(ONLY_RUN_MAX_CONSECUTIVE_LOSSES, (refs.onlyRunLossStreakVirtRef.current[st] ?? 0) + 1);
+            refs.onlyRunLossStreakVirtRef.current[st] = next;
+            if (refs.onlyRunLossStreakRef?.current) refs.onlyRunLossStreakRef.current[st] = next;
+        }
+
+        scheduleCrChanceLedgerRoundTrip({
+            client,
+            walletLoginId,
+            ask,
+            settlementCredit: decision.win ? payout : 0,
+            entryEpochSec: decision.entry.epoch,
+            exitEpochSec: decision.exit.epoch,
+        });
+        settleScheduled = true;
+
+        const displayTicks = normalizeVirtDisplayTicks(st, decision.entry, decision.exit, duration);
+
+        return {
+            virtId,
+            net,
+            ask,
+            payout,
+            win: decision.win,
+            entry: displayTicks.entry,
+            exit: displayTicks.exit,
+            longcode: longcode || undefined,
+            shortcode: shortcode || undefined,
+        };
+    } finally {
+        if (!settleScheduled) endVirtualSettlementHold();
     }
-
-    if (st === 'only_up' || st === 'only_down') {
-        const next =
-            net >= 0
-                ? 0
-                : Math.min(ONLY_RUN_MAX_CONSECUTIVE_LOSSES, (refs.onlyRunLossStreakVirtRef.current[st] ?? 0) + 1);
-        refs.onlyRunLossStreakVirtRef.current[st] = next;
-        if (refs.onlyRunLossStreakRef?.current) refs.onlyRunLossStreakRef.current[st] = next;
-    }
-
-    scheduleCrChanceLedgerRoundTrip({
-        client,
-        walletLoginId,
-        ask,
-        settlementCredit: decision.win ? payout : 0,
-        entryEpochSec: decision.entry.epoch,
-        exitEpochSec: decision.exit.epoch,
-    });
-
-    const displayTicks = normalizeVirtDisplayTicks(st, decision.entry, decision.exit, duration);
-
-    return {
-        virtId,
-        net,
-        ask,
-        payout,
-        win: decision.win,
-        entry: displayTicks.entry,
-        exit: displayTicks.exit,
-        longcode: longcode || undefined,
-        shortcode: shortcode || undefined,
-    };
 }
 
 export const isCrShadowVirtualRecoverableError = (msg: string) =>

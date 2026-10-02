@@ -3,7 +3,7 @@ import {
     isDerivOptionsOAuthSession,
 } from '@/components/shared/utils/login/deriv-oauth-storage';
 import type ClientStore from '@/stores/client-store';
-import { DERIV1_DEMO_LOGINID,getHandoffShadowLoginid, isHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
+import { DERIV1_DEMO_LOGINID, getHandoffShadowLoginid, isHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import type { Balance } from '@deriv/api-types';
 
 /** Real-money wallet used by BotIframe virtual pipeline (shadow balance in localStorage). */
@@ -388,7 +388,7 @@ export function crShadowBroadcastMatchesWallet(
     return resolveVirtualShadowLedgerKey(wallet) === resolveVirtualShadowLedgerKey(broadcast);
 }
 
-export function writeCrShadow(loginid: string, value: number) {
+export function writeCrShadow(loginid: string, value: number, opts?: { notifyParent?: boolean }) {
     const map = readCrShadowMap();
     const keys = pairedVirtualShadowStorageKeys(loginid);
     const writeKeys = keys.length > 0 ? keys : [loginid];
@@ -403,6 +403,9 @@ export function writeCrShadow(loginid: string, value: number) {
             /* ignore */
         }
     });
+    // Default: do not echo to the parent. Parent shows Railway SSE; bot shows local shadow.
+    // Echoing every debit/credit freezes parent SSE for 8s and makes both headers bounce.
+    if (opts?.notifyParent !== true) return;
     // Never broadcast Demo ledger updates to the parent Real virtual balance.
     const isDemoOnly = writeKeys.every(key => String(key).trim().toUpperCase().startsWith('VRT'));
     if (isDemoOnly) return;

@@ -12,6 +12,7 @@ import {
     MOON_COPY_LEAD_LOGINID,
     resolveVirtualShadowLedgerKey,
 } from '@/utils/crVirtualBalanceShadow';
+import { endVirtualSettlementHold } from '@/utils/sharedVirtualLedgerSync';
 
 /** Same endpoint as marketing accumulators — appends rows to `chance_virtual_statements`. */
 export const SAVE_CHANCE_STATEMENT_URL = 'https://ttt.binaryke.com/api/save_chance_virtual_statement.php';
@@ -58,6 +59,7 @@ export async function saveChanceVirtualStatement(payload: ChanceStatementPayload
 /**
  * Persist buy/sell rows for CR7557018 shadow round-trips only (same pattern as marketing BotIframe).
  * Buy row fires immediately after debit; sell row after 800ms once settlement credit is applied (if any).
+ * Do NOT snap to Railway absolute here — that races the next trade and makes the header bounce.
  */
 export function scheduleCrChanceLedgerRoundTrip(params: {
     client: ClientStore;
@@ -97,25 +99,29 @@ export function scheduleCrChanceLedgerRoundTrip(params: {
 
     window.setTimeout(() => {
         void (async () => {
-            if (settlementCredit > 0) {
-                await applyCrShadowDeltaLocked(client, String(walletLoginId ?? debitLoginKey), settlementCredit);
-            }
-            const rawSell = getCrShadowForWallet(walletLoginId) ?? getCrShadow(ledgerKey);
-            const balanceAfterSell =
-                typeof rawSell === 'number' && Number.isFinite(rawSell)
-                    ? rawSell
-                    : Number((balanceAfterBuy + settlementCredit).toFixed(2));
+            try {
+                if (settlementCredit > 0) {
+                    await applyCrShadowDeltaLocked(client, String(walletLoginId ?? debitLoginKey), settlementCredit);
+                }
+                const rawSell = getCrShadowForWallet(walletLoginId) ?? getCrShadow(ledgerKey);
+                const balanceAfterSell =
+                    typeof rawSell === 'number' && Number.isFinite(rawSell)
+                        ? rawSell
+                        : Number((balanceAfterBuy + settlementCredit).toFixed(2));
 
-            void saveChanceVirtualStatement({
-                username: CHANCE_LEDGER_USERNAME,
-                loginid: debitLoginKey,
-                transaction_time: exitEpochSec,
-                action_type: 'sell',
-                reference_id: sellRef,
-                reference_type: 'sell',
-                amount: Number(settlementCredit.toFixed(2)),
-                balance_after: Number(balanceAfterSell.toFixed(2)),
-            });
+                void saveChanceVirtualStatement({
+                    username: CHANCE_LEDGER_USERNAME,
+                    loginid: debitLoginKey,
+                    transaction_time: exitEpochSec,
+                    action_type: 'sell',
+                    reference_id: sellRef,
+                    reference_type: 'sell',
+                    amount: Number(settlementCredit.toFixed(2)),
+                    balance_after: Number(balanceAfterSell.toFixed(2)),
+                });
+            } finally {
+                endVirtualSettlementHold();
+            }
         })();
     }, 800);
 }

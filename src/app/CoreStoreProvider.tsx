@@ -36,7 +36,7 @@ import {
     writeCrShadow,
 } from '@/utils/crVirtualBalanceShadow';
 import { getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
-import { fetchSharedVirtualLedgerBalance, hasPendingSharedVirtualLedgerSync } from '@/utils/sharedVirtualLedgerSync';
+import { fetchSharedVirtualLedgerBalance, hasVirtualSettlementHold } from '@/utils/sharedVirtualLedgerSync';
 import type { Balance } from '@deriv/api-types';
 import { useTranslations } from '@deriv-com/translations';
 
@@ -91,7 +91,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     const accountInitialization = useRef(false);
     const timeInterval = useRef<NodeJS.Timeout | null>(null);
     const msg_listener = useRef<{ unsubscribe: () => void } | null>(null);
-    const { client, common } = useStore() ?? {};
+    const { client, common, run_panel } = useStore() ?? {};
 
     const { currentLang } = useTranslations();
 
@@ -195,13 +195,29 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
         let cancelled = false;
         let pullTicket = 0;
         const pull = async () => {
-            if (hasPendingSharedVirtualLedgerSync()) return;
+            // Read live — do not close over a stale is_running from effect setup.
+            const botRunning = Boolean(
+                (typeof window !== 'undefined' &&
+                    (window as Window & { __dbot_root_store__?: { run_panel?: { is_running?: boolean } } })
+                        .__dbot_root_store__?.run_panel?.is_running) ||
+                run_panel?.is_running
+            );
+            // While the bot is running, local debit/credit owns the header.
+            // Railway poll must not interleave a second figure mid-trade.
+            if (botRunning || hasVirtualSettlementHold()) return;
             const ticket = ++pullTicket;
             const bal = await fetchSharedVirtualLedgerBalance();
+            const stillRunning = Boolean(
+                (typeof window !== 'undefined' &&
+                    (window as Window & { __dbot_root_store__?: { run_panel?: { is_running?: boolean } } })
+                        .__dbot_root_store__?.run_panel?.is_running) ||
+                run_panel?.is_running
+            );
             // Drop stale responses. A slower capital read must not overwrite a newer one,
             // and an in-flight read must not clobber a trade that landed while it was waiting.
-            if (cancelled || bal == null || ticket !== pullTicket || hasPendingSharedVirtualLedgerSync()) return;
-            writeCrShadow(ledgerLogin, bal);
+            if (cancelled || bal == null || ticket !== pullTicket || stillRunning || hasVirtualSettlementHold()) return;
+            // Silent write: parent already streams Railway SSE.
+            writeCrShadow(ledgerLogin, bal, { notifyParent: false });
             syncCrShadowBalanceIfNeeded(client, ledgerLogin, bal);
             if (!isCrVirtualShadowLogin(loginid)) {
                 client.setBalance(bal.toFixed(2));
@@ -214,7 +230,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             cancelled = true;
             window.clearInterval(intervalId);
         };
-    }, [client, activeAccount?.loginid, client?.loginid]);
+    }, [client, activeAccount?.loginid, client?.loginid, run_panel?.is_running]);
 
     useEffect(() => {
         if (!client) return;

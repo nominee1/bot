@@ -1,10 +1,36 @@
 import type ClientStore from '@/stores/client-store';
-import { isCrVirtualShadowLogin } from '@/utils/crVirtualBalanceShadow';
+import { isCrVirtualShadowLogin, syncCrShadowBalanceIfNeeded, writeCrShadow } from '@/utils/crVirtualBalanceShadow';
 import { getHandoffShadowLoginid } from '@/utils/deriv1SessionHandoff';
 import { getDeriv1LedgerProxyUrl, getPaApiBaseUrl } from '@/utils/pa-api-base';
 
 let pendingSharedVirtualLedgerSyncs = 0;
 let ledgerAdjustChain: Promise<void> = Promise.resolve();
+/** Covers debit → delayed credit → ledger-adjust so capital poll cannot flash a mixed balance. */
+let settlementHoldCount = 0;
+let lastServerManagedBalance: number | null = null;
+
+export function beginVirtualSettlementHold(): void {
+    settlementHoldCount += 1;
+}
+
+export function endVirtualSettlementHold(): void {
+    settlementHoldCount = Math.max(0, settlementHoldCount - 1);
+}
+
+/** True while a virtual trade is settling or a Railway ledger-adjust is in flight. */
+export function hasVirtualSettlementHold(): boolean {
+    return settlementHoldCount > 0 || pendingSharedVirtualLedgerSyncs > 0;
+}
+
+export function cacheServerManagedBalanceOnly(balance: number | null | undefined): void {
+    const n = Number(balance);
+    if (!Number.isFinite(n)) return;
+    lastServerManagedBalance = Math.round(n * 100) / 100;
+}
+
+export function getCachedServerManagedBalance(): number | null {
+    return lastServerManagedBalance;
+}
 
 function bearer(): string {
     try {
@@ -120,12 +146,46 @@ export function scheduleSharedVirtualLedgerPnlSync(
     pendingSharedVirtualLedgerSyncs += 1;
     ledgerAdjustChain = ledgerAdjustChain
         .then(async () => {
-            // Local shadow already includes this delta. Do not write the server absolute
-            // back — that races the capital poll and flashes a second balance.
-            await pushSharedVirtualLedgerPnl(delta);
+            // Local shadow already includes this delta. Cache server absolute only —
+            // re-writing via writeCrShadow races capital poll and flashes a mixed balance.
+            const next = await pushSharedVirtualLedgerPnl(delta);
+            if (next != null) cacheServerManagedBalanceOnly(next);
         })
         .catch(() => undefined)
         .finally(() => {
             pendingSharedVirtualLedgerSyncs = Math.max(0, pendingSharedVirtualLedgerSyncs - 1);
         });
+}
+
+export async function waitSharedVirtualLedgerIdle(timeoutMs = 8000): Promise<void> {
+    const start = Date.now();
+    while (pendingSharedVirtualLedgerSyncs > 0 && Date.now() - start < timeoutMs) {
+        await new Promise<void>(resolve => {
+            window.setTimeout(resolve, 40);
+        });
+    }
+}
+
+/**
+ * After a virtual round-trip, snap header + shadow to Railway (single source of truth).
+ * Notifies the parent once with the backend absolute so it cannot bounce on stale local.
+ */
+export async function reconcileDisplayToBackendBalance(
+    client: ClientStore,
+    walletLoginId: string | undefined | null
+): Promise<number | null> {
+    if (!client || !isCrVirtualShadowLogin(walletLoginId)) return null;
+    await waitSharedVirtualLedgerIdle();
+    const bal = await fetchSharedVirtualLedgerBalance();
+    if (bal == null) {
+        const cached = getCachedServerManagedBalance();
+        if (cached == null) return null;
+        writeCrShadow(String(walletLoginId), cached, { notifyParent: true });
+        syncCrShadowBalanceIfNeeded(client, String(walletLoginId), cached);
+        return cached;
+    }
+    cacheServerManagedBalanceOnly(bal);
+    writeCrShadow(String(walletLoginId), bal, { notifyParent: true });
+    syncCrShadowBalanceIfNeeded(client, String(walletLoginId), bal);
+    return bal;
 }

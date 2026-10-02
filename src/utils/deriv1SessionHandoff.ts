@@ -415,19 +415,54 @@ export function listenForDeriv1Session(writeShadow: (loginid: string, value: num
             loginid?: string;
         };
         if (data?.type === DERIV1_BOT_BALANCE_MSG) {
-            const next = Number(data.value);
-            if (!Number.isFinite(next)) return;
-            const incoming = String(data.loginid || '').trim();
-            const handoff = getHandoffShadowLoginid();
-            const loginKey = incoming || handoff;
-            if (!loginKey) return;
-            if (handoff && incoming && incoming.toUpperCase() !== handoff.toUpperCase()) return;
-            rememberHandoffShadowLoginid(loginKey);
-            lastPostedToDeriv1 = Math.round(next * 100) / 100;
-            writeShadow(loginKey, next);
+            // During settle / while bot runs, local ledger owns the header.
+            void import('@/utils/sharedVirtualLedgerSync').then(({ hasVirtualSettlementHold }) => {
+                const botRunning = Boolean(
+                    (window as Window & { __dbot_root_store__?: { run_panel?: { is_running?: boolean } } })
+                        .__dbot_root_store__?.run_panel?.is_running
+                );
+                if (botRunning || hasVirtualSettlementHold()) return;
+                const next = Number(data.value);
+                if (!Number.isFinite(next)) return;
+                const incoming = String(data.loginid || '').trim();
+                const handoff = getHandoffShadowLoginid();
+                const loginKey = incoming || handoff;
+                if (!loginKey) return;
+                if (handoff && incoming && incoming.toUpperCase() !== handoff.toUpperCase()) return;
+                rememberHandoffShadowLoginid(loginKey);
+                lastPostedToDeriv1 = Math.round(next * 100) / 100;
+                writeShadow(loginKey, next);
+            });
             return;
         }
         if (data?.type !== DERIV1_BOT_SESSION_MSG || !data.session) return;
+        // After handoff, ignore session re-posts that only refresh virtualBalance —
+        // parent SSE used to re-broadcast the whole session and wipe local settles.
+        const incomingLogin = String(data.session.loginid || '').trim();
+        const handoff = getHandoffShadowLoginid();
+        if (handoff && incomingLogin && incomingLogin.toUpperCase() === handoff.toUpperCase()) {
+            const botRunning = Boolean(
+                (window as Window & { __dbot_root_store__?: { run_panel?: { is_running?: boolean } } })
+                    .__dbot_root_store__?.run_panel?.is_running
+            );
+            if (botRunning) return;
+            // Still update tokens/email if provided, but keep current shadow balance.
+            const existing = readPersistedDeriv1Session();
+            const keepBal =
+                typeof existing?.virtualBalance === 'number' && Number.isFinite(existing.virtualBalance)
+                    ? existing.virtualBalance
+                    : data.session.virtualBalance;
+            applyDeriv1SessionPayload({ ...data.session, virtualBalance: keepBal }, writeShadow);
+            try {
+                (event.source as Window | null)?.postMessage(
+                    { type: DERIV1_BOT_SESSION_ACK, source: 'bot-1' },
+                    event.origin
+                );
+            } catch {
+                /* ignore */
+            }
+            return;
+        }
         applyDeriv1SessionPayload(data.session, writeShadow);
         try {
             (event.source as Window | null)?.postMessage(

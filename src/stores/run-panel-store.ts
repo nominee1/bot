@@ -7,6 +7,10 @@ import { contract_stages, TContractStage } from '@/constants/contract-stage';
 import { run_panel } from '@/constants/run-panel';
 import { ErrorTypes, MessageTypes, observer, unrecoverable_errors } from '@/external/bot-skeleton';
 import { getSelectedTradeType } from '@/external/bot-skeleton/scratch/utils';
+import {
+    hasPendingShadowUiSettles,
+    onPendingShadowUiSettlesClear,
+} from '@/external/bot-skeleton/services/tradeEngine/trade/Purchase';
 import { resetCrShadowMatchesFirstRun } from '@/utils/botEngineCrShadowPurchase';
 // import { journalError, switch_account_notification } from '@/utils/bot-notifications';
 import GTM from '@/utils/gtm';
@@ -274,8 +278,8 @@ export default class RunPanelStore {
             this.setContractStage(contract_stages.NOT_RUNNING);
             ui.setAccountSwitcherDisabledMessage();
             this.setIsRunning(false);
-        } else if (this.has_open_contract) {
-            // when user click stop button when bot is running
+        } else if (this.has_open_contract || hasPendingShadowUiSettles()) {
+            // Open (or still-settling virtual) trade: keep listeners for entry/exit.
             this.setContractStage(contract_stages.IS_STOPPING);
         } else {
             // when user click stop button before bot start running
@@ -557,6 +561,15 @@ export default class RunPanelStore {
             this.unregisterBotListeners();
             self_exclusion.resetSelfExclusion();
         };
+        // Keep bot.contract listening until virtual entry/exit timers finish — Stop only
+        // blocks the next trade (api_base.is_running=false); do not drop mid-trade UI settles.
+        const finishStopAfterPendingSettles = () => {
+            this.setIsRunning(false);
+            this.setContractStage(contract_stages.NOT_RUNNING);
+            ui.setAccountSwitcherDisabledMessage();
+            this.unregisterBotListeners();
+            self_exclusion.resetSelfExclusion();
+        };
         if (this.error_type === ErrorTypes.RECOVERABLE_ERRORS) {
             // Bot should indicate it started in below cases:
             // - When error happens it's a recoverable error
@@ -583,8 +596,16 @@ export default class RunPanelStore {
             this.is_sell_requested = false;
             this.setContractStage(contract_stages.CONTRACT_CLOSED);
             ui.setAccountSwitcherDisabledMessage();
-            this.unregisterBotListeners();
-            self_exclusion.resetSelfExclusion();
+            if (hasPendingShadowUiSettles()) {
+                onPendingShadowUiSettlesClear(finishStopAfterPendingSettles);
+            } else {
+                this.unregisterBotListeners();
+                self_exclusion.resetSelfExclusion();
+            }
+        } else if (hasPendingShadowUiSettles()) {
+            // Stop landed before has_open_contract flipped, but virtual settle timers are live.
+            this.setContractStage(contract_stages.CONTRACT_CLOSED);
+            onPendingShadowUiSettlesClear(finishStopAfterPendingSettles);
         }
 
         this.setHasOpenContract(false);
