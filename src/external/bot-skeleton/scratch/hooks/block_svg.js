@@ -115,9 +115,58 @@ window.Blockly.BlockSvg.prototype.toggleCollapseWithDelay = function (collapsed)
 // Store original onMouseDown_ function
 const originalOnMouseDown = window.Blockly.BlockSvg.prototype.onMouseDown_;
 
+const isTouchPointer = event => event?.pointerType === 'touch' || String(event?.type || '').startsWith('touch');
+
+/** Editable field under a finger. A tap on the number must open the input, not only select the block. */
+const editableFieldAtPointer = (block, event) => {
+    const x = event?.clientX;
+    const y = event?.clientY;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const pad = isTouchPointer(event) ? 16 : 2;
+    let best = null;
+    let bestArea = Infinity;
+
+    const visit = current => {
+        if (!current) return;
+        (current.inputList || []).forEach(input => {
+            (input.fieldRow || []).forEach(field => {
+                if (typeof field.isClickable !== 'function' || !field.isClickable()) return;
+                const svg = typeof field.getSvgRoot === 'function' ? field.getSvgRoot() : null;
+                const rect = svg && svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
+                if (!rect || rect.width <= 0 || rect.height <= 0) return;
+                const hit =
+                    x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
+                if (!hit) return;
+                const area = rect.width * rect.height;
+                if (area < bestArea) {
+                    best = field;
+                    bestArea = area;
+                }
+            });
+            const child = input.connection && input.connection.targetBlock && input.connection.targetBlock();
+            if (child) visit(child);
+        });
+    };
+
+    visit(block);
+    return best;
+};
+
 // Override onMouseDown_ to handle both selection and dragging
 window.Blockly.BlockSvg.prototype.onMouseDown_ = function (e) {
-    if (!this.workspace.options.readOnly && !e.shiftKey) {
+    const touch = isTouchPointer(e);
+    if (touch && window.Blockly.config) {
+        // A finger moves more than Blockly's 5px click radius, which cancels the field editor.
+        window.Blockly.config.dragRadius = 28;
+    } else if (window.Blockly.config) {
+        window.Blockly.config.dragRadius = 5;
+    }
+
+    const field = editableFieldAtPointer(this, e);
+    if (field) {
+        const gesture = this.workspace.getGesture(e);
+        if (gesture) gesture.setStartField(field);
+    } else if (!this.workspace.options.readOnly && !e.shiftKey) {
         this.addSelect();
     }
     // Call original handler to maintain drag functionality
