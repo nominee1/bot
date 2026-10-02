@@ -20,26 +20,28 @@ import {
 } from '@/utils/flipaaVirtualDecision';
 
 /** Shared tick path for stacked hedge purchases (both sides of one round). */
-let hedgeWindowCache: {
-    key: string;
-    entry: VirtTick;
-    exit: VirtTick;
-    ticks: VirtTick[];
-    at: number;
-} | null = null;
-
 type HedgeSharedPath = { entry: VirtTick; exit: VirtTick; ticks: VirtTick[] };
 
-/** In-flight path so Only Ups and Only Downs started together share one window. */
+/**
+ * In-flight path so Only Ups and Only Downs started together share one window.
+ * Scoped to hedgeRoundId — Flipaa takes a fresh entry every round, so never reuse
+ * a finished path for the next trade (the old 8s cache did that).
+ */
+let hedgeRoundId = 0;
 let hedgeWindowInflight: {
     key: string;
     promise: Promise<HedgeSharedPath | null>;
 } | null = null;
 
-const HEDGE_WINDOW_REUSE_MS = 8000;
+/** Call once at the start of each stacked hedge commit so legs share ticks without leaking to the next round. */
+export function beginCrShadowHedgeRound(): number {
+    hedgeRoundId += 1;
+    hedgeWindowInflight = null;
+    return hedgeRoundId;
+}
 
 function hedgeWindowKey(market: string, duration: number, barrier: number | string | undefined): string {
-    return `${market}|${duration}|${barrier ?? ''}`;
+    return `${hedgeRoundId}|${market}|${duration}|${barrier ?? ''}`;
 }
 
 function decisionFromSharedPair(
@@ -69,10 +71,6 @@ async function decideFlipVirtualPairWithHedgeReuse(
     market: string
 ): Promise<VirtFlipDecision> {
     const key = hedgeWindowKey(market, duration, barrier);
-    const cached = hedgeWindowCache;
-    if (cached && cached.key === key && Date.now() - cached.at < HEDGE_WINDOW_REUSE_MS) {
-        return decisionFromSharedPair(st, barrier, market, cached);
-    }
 
     if (hedgeWindowInflight && hedgeWindowInflight.key === key) {
         const shared = await hedgeWindowInflight.promise;
@@ -89,13 +87,7 @@ async function decideFlipVirtualPairWithHedgeReuse(
         const decision = await decideFlipVirtualPair(refs, st, barrier, duration, market);
         if (decision.decided) {
             const ticks = decision.path && decision.path.length >= 2 ? decision.path : [decision.entry, decision.exit];
-            const shared = { entry: decision.entry, exit: decision.exit, ticks };
-            hedgeWindowCache = {
-                key,
-                ...shared,
-                at: Date.now(),
-            };
-            resolveShared(shared);
+            resolveShared({ entry: decision.entry, exit: decision.exit, ticks });
         } else {
             resolveShared(null);
         }

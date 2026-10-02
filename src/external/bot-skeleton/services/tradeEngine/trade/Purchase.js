@@ -5,6 +5,7 @@ import {
 } from '@/components/shared/utils/trading/deriv-session-contract-purchase';
 import { isBotEmbed } from '@/utils/bot-embed';
 import {
+    beginCrShadowHedgeRound,
     executeBotEngineCrShadowPurchase,
     resolveCrShadowWalletLoginid,
     shouldUseCrShadowLiveFills,
@@ -97,6 +98,8 @@ export default Engine =>
             }
 
             const run = async () => {
+                // Fresh entry for this round only — legs share ticks; next trade must not reuse them.
+                beginCrShadowHedgeRound();
                 // Start every leg together so Only Ups and Only Downs share one tick window.
                 await Promise.all(
                     types.map(contract_type => {

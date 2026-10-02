@@ -6,6 +6,7 @@
  */
 import { api_base } from '@/external/bot-skeleton';
 import {
+    beginCrShadowHedgeRound,
     CONTRACT_TO_FLIP_STRATEGY,
     type CrShadowVirtFillResult,
     ensureCrShadowVirtTickBuffer,
@@ -452,4 +453,4 @@ export async function executeBotEngineCrShadowPurchase(args: {
     }
 }
 
-export { resolveCrShadowWalletLoginid, shouldUseCrShadowLiveFills };
+export { beginCrShadowHedgeRound, resolveCrShadowWalletLoginid, shouldUseCrShadowLiveFills };
