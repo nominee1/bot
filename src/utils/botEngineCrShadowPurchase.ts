@@ -120,6 +120,8 @@ export type BotEngineCrShadowPurchaseResult = {
     openContract: Record<string, unknown>;
     soldContract: Record<string, unknown>;
     walletLoginId: string;
+    /** Apply deferred sell credit when the run panel settles (idempotent). */
+    completeLedgerCredit?: () => void;
 };
 
 /** Demo-style buy ids: constant head `47674`, rotating middle, trailing `9` (e.g. 4767405699). */
@@ -449,6 +451,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
             ...built,
             fill,
             walletLoginId: walletLogin,
+            completeLedgerCredit: fill.completeLedgerCredit,
         };
     } finally {
         fillInFlightRef.current = false;

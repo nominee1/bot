@@ -297,14 +297,21 @@ export default Engine =>
 
                 const settleSold = () => {
                     try {
-                        if (typeof this.processContractUpdate !== 'function') return;
-                        this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
-                            afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
-                        });
-                        bumpTick();
+                        if (typeof this.processContractUpdate === 'function') {
+                            // Sold row first — credit must not land before exit/P&L is visible.
+                            this.processContractUpdate(shadow.soldContract, shadow.walletLoginId, {
+                                afterCompleteDelayMs: CR_SHADOW_AFTER_COMPLETE_MS,
+                            });
+                        }
                     } catch {
                         /* ignore settle races */
                     }
+                    try {
+                        shadow.completeLedgerCredit?.();
+                    } catch {
+                        /* ignore ledger races */
+                    }
+                    bumpTick();
                 };
 
                 settleEntry.flush = () => {

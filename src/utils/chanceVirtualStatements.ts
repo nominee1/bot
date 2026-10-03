@@ -1,7 +1,7 @@
 import type ClientStore from '@/stores/client-store';
 import {
     ALLOWED_BOT_IFRAME_LOGINID,
-    applyCrShadowDeltaLocked,
+    applyCrShadowDeltaSync,
     getCrShadow,
     getCrShadowForWallet,
     getMoonLeadVirtualLedgerKey,
@@ -56,11 +56,16 @@ export async function saveChanceVirtualStatement(payload: ChanceStatementPayload
     }
 }
 
+export type CrChanceLedgerRoundTripHandle = {
+    /** Apply sell credit + statement. Idempotent. Call from run-panel settle. */
+    completeCredit: () => void;
+};
+
 /**
  * Persist buy/sell rows for CR7557018 shadow round-trips only (same pattern as marketing BotIframe).
- * Buy row fires immediately after debit; sell/credit waits for `creditDelayMs` (default 800ms).
- * Bot Builder passes the run-panel settle delay so P/L hits the balance with the sold row.
- * Do NOT snap to Railway absolute here — that races the next trade and makes the header bounce.
+ * Buy row fires immediately after debit.
+ * Sell/credit: Bot Builder uses `deferCredit` and completes on run-panel settle; other callers
+ * use `creditDelayMs` (default 800ms). Do NOT snap to Railway absolute here.
  */
 export function scheduleCrChanceLedgerRoundTrip(params: {
     client: ClientStore;
@@ -69,9 +74,14 @@ export function scheduleCrChanceLedgerRoundTrip(params: {
     settlementCredit: number;
     entryEpochSec: number;
     exitEpochSec: number;
-    /** ms until sell credit — match UI settle (e.g. 5s contract → 5000). Default 800. */
+    /** ms until sell credit when not deferring. Default 800. */
     creditDelayMs?: number;
-}): void {
+    /**
+     * When true, do not start a timer — caller must invoke `completeCredit()` when the
+     * run panel publishes exit/P&L so the header cannot race ahead of the sold row.
+     */
+    deferCredit?: boolean;
+}): CrChanceLedgerRoundTripHandle | void {
     const { client, walletLoginId, ask, settlementCredit, entryEpochSec, exitEpochSec } = params;
     const creditDelayMs = Math.max(0, Number(params.creditDelayMs) || 800);
     if (!isCrVirtualShadowLogin(walletLoginId)) return;
@@ -101,31 +111,47 @@ export function scheduleCrChanceLedgerRoundTrip(params: {
         balance_after: Number(balanceAfterBuy.toFixed(2)),
     });
 
-    window.setTimeout(() => {
-        void (async () => {
+    let completed = false;
+    const completeCredit = () => {
+        if (completed) return;
+        completed = true;
+        const creditLogin = String(walletLoginId ?? debitLoginKey);
+        // Sync header in this turn so balance paints with the sold row (not a timer race).
+        if (settlementCredit > 0) {
             try {
-                if (settlementCredit > 0) {
-                    await applyCrShadowDeltaLocked(client, String(walletLoginId ?? debitLoginKey), settlementCredit);
-                }
-                const rawSell = getCrShadowForWallet(walletLoginId) ?? getCrShadow(ledgerKey);
-                const balanceAfterSell =
-                    typeof rawSell === 'number' && Number.isFinite(rawSell)
-                        ? rawSell
-                        : Number((balanceAfterBuy + settlementCredit).toFixed(2));
-
-                void saveChanceVirtualStatement({
-                    username: CHANCE_LEDGER_USERNAME,
-                    loginid: debitLoginKey,
-                    transaction_time: exitEpochSec,
-                    action_type: 'sell',
-                    reference_id: sellRef,
-                    reference_type: 'sell',
-                    amount: Number(settlementCredit.toFixed(2)),
-                    balance_after: Number(balanceAfterSell.toFixed(2)),
-                });
-            } finally {
-                endVirtualSettlementHold();
+                applyCrShadowDeltaSync(client, creditLogin, settlementCredit);
+            } catch {
+                /* ignore */
             }
-        })();
+        }
+        try {
+            const rawSell = getCrShadowForWallet(walletLoginId) ?? getCrShadow(ledgerKey);
+            const balanceAfterSell =
+                typeof rawSell === 'number' && Number.isFinite(rawSell)
+                    ? rawSell
+                    : Number((balanceAfterBuy + settlementCredit).toFixed(2));
+
+            void saveChanceVirtualStatement({
+                username: CHANCE_LEDGER_USERNAME,
+                loginid: debitLoginKey,
+                transaction_time: exitEpochSec,
+                action_type: 'sell',
+                reference_id: sellRef,
+                reference_type: 'sell',
+                amount: Number(settlementCredit.toFixed(2)),
+                balance_after: Number(balanceAfterSell.toFixed(2)),
+            });
+        } finally {
+            endVirtualSettlementHold();
+        }
+    };
+
+    if (params.deferCredit) {
+        return { completeCredit };
+    }
+
+    window.setTimeout(() => {
+        completeCredit();
     }, creditDelayMs);
+    return { completeCredit };
 }

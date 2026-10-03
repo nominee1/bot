@@ -251,6 +251,8 @@ export type CrShadowVirtFillResult = {
     /** From Deriv proposal — used for journal Bought: … lines. */
     longcode?: string;
     shortcode?: string;
+    /** Flush sell credit when the run panel publishes exit/P&L (idempotent). */
+    completeLedgerCredit?: () => void;
 };
 
 export type CrShadowVirtWsHandle = {
@@ -423,14 +425,6 @@ export async function ensureCrShadowVirtTickBuffer(
     throw new Error('virtual-tick-timeout');
 }
 
-/** Match Purchase.js run-panel settle timing (~1s/tick or /second; minutes × 60s). */
-function uiSettleDelayMs(duration: number, durationUnit?: string): number {
-    const units = Math.max(1, Number(duration) || 1);
-    const unit = String(durationUnit || 't').toLowerCase();
-    const msPerUnit = unit === 'm' || unit === 'min' ? 60_000 : 1000;
-    return units * msPerUnit;
-}
-
 export async function executeCrShadowVirtualFill(args: {
     client: { loginid?: string; all_accounts_balance?: { accounts?: Record<string, { balance?: number }> } };
     walletLoginId: string;
@@ -452,7 +446,6 @@ export async function executeCrShadowVirtualFill(args: {
         stake,
         market,
         duration,
-        durationUnit,
         barrier,
         currency,
         ensureApiReady,
@@ -618,15 +611,16 @@ export async function executeCrShadowVirtualFill(args: {
             if (refs.onlyRunLossStreakRef?.current) refs.onlyRunLossStreakRef.current[st] = next;
         }
 
-        scheduleCrChanceLedgerRoundTrip({
+        // Defer sell credit until Purchase.js run-panel settle — a parallel timer was
+        // racing ahead of the sold row (balance credited before exit/P&L appeared).
+        const ledger = scheduleCrChanceLedgerRoundTrip({
             client,
             walletLoginId,
             ask,
             settlementCredit: decision.win ? payout : 0,
             entryEpochSec: decision.entry.epoch,
             exitEpochSec: decision.exit.epoch,
-            // Credit with run-panel exit/P&L reveal (not the legacy 800ms marketing delay).
-            creditDelayMs: uiSettleDelayMs(duration, durationUnit),
+            deferCredit: true,
         });
         settleScheduled = true;
 
@@ -642,6 +636,7 @@ export async function executeCrShadowVirtualFill(args: {
             exit: displayTicks.exit,
             longcode: longcode || undefined,
             shortcode: shortcode || undefined,
+            completeLedgerCredit: ledger?.completeCredit,
         };
     } finally {
         if (!settleScheduled) endVirtualSettlementHold();
