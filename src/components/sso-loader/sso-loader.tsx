@@ -6,7 +6,7 @@ const SSOLoader = () => {
         <div className='sso-loader'>
             <div className='sso-loader__content'>
                 <img src={getImageLocation('sso_loader.gif')} width={234} height={234} alt='loader' />
-                <h3 className='callback__title'>{localize('Getting your account ready')}</h3>
+                <h3 className='callback__title'>{localize('Initializing Deriv Bot account...')}</h3>
             </div>
         </div>
     );

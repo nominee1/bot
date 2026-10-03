@@ -6,7 +6,7 @@ export default function OAuthAccountSetupOverlay() {
         <div className='oauth-account-setup-overlay' role='status' aria-live='polite' aria-busy='true'>
             <div className='oauth-account-setup-overlay__card'>
                 <span className='oauth-account-setup-overlay__spinner' aria-hidden />
-                <strong>{localize('Setting up your account, please hold on…')}</strong>
+                <strong>{localize('Initializing Deriv Bot account...')}</strong>
             </div>
         </div>
     );

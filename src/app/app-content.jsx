@@ -309,11 +309,9 @@ const AppContent = observer(() => {
 
     if (common?.error) return null;
 
-    // Show loading message based on online/offline state
+    // One boot copy for every path into Deriv Bot (OAuth, embed, remount).
     const getLoadingMessage = () => {
         if (is_eu_error_loading) return '';
-        if (!isOnline) return localize('Loading offline dashboard...');
-        if (isDerivOptionsOAuthSession()) return localize('Setting up your account, please hold on…');
         return localize('Initializing Deriv Bot account...');
     };
 

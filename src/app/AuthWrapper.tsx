@@ -165,10 +165,7 @@ export const AuthWrapper = () => {
         }
     }, [isOnline, isAuthComplete]);
 
-    const getLoadingMessage = () => {
-        if (!isOnline) return localize('Loading offline mode...');
-        return localize('Initializing...');
-    };
+    const getLoadingMessage = () => localize('Initializing Deriv Bot account...');
 
     if (!isAuthComplete) {
         return <ChunkLoader message={getLoadingMessage()} />;
