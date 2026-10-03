@@ -74,10 +74,24 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
         getHandoffShadowLoginid() || (real_loginid && isCrVirtualShadowLogin(real_loginid))
     );
 
+    const shadowReal = real_loginid ? getCrShadowForWallet(real_loginid) : undefined;
+    const sessionReal = readPersistedDeriv1Session()?.virtualBalance;
+    const listedReal = real_loginid ? client.all_accounts_balance?.accounts?.[real_loginid]?.balance : undefined;
+    // Persisted shadow / in-memory Railway cache are trusted — show them immediately.
+    // Skeleton only when we have neither and are still waiting on the first live fetch
+    // (avoids the Options REST flash, e.g. 3916, without locking the UI forever).
+    const has_trusted_ledger =
+        (typeof live_managed_balance === 'number' && Number.isFinite(live_managed_balance)) ||
+        (typeof shadowReal === 'number' && Number.isFinite(shadowReal));
+
     useEffect(() => {
         if (is_virtual_account || !uses_virtual_ledger) {
             setIsLiveBalanceReady(true);
             return undefined;
+        }
+
+        if (has_trusted_ledger) {
+            setIsLiveBalanceReady(true);
         }
 
         let cancelled = false;
@@ -98,12 +112,13 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                     cacheServerManagedBalanceOnly(bal);
                     return;
                 }
-                // Railway unavailable — fall back to local shadow after a short wait
-                // so we never flash Options REST (e.g. 3916) as the header balance.
+                // Railway unavailable — fall back to local shadow after a short wait.
                 fallbackTimer = window.setTimeout(() => {
                     if (!cancelled) setIsLiveBalanceReady(true);
                 }, 1200);
             });
+        } else {
+            setIsLiveBalanceReady(true);
         }
 
         return () => {
@@ -111,20 +126,14 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             unsubscribe();
             if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
         };
-    }, [is_virtual_account, uses_virtual_ledger, real_loginid]);
+    }, [is_virtual_account, uses_virtual_ledger, real_loginid, has_trusted_ledger]);
 
-    const shadowReal = real_loginid ? getCrShadowForWallet(real_loginid) : undefined;
-    const sessionReal = readPersistedDeriv1Session()?.virtualBalance;
-    const listedReal = real_loginid ? client.all_accounts_balance?.accounts?.[real_loginid]?.balance : undefined;
-
-    // Until Railway/live ledger is ready, do not surface Options REST / stale session figures.
+    // Prefer live Railway, then shadow. Never use Options REST listed balance for virtual ledgers.
     const real_balance = Number(
         (typeof live_managed_balance === 'number' && Number.isFinite(live_managed_balance)
             ? live_managed_balance
             : undefined) ??
-            (is_live_balance_ready && typeof shadowReal === 'number' && Number.isFinite(shadowReal)
-                ? shadowReal
-                : undefined) ??
+            (typeof shadowReal === 'number' && Number.isFinite(shadowReal) ? shadowReal : undefined) ??
             (is_live_balance_ready && typeof sessionReal === 'number' && Number.isFinite(sessionReal)
                 ? sessionReal
                 : undefined) ??
@@ -135,7 +144,8 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             0
     );
     const header_balance = is_virtual_account ? DERIV1_DEMO_BALANCE : real_balance;
-    const show_balance_skeleton = !is_virtual_account && uses_virtual_ledger && !is_live_balance_ready;
+    const show_balance_skeleton =
+        !is_virtual_account && uses_virtual_ledger && !is_live_balance_ready && !has_trusted_ledger;
 
     const dropdown_rows = [
         {
