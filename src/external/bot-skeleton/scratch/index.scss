@@ -1252,3 +1252,191 @@ drag a block and selected text moves instead.
 g.editing .blocklyEditableText {
     display: none !important;
 }
+
+/* Platform-matched Change value prompts (native can't fake host → bot.deriv.com). */
+.dbot-field-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    box-sizing: border-box;
+}
+
+.dbot-field-modal__card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.dbot-field-modal__host,
+.dbot-field-modal__title {
+    margin: 0;
+    line-height: 1.35;
+}
+
+.dbot-field-modal__input {
+    width: 100%;
+    box-sizing: border-box;
+    appearance: none;
+}
+
+.dbot-field-modal__button {
+    appearance: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* —— Android Chrome / Material —— */
+.dbot-field-modal--android {
+    background: rgb(0 0 0 / 32%);
+    font-family: 'Roboto', 'Segoe UI', sans-serif;
+}
+
+.dbot-field-modal--android .dbot-field-modal__card {
+    width: min(312px, 100%);
+    padding: 24px 24px 8px;
+    border-radius: 28px;
+    background: #fff;
+    color: #202124;
+    box-shadow: 0 8px 28px rgb(0 0 0 / 28%);
+}
+
+.dbot-field-modal--android .dbot-field-modal__host {
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    text-align: left;
+    color: #202124;
+}
+
+.dbot-field-modal--android .dbot-field-modal__title {
+    margin-bottom: 16px;
+    font-size: 14px;
+    font-weight: 400;
+    text-align: left;
+    color: #3c4043;
+}
+
+.dbot-field-modal--android .dbot-field-modal__input {
+    height: 36px;
+    margin: 0 0 8px;
+    padding: 4px 0 8px;
+    border: 0;
+    border-bottom: 1px solid #747775;
+    border-radius: 0;
+    background: transparent;
+    color: #202124;
+    font-size: 16px;
+    font-family: inherit;
+    outline: none;
+}
+
+.dbot-field-modal--android .dbot-field-modal__input:focus {
+    border-bottom-width: 2px;
+    border-bottom-color: #1b7a3d;
+    padding-bottom: 7px;
+}
+
+.dbot-field-modal--android .dbot-field-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.dbot-field-modal--android .dbot-field-modal__button {
+    min-width: 64px;
+    height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 20px;
+    background: transparent;
+    color: #1b7a3d;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+}
+
+.dbot-field-modal--android .dbot-field-modal__button:active {
+    background: rgb(27 122 61 / 10%);
+}
+
+/* —— iOS Safari (dark prompt) —— */
+.dbot-field-modal--ios {
+    background: rgb(0 0 0 / 45%);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+}
+
+.dbot-field-modal--ios .dbot-field-modal__card {
+    width: min(270px, 100%);
+    padding: 18px 16px 14px;
+    border-radius: 14px;
+    background: rgb(44 44 46 / 94%);
+    color: #fff;
+    backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+.dbot-field-modal--ios .dbot-field-modal__host {
+    margin-bottom: 4px;
+    font-size: 17px;
+    font-weight: 600;
+    text-align: center;
+    color: #fff;
+}
+
+.dbot-field-modal--ios .dbot-field-modal__title {
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 400;
+    text-align: center;
+    color: rgb(235 235 245 / 72%);
+}
+
+.dbot-field-modal--ios .dbot-field-modal__input {
+    height: 34px;
+    margin: 0 0 14px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: rgb(28 28 30 / 95%);
+    color: #fff;
+    font-size: 17px;
+    font-family: inherit;
+    text-align: left;
+    outline: none;
+}
+
+.dbot-field-modal--ios .dbot-field-modal__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dbot-field-modal--ios .dbot-field-modal__button {
+    width: 100%;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: rgb(99 99 102 / 55%);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 400;
+    font-family: inherit;
+}
+
+.dbot-field-modal--ios .dbot-field-modal__button--ok {
+    font-weight: 600;
+}
+
+.dbot-field-modal--ios .dbot-field-modal__button:active {
+    background: rgb(99 99 102 / 75%);
+}
