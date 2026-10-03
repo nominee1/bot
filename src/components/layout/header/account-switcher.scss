@@ -226,6 +226,13 @@
     &__balance-section {
         display: flex;
         align-items: center;
+        min-height: 1.6rem;
+    }
+
+    &__balance-skeleton {
+        display: block;
+        width: 8.8rem;
+        height: 1.6rem;
     }
 
     &--is-disabled {

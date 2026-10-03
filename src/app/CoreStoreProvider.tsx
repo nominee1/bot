@@ -36,7 +36,11 @@ import {
     writeCrShadow,
 } from '@/utils/crVirtualBalanceShadow';
 import { getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
-import { fetchSharedVirtualLedgerBalance, hasVirtualSettlementHold } from '@/utils/sharedVirtualLedgerSync';
+import {
+    cacheServerManagedBalanceOnly,
+    fetchSharedVirtualLedgerBalance,
+    hasVirtualSettlementHold,
+} from '@/utils/sharedVirtualLedgerSync';
 import type { Balance } from '@deriv/api-types';
 import { useTranslations } from '@deriv-com/translations';
 
@@ -49,7 +53,9 @@ function mergeOptionsAccountBalances(
         const loginid = String(account.loginid ?? '');
         if (!allowedLoginids.has(loginid)) return;
         if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
-            syncCrShadowBalanceIfNeeded(client, loginid, Number(account.balance ?? 0));
+            // Never seed the virtual ledger from Options REST — that flashes the
+            // broker balance (e.g. 3916) before Railway's managed balance arrives.
+            syncCrShadowBalanceIfNeeded(client, loginid);
             return;
         }
         if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
@@ -217,6 +223,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             // and an in-flight read must not clobber a trade that landed while it was waiting.
             if (cancelled || bal == null || ticket !== pullTicket || stillRunning || hasVirtualSettlementHold()) return;
             // Silent write: parent already streams Railway SSE.
+            cacheServerManagedBalanceOnly(bal);
             writeCrShadow(ledgerLogin, bal, { notifyParent: false });
             syncCrShadowBalanceIfNeeded(client, ledgerLogin, bal);
             if (!isCrVirtualShadowLogin(loginid)) {
@@ -369,7 +376,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
                     });
                     Object.keys(balance.accounts).forEach(loginid => {
                         if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
-                            syncCrShadowBalanceIfNeeded(client, loginid, Number(balance.accounts?.[loginid]?.balance));
+                            syncCrShadowBalanceIfNeeded(client, loginid);
                         } else if (shouldSuppressDerivBalanceForMoonLead(loginid)) {
                             syncMoonVirtLedgerToHeaderIfNeeded(client, loginid);
                         }
@@ -385,7 +392,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
                 } else if (balance?.loginid) {
                     const loginid = String(balance.loginid);
                     if (shouldSuppressDerivBalanceForVirtualShadow(loginid)) {
-                        syncCrShadowBalanceIfNeeded(client, loginid, Number(balance.balance));
+                        syncCrShadowBalanceIfNeeded(client, loginid);
                         return;
                     }
                     if (shouldSuppressDerivBalanceForMoonLead(loginid)) {

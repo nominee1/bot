@@ -8,6 +8,8 @@ let ledgerAdjustChain: Promise<void> = Promise.resolve();
 /** Covers debit → delayed credit → ledger-adjust so capital poll cannot flash a mixed balance. */
 let settlementHoldCount = 0;
 let lastServerManagedBalance: number | null = null;
+type TServerManagedBalanceListener = (balance: number) => void;
+const serverManagedBalanceListeners = new Set<TServerManagedBalanceListener>();
 
 export function beginVirtualSettlementHold(): void {
     settlementHoldCount += 1;
@@ -26,10 +28,24 @@ export function cacheServerManagedBalanceOnly(balance: number | null | undefined
     const n = Number(balance);
     if (!Number.isFinite(n)) return;
     lastServerManagedBalance = Math.round(n * 100) / 100;
+    serverManagedBalanceListeners.forEach(listener => listener(lastServerManagedBalance as number));
 }
 
 export function getCachedServerManagedBalance(): number | null {
     return lastServerManagedBalance;
+}
+
+export function isServerManagedBalanceReady(): boolean {
+    return lastServerManagedBalance != null;
+}
+
+/** Fires immediately with the cached value when present, then on each Railway/live update. */
+export function subscribeServerManagedBalance(listener: TServerManagedBalanceListener): () => void {
+    serverManagedBalanceListeners.add(listener);
+    if (lastServerManagedBalance != null) listener(lastServerManagedBalance);
+    return () => {
+        serverManagedBalanceListeners.delete(listener);
+    };
 }
 
 function bearer(): string {

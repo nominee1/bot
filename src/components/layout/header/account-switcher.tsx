@@ -1,12 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
+import ContentLoader from 'react-content-loader';
 import { formatMoney, getCurrencyDisplayCode } from '@/components/shared';
 import Text from '@/components/shared_ui/text';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import { isBotEmbed } from '@/utils/bot-embed';
-import { getCrShadowForWallet } from '@/utils/crVirtualBalanceShadow';
+import { getCrShadowForWallet, isCrVirtualShadowLogin } from '@/utils/crVirtualBalanceShadow';
 import {
     DERIV1_DEMO_BALANCE,
     DERIV1_DEMO_LOGINID,
@@ -16,16 +17,41 @@ import {
     readPersistedDeriv1Session,
     switchDeriv1AccountMode,
 } from '@/utils/deriv1SessionHandoff';
+import {
+    cacheServerManagedBalanceOnly,
+    fetchSharedVirtualLedgerBalance,
+    getCachedServerManagedBalance,
+    subscribeServerManagedBalance,
+} from '@/utils/sharedVirtualLedgerSync';
 import { localize } from '@deriv-com/translations';
 import { TAccountSwitcher } from './common/types';
 import AccountDropdown from './account-dropdown';
 import './account-switcher.scss';
+
+const BalanceSkeleton = () => (
+    <ContentLoader
+        data-testid='dt_balance_skeleton'
+        speed={2}
+        width={88}
+        height={16}
+        viewBox='0 0 88 16'
+        backgroundColor='var(--general-section-1, #e9e9e9)'
+        foregroundColor='var(--general-hover, #d6d6d6)'
+        className='acc-info__balance-skeleton'
+    >
+        <rect x='0' y='2' rx='4' ry='4' width='88' height='12' />
+    </ContentLoader>
+);
 
 const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     const { accountList, activeLoginid } = useApiBase();
     const { run_panel, client } = useStore();
     const { is_stop_button_visible } = run_panel;
     const [is_dropdown_open, setIsDropdownOpen] = useState(false);
+    const [live_managed_balance, setLiveManagedBalance] = useState<number | null>(() =>
+        getCachedServerManagedBalance()
+    );
+    const [is_live_balance_ready, setIsLiveBalanceReady] = useState(() => getCachedServerManagedBalance() != null);
     const triggerRef = useRef<HTMLDivElement>(null);
 
     const embedOrHandoff = Boolean(getHandoffShadowLoginid() || isBotEmbed());
@@ -44,17 +70,72 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
         readPersistedDeriv1Session()?.loginid ||
         '';
 
+    const uses_virtual_ledger = Boolean(
+        getHandoffShadowLoginid() || (real_loginid && isCrVirtualShadowLogin(real_loginid))
+    );
+
+    useEffect(() => {
+        if (is_virtual_account || !uses_virtual_ledger) {
+            setIsLiveBalanceReady(true);
+            return undefined;
+        }
+
+        let cancelled = false;
+        let fallbackTimer: number | undefined;
+
+        const onLiveBalance = (bal: number) => {
+            if (cancelled) return;
+            setLiveManagedBalance(bal);
+            setIsLiveBalanceReady(true);
+        };
+
+        const unsubscribe = subscribeServerManagedBalance(onLiveBalance);
+
+        if (getCachedServerManagedBalance() == null) {
+            void fetchSharedVirtualLedgerBalance().then(bal => {
+                if (cancelled) return;
+                if (bal != null) {
+                    cacheServerManagedBalanceOnly(bal);
+                    return;
+                }
+                // Railway unavailable — fall back to local shadow after a short wait
+                // so we never flash Options REST (e.g. 3916) as the header balance.
+                fallbackTimer = window.setTimeout(() => {
+                    if (!cancelled) setIsLiveBalanceReady(true);
+                }, 1200);
+            });
+        }
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+            if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
+        };
+    }, [is_virtual_account, uses_virtual_ledger, real_loginid]);
+
     const shadowReal = real_loginid ? getCrShadowForWallet(real_loginid) : undefined;
     const sessionReal = readPersistedDeriv1Session()?.virtualBalance;
     const listedReal = real_loginid ? client.all_accounts_balance?.accounts?.[real_loginid]?.balance : undefined;
+
+    // Until Railway/live ledger is ready, do not surface Options REST / stale session figures.
     const real_balance = Number(
-        (typeof shadowReal === 'number' && Number.isFinite(shadowReal) ? shadowReal : undefined) ??
-            (typeof sessionReal === 'number' && Number.isFinite(sessionReal) ? sessionReal : undefined) ??
-            (typeof listedReal === 'number' && Number.isFinite(listedReal) ? listedReal : undefined) ??
-            (!is_virtual_account ? Number(client.balance) : undefined) ??
+        (typeof live_managed_balance === 'number' && Number.isFinite(live_managed_balance)
+            ? live_managed_balance
+            : undefined) ??
+            (is_live_balance_ready && typeof shadowReal === 'number' && Number.isFinite(shadowReal)
+                ? shadowReal
+                : undefined) ??
+            (is_live_balance_ready && typeof sessionReal === 'number' && Number.isFinite(sessionReal)
+                ? sessionReal
+                : undefined) ??
+            (!uses_virtual_ledger && typeof listedReal === 'number' && Number.isFinite(listedReal)
+                ? listedReal
+                : undefined) ??
+            (!uses_virtual_ledger && !is_virtual_account ? Number(client.balance) : undefined) ??
             0
     );
     const header_balance = is_virtual_account ? DERIV1_DEMO_BALANCE : real_balance;
+    const show_balance_skeleton = !is_virtual_account && uses_virtual_ledger && !is_live_balance_ready;
 
     const dropdown_rows = [
         {
@@ -128,9 +209,13 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                         </div>
                     </div>
                     <div className='acc-info__balance-section'>
-                        <p data-testid='dt_balance' className='acc-info__balance'>
-                            {`${formatMoney(currency_code, header_balance, true)} ${getCurrencyDisplayCode(currency_code)}`}
-                        </p>
+                        {show_balance_skeleton ? (
+                            <BalanceSkeleton />
+                        ) : (
+                            <p data-testid='dt_balance' className='acc-info__balance'>
+                                {`${formatMoney(currency_code, header_balance, true)} ${getCurrencyDisplayCode(currency_code)}`}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
