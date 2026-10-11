@@ -6,9 +6,9 @@ import { isCrVirtualShadowLogin, runWithCrShadowLock, tryDebitCrShadowSync } fro
 import { DERIV1_DEMO_LOGINID, getHandoffShadowLoginid, isDeriv1DemoLoginid } from '@/utils/deriv1SessionHandoff';
 import { flipaaQuoteWithForcedLastDigit } from '@/utils/flipaaTickDigitFormat';
 import {
-    applyConsecutiveLossForceWin,
     decideFlipVirtualPair,
     type FlipVirtStrategyType,
+    forceVirtualWin,
     MAX_CONSECUTIVE_LOSSES,
     MAX_SESSION_LOSSES,
     ONLY_RUN_MAX_CONSECUTIVE_LOSSES,
@@ -69,7 +69,8 @@ async function decideFlipVirtualPairWithHedgeReuse(
     st: FlipVirtStrategyType,
     barrier: number | string | undefined,
     duration: number,
-    market: string
+    market: string,
+    barrier2?: number | string
 ): Promise<VirtFlipDecision> {
     const key = hedgeWindowKey(market, duration, barrier);
 
@@ -85,7 +86,7 @@ async function decideFlipVirtualPairWithHedgeReuse(
     hedgeWindowInflight = { key, promise };
 
     try {
-        const decision = await decideFlipVirtualPair(refs, st, barrier, duration, market);
+        const decision = await decideFlipVirtualPair(refs, st, barrier, duration, market, barrier2);
         if (decision.decided) {
             const ticks = decision.path && decision.path.length >= 2 ? decision.path : [decision.entry, decision.exit];
             resolveShared({ entry: decision.entry, exit: decision.exit, ticks });
@@ -155,6 +156,8 @@ const STRATEGY_KEYS: FlipVirtStrategyType[] = [
     'fall_equals',
     'high',
     'low',
+    'stays_between',
+    'goes_outside',
 ];
 
 const contractForStrategy = (st: FlipVirtStrategyType): string => {
@@ -187,6 +190,10 @@ const contractForStrategy = (st: FlipVirtStrategyType): string => {
             return 'TICKHIGH';
         case 'low':
             return 'TICKLOW';
+        case 'stays_between':
+            return 'RANGE';
+        case 'goes_outside':
+            return 'UPORDOWN';
         default:
             return '';
     }
@@ -434,6 +441,7 @@ export async function executeCrShadowVirtualFill(args: {
     duration: number;
     durationUnit?: string;
     barrier?: number | string;
+    barrier2?: number | string;
     currency?: string;
     ensureApiReady: () => Promise<unknown>;
     ensureTicks: (symbol: string) => Promise<void>;
@@ -446,7 +454,9 @@ export async function executeCrShadowVirtualFill(args: {
         stake,
         market,
         duration,
+        durationUnit,
         barrier,
+        barrier2,
         currency,
         ensureApiReady,
         ensureTicks,
@@ -461,12 +471,12 @@ export async function executeCrShadowVirtualFill(args: {
 
     // Flipaa Instant Fill order: resolve after-fact outcome on live ticks, then price via proposal.
     // Hedge legs in one commit (Higher+Lower, Only Ups+Only Downs) reuse the same entry/exit window.
-    let decision = await decideFlipVirtualPairWithHedgeReuse(refs, st, barrier, duration, market);
+    let decision = await decideFlipVirtualPairWithHedgeReuse(refs, st, barrier, duration, market, barrier2);
 
     if (!decision.decided) throw new Error('virtual-timeout');
 
-    // Cap consecutive losses: never allow a 4th loss in a row on any contract type.
-    decision = applyConsecutiveLossForceWin(decision, st, barrier, market, refs.consecutiveLossStreakRef);
+    // Always a win. Purchase.js still holds the sold row until the duration elapses.
+    decision = forceVirtualWin(decision, st, barrier, market, barrier2);
 
     // Ensure fabricated Matches exits paint the predicted last digit on the settlement spot.
     if (
@@ -524,10 +534,16 @@ export async function executeCrShadowVirtualFill(args: {
             market,
             stake,
             duration: tickTypes.includes(contractType) ? Math.max(5, duration || 5) : duration,
+            duration_unit: durationUnit || 't',
             barrier: proposalBarrier,
             currency: currency || 'USD',
             basis: 'stake',
-            extras: selectedTick !== undefined ? { selected_tick: selectedTick } : undefined,
+            extras: {
+                ...(selectedTick !== undefined ? { selected_tick: selectedTick } : {}),
+                ...(barrier2 !== undefined && barrier2 !== null && `${barrier2}` !== ''
+                    ? { barrier2: String(barrier2) }
+                    : {}),
+            },
         })
     );
     if (proposalResp?.error) throw proposalResp.error;

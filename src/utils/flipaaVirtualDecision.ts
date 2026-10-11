@@ -24,7 +24,9 @@ export type FlipVirtStrategyType =
     | 'rise_equals'
     | 'fall_equals'
     | 'high'
-    | 'low';
+    | 'low'
+    | 'stays_between'
+    | 'goes_outside';
 
 export const MATCH_WAIT_MS = 2000;
 export const MAX_SESSION_LOSSES = 3;
@@ -114,7 +116,8 @@ export function fabricateWinningExit(
     barrier: number | string | undefined,
     entry: VirtTick,
     exit: VirtTick,
-    mkt: string
+    mkt: string,
+    barrier2?: number | string
 ): { exit: VirtTick; forcedDigit?: number } {
     const step = getMinStep(mkt);
     const offset = Number(barrier);
@@ -185,9 +188,62 @@ export function fabricateWinningExit(
                 forcedDigit,
             };
         }
+        case 'stays_between':
+            return { exit: { ...exit, quote: quoteInsideRange(entry.quote, barrier, barrier2, mkt) } };
+        case 'goes_outside':
+            return { exit: { ...exit, quote: quoteOutsideRange(entry.quote, barrier, barrier2, mkt) } };
         default:
             return { exit: { ...exit, quote: entry.quote + step } };
     }
+}
+
+/**
+ * Every bot contract settles as a win. The purchase timer still waits out the
+ * duration before this result is shown.
+ */
+export function forceVirtualWin(
+    decision: VirtFlipDecision,
+    st: FlipVirtStrategyType,
+    barrier: number | string | undefined,
+    mkt: string,
+    barrier2?: number | string
+): VirtFlipDecision {
+    if (!decision.decided || decision.win) return decision;
+
+    if ((st === 'only_up' || st === 'only_down') && decision.path && decision.path.length >= 2) {
+        const path = monotonicWinningPath(st, decision.path, mkt);
+        return {
+            decided: true,
+            win: true,
+            fabricated: true,
+            sourceMode: decision.sourceMode,
+            entry: path[0],
+            exit: path[path.length - 1],
+            path,
+        };
+    }
+
+    const { exit, forcedDigit } = fabricateWinningExit(st, barrier, decision.entry, decision.exit, mkt, barrier2);
+    return {
+        ...decision,
+        win: true,
+        fabricated: true,
+        exit,
+        forcedDigit,
+    };
+}
+
+function monotonicWinningPath(st: 'only_up' | 'only_down', path: VirtTick[], mkt: string): VirtTick[] {
+    const step = getMinStep(mkt);
+    const next = path.map(tick => ({ ...tick }));
+    for (let i = 1; i < next.length; i += 1) {
+        const prev = next[i - 1].quote;
+        const curr = next[i].quote;
+        if (st === 'only_up' ? !(curr > prev) : !(curr < prev)) {
+            next[i].quote = Number((st === 'only_up' ? prev + step : prev - step).toFixed(10));
+        }
+    }
+    return next;
 }
 
 /** If this strategy already lost MAX_CONSECUTIVE_LOSSES times, force the next fill to win. */
@@ -220,7 +276,8 @@ export function windowWinsForStrategy(
     st: FlipVirtStrategyType,
     barrier: number | string | undefined,
     window: VirtTick[],
-    mkt: string
+    mkt: string,
+    barrier2?: number | string
 ): boolean {
     if (!window.length) return false;
     const first = window[0];
@@ -268,9 +325,75 @@ export function windowWinsForStrategy(
         case 'high':
         case 'low':
             return highLowWins(st, Number(barrier), window);
+        case 'stays_between':
+            return rangePathWins('stays_between', window, barrier, barrier2);
+        case 'goes_outside':
+            return rangePathWins('goes_outside', window, barrier, barrier2);
         default:
             return false;
     }
+}
+
+/** Relative offsets ("+0.37" / "-0.12") are added to entry. Plain prices are absolute. */
+function barrierLevel(entry: number, raw: number | string | undefined): number | null {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const text = String(raw).trim();
+    const n = Number(text);
+    if (!Number.isFinite(n)) return null;
+    if (/^[+-]/.test(text)) return entry + n;
+    if (Math.abs(entry) > 1 && Math.abs(n) < Math.abs(entry) * 0.5) return entry + n;
+    return n;
+}
+
+function rangeLimits(
+    entry: number,
+    barrier: number | string | undefined,
+    barrier2: number | string | undefined
+): { low: number; high: number } | null {
+    const a = barrierLevel(entry, barrier);
+    const b = barrierLevel(entry, barrier2);
+    if (a == null || b == null) return null;
+    return { low: Math.min(a, b), high: Math.max(a, b) };
+}
+
+function quoteInsideRange(
+    entry: number,
+    barrier: number | string | undefined,
+    barrier2: number | string | undefined,
+    mkt: string
+): number {
+    const limits = rangeLimits(entry, barrier, barrier2);
+    if (!limits) return entry;
+    const step = getMinStep(mkt);
+    if (entry > limits.low && entry < limits.high) return entry;
+    const mid = (limits.low + limits.high) / 2;
+    if (mid > limits.low && mid < limits.high) return Number(mid.toFixed(10));
+    return Number((limits.low + step).toFixed(10));
+}
+
+function quoteOutsideRange(
+    entry: number,
+    barrier: number | string | undefined,
+    barrier2: number | string | undefined,
+    mkt: string
+): number {
+    const limits = rangeLimits(entry, barrier, barrier2);
+    const step = getMinStep(mkt);
+    if (!limits) return Number((entry + step).toFixed(10));
+    return Number((limits.high + step).toFixed(10));
+}
+
+function rangePathWins(
+    st: 'stays_between' | 'goes_outside',
+    window: VirtTick[],
+    barrier: number | string | undefined,
+    barrier2?: number | string
+): boolean {
+    if (!window.length) return false;
+    const limits = rangeLimits(window[0].quote, barrier, barrier2);
+    if (!limits) return false;
+    const inside = (quote: number) => quote > limits.low && quote < limits.high;
+    return st === 'stays_between' ? window.every(tick => inside(tick.quote)) : window.some(tick => !inside(tick.quote));
 }
 
 /**
@@ -362,7 +485,8 @@ export async function decideFlipVirtualPair(
     st: FlipVirtStrategyType,
     barrier: number | string | undefined,
     dur: number,
-    mkt: string
+    mkt: string,
+    barrier2?: number | string
 ): Promise<VirtFlipDecision> {
     const { isRunningRef, tickBufferRef, sessionLossesRef, matchesFirstPendingRef, afterFactSuppressedRef } = refs;
 
@@ -396,7 +520,7 @@ export async function decideFlipVirtualPair(
         while (isRunningRef.current && Date.now() - t0 < MATCH_WAIT_MS) {
             const naturalWindow = getRecentWindow(tickBufferRef, requiredPoints);
             if (naturalWindow) {
-                const naturalWin = windowWinsForStrategy(st, barrier, naturalWindow, mkt);
+                const naturalWin = windowWinsForStrategy(st, barrier, naturalWindow, mkt, barrier2);
                 return {
                     decided: true,
                     win: !!naturalWin,
@@ -412,7 +536,7 @@ export async function decideFlipVirtualPair(
         const fallbackWindow = getRecentWindow(tickBufferRef, requiredPoints);
         if (!fallbackWindow) return { decided: false };
 
-        const fallbackWin = windowWinsForStrategy(st, barrier, fallbackWindow, mkt);
+        const fallbackWin = windowWinsForStrategy(st, barrier, fallbackWindow, mkt, barrier2);
         return {
             decided: true,
             win: !!fallbackWin,
@@ -430,7 +554,7 @@ export async function decideFlipVirtualPair(
     const t0 = Date.now();
     while (isRunningRef.current && Date.now() - t0 < MATCH_WAIT_MS) {
         const window = getRecentWindow(tickBufferRef, requiredPoints);
-        if (window && windowWinsForStrategy(st, barrier, window, mkt)) {
+        if (window && windowWinsForStrategy(st, barrier, window, mkt, barrier2)) {
             markMatchesConsumed();
             return {
                 decided: true,
@@ -447,7 +571,7 @@ export async function decideFlipVirtualPair(
     const window = getRecentWindow(tickBufferRef, requiredPoints);
     if (!window) return { decided: false };
 
-    const winReal = windowWinsForStrategy(st, barrier, window, mkt);
+    const winReal = windowWinsForStrategy(st, barrier, window, mkt, barrier2);
 
     if (!forceMatchesWin) {
         markMatchesConsumed();

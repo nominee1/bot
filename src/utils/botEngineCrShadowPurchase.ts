@@ -196,6 +196,10 @@ function buildFallbackLongcode(
             return `Win payout if ${name} only goes up after ${ticks} ${tickWord}.`;
         case 'RUNLOW':
             return `Win payout if ${name} only goes down after ${ticks} ${tickWord}.`;
+        case 'RANGE':
+            return `Win payout if ${name} stays between the barriers after ${ticks} ${tickWord}.`;
+        case 'UPORDOWN':
+            return `Win payout if ${name} goes outside the barriers after ${ticks} ${tickWord}.`;
         case 'TICKHIGH':
             return `Win payout if tick number ${b} is the highest among the next ${Math.max(5, ticks)} ticks of ${name}.`;
         case 'TICKLOW':
@@ -205,13 +209,25 @@ function buildFallbackLongcode(
     }
 }
 
+/** Seconds until expiry for a clock-based contract. Tick durations stay on the tick counter. */
+function durationToExpirySeconds(duration: number, durationUnit: string | undefined): number | null {
+    const unit = String(durationUnit || 't').toLowerCase();
+    const count = Math.max(1, duration);
+    if (unit === 's' || unit === 'sec' || unit === 'second' || unit === 'seconds') return count;
+    if (unit === 'm' || unit === 'min' || unit === 'minute' || unit === 'minutes') return count * 60;
+    if (unit === 'h' || unit === 'hour' || unit === 'hours') return count * 3600;
+    if (unit === 'd' || unit === 'day' || unit === 'days') return count * 86400;
+    return null;
+}
+
 function buildContracts(
     fill: CrShadowVirtFillResult,
     contractType: string,
     symbol: string,
     currency: string,
     duration: number,
-    barrier?: number | string
+    barrier?: number | string,
+    durationUnit?: string
 ): Pick<BotEngineCrShadowPurchaseResult, 'buyResponse' | 'pendingContract' | 'openContract' | 'soldContract'> {
     const buyTx = nextVirtualBuyTransactionId();
     const sellTx = nextVirtualSellTransactionId(buyTx);
@@ -235,6 +251,8 @@ function buildContracts(
     }
     // Prefer proposal longcode so journal matches real demo buys (Bought: … (ID: …)).
     const longcode = fill.longcode || buildFallbackLongcode(contractType, symbol, duration, hlBarrier ?? barrier);
+    const isStaysInOut = contractType === 'RANGE' || contractType === 'UPORDOWN';
+    const expirySeconds = isStaysInOut ? durationToExpirySeconds(duration, durationUnit) : null;
     const buyResponse = {
         buy: {
             contract_id: fill.virtId,
@@ -256,11 +274,15 @@ function buildContracts(
         currency,
         buy_price: fill.ask,
         bid_price: fill.ask,
+        profit: 0,
         payout: fill.payout,
         shortcode,
         longcode,
         date_start: purchaseTime,
-        tick_count: Math.max(1, duration),
+        purchase_time: purchaseTime,
+        ...(expirySeconds != null
+            ? { date_expiry: purchaseTime + expirySeconds }
+            : { tick_count: Math.max(1, duration) }),
         barrier: hlBarrier ?? barrier ?? 0,
         is_sold: false,
         is_expired: false,
@@ -388,6 +410,8 @@ export async function executeBotEngineCrShadowPurchase(args: {
     const isHl = contractType === 'HIGHER' || contractType === 'LOWER';
     const barrierRaw = args.barrierOverride !== undefined ? args.barrierOverride : resolveBarrier(tradeOptions);
     const barrier = isHl ? (formatHlRelativeBarrier(barrierRaw) ?? barrierRaw) : barrierRaw;
+    const barrier2Raw = tradeOptions?.secondBarrierOffset;
+    const barrier2 = barrier2Raw === undefined || barrier2Raw === null || barrier2Raw === '' ? undefined : barrier2Raw;
     const currency = String(client.currency || 'USD');
 
     fillInFlightRef.current = true;
@@ -413,6 +437,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
             duration,
             durationUnit,
             barrier,
+            barrier2,
             currency,
             ensureApiReady: async () => {
                 if (!api_base.api) {
@@ -446,7 +471,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
             },
         });
 
-        const built = buildContracts(fill, contractType, symbol, currency, duration, barrier);
+        const built = buildContracts(fill, contractType, symbol, currency, duration, barrier, durationUnit);
         return {
             ...built,
             fill,

@@ -271,27 +271,60 @@ export default Engine =>
                     bumpTick();
                 };
 
-                // Immediate row: stake only, entry/exit/P&L skeleton (Deriv Bot style).
-                publish(shadow.pendingContract || shadow.openContract);
-
                 const ticks = Math.max(1, Number(this.tradeOptions?.duration) || 1);
                 const unit = String(this.tradeOptions?.duration_unit || 't').toLowerCase();
                 const msPerUnit = unit === 'm' || unit === 'min' ? 60_000 : unit === 's' ? 1000 : CR_SHADOW_MS_PER_TICK;
                 const entryRevealMs = msPerUnit; // entry after 1 tick
                 const settleMs = ticks * msPerUnit; // exit + P/L after full duration
+                const startedAt = Date.now();
+                const stake = Number(shadow.openContract?.buy_price) || 0;
+                const terminal = Number(shadow.soldContract?.sell_price);
+                const roundMoney = value => Math.round(Number(value) * 100) / 100;
+                let markClosed = false;
+
+                // Open contract: contract value walks from the stake to the close, once a second.
+                // P/L is that value minus the stake. The wallet credit still waits for settleSold.
+                const markedContract = () => {
+                    const elapsed = Date.now() - startedAt;
+                    const progress = Math.min(1, Math.max(0, elapsed / Math.max(1, settleMs)));
+                    const value = roundMoney(stake + (terminal - stake) * progress);
+                    const profit = roundMoney(value - stake);
+                    const revealed = elapsed >= entryRevealMs;
+                    const base = revealed ? shadow.openContract : shadow.pendingContract || shadow.openContract;
+                    return {
+                        ...base,
+                        bid_price: value,
+                        profit,
+                        is_sold: false,
+                        is_expired: false,
+                        status: 'open',
+                    };
+                };
+
+                const publishMark = () => {
+                    if (markClosed) return;
+                    publish(markedContract());
+                };
+
+                // Immediate row: stake, with P/L at 0 and contract value at the stake.
+                publishMark();
 
                 const settleEntry = {
                     entryTimer: null,
                     settleTimer: null,
+                    markTimer: null,
                     flush: null,
                 };
 
                 const clearPending = () => {
                     pendingShadowUiSettles.delete(settleEntry);
+                    markClosed = true;
                     if (settleEntry.entryTimer) clearTimeout(settleEntry.entryTimer);
                     if (settleEntry.settleTimer) clearTimeout(settleEntry.settleTimer);
+                    if (settleEntry.markTimer) clearInterval(settleEntry.markTimer);
                     settleEntry.entryTimer = null;
                     settleEntry.settleTimer = null;
+                    settleEntry.markTimer = null;
                     notifyPendingShadowUiSettlesClear();
                 };
 
@@ -317,6 +350,11 @@ export default Engine =>
                 settleEntry.flush = () => {
                     // Publish sold first — clearPending notifies Stop handlers that unregister
                     // bot.contract; doing clear first would drop the settle update.
+                    markClosed = true;
+                    if (settleEntry.markTimer) {
+                        clearInterval(settleEntry.markTimer);
+                        settleEntry.markTimer = null;
+                    }
                     try {
                         settleSold();
                     } finally {
@@ -324,6 +362,10 @@ export default Engine =>
                     }
                 };
                 pendingShadowUiSettles.add(settleEntry);
+
+                if (settleMs > 1000) {
+                    settleEntry.markTimer = window.setInterval(publishMark, 1000);
+                }
 
                 // After 1 tick: reveal entry (1-tick contracts also settle here).
                 // Always finish an already-purchased contract — even if the user hits Stop.
@@ -333,7 +375,7 @@ export default Engine =>
                             settleEntry.flush();
                             return;
                         }
-                        publish(shadow.openContract);
+                        publishMark();
                     } catch {
                         /* ignore reveal races */
                     }
