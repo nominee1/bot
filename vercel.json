@@ -20,7 +20,7 @@
         {
             "source": "/(.*)",
             "headers": [
-                { "key": "Access-Control-Allow-Origin", "value": "https://deriv-1-nominee1s-projects.vercel.app" },
+                { "key": "Access-Control-Allow-Origin", "value": "https://tradingsiteske.com" },
                 { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
                 { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" },
                 { "key": "Access-Control-Allow-Credentials", "value": "true" },

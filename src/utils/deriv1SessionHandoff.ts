@@ -35,7 +35,8 @@ export function getDeriv1AppOrigins(): string[] {
     const extra = readBuildEnv('DERIV1_APP_ORIGIN') || readBuildEnv('NEXT_PUBLIC_DERIV1_ORIGIN');
     const list = [
         extra,
-        'https://deriv-1-nominee1s-projects.vercel.app',
+        'https://tradingsiteske.com',
+        'https://www.tradingsiteske.com',
         'https://deriv-1.vercel.app',
         'http://localhost:3000',
         'https://localhost:3000',
