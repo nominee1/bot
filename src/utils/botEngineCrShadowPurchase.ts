@@ -21,6 +21,13 @@ import type { FlipVirtStrategyType } from '@/utils/flipaaVirtualDecision';
 type VirtTick = { epoch: number; quote: number };
 
 const tickBufferRef: { current: VirtTick[] } = { current: [] };
+
+/** Latest live quote for open-contract marks. Summary reads this once a second, not on every tick. */
+export function getCrShadowLatestQuote(): number | null {
+    const tick = tickBufferRef.current[tickBufferRef.current.length - 1];
+    const quote = Number(tick?.quote);
+    return Number.isFinite(quote) ? quote : null;
+}
 const tickEpochRef: { current: number | null } = { current: null };
 const tickMarketRef: { current: string } = { current: '' };
 const tickWsRef: { current: WebSocket | null } = { current: null };
@@ -197,9 +204,8 @@ function buildFallbackLongcode(
         case 'RUNLOW':
             return `Win payout if ${name} only goes down after ${ticks} ${tickWord}.`;
         case 'RANGE':
-            return `Win payout if ${name} stays between the barriers after ${ticks} ${tickWord}.`;
         case 'UPORDOWN':
-            return `Win payout if ${name} goes outside the barriers after ${ticks} ${tickWord}.`;
+            return rangeContractLongcode(contractType, symbol, ticks, 't', undefined, undefined);
         case 'TICKHIGH':
             return `Win payout if tick number ${b} is the highest among the next ${Math.max(5, ticks)} ticks of ${name}.`;
         case 'TICKLOW':
@@ -207,6 +213,52 @@ function buildFallbackLongcode(
         default:
             return `Win payout if ${name} meets ${contractType} conditions after ${ticks} ${tickWord}.`;
     }
+}
+
+function durationPhrase(duration: number, durationUnit: string | undefined): string {
+    const count = Math.max(1, Number(duration) || 1);
+    const unit = String(durationUnit || 't').toLowerCase();
+    if (unit === 's' || unit === 'sec' || unit === 'second' || unit === 'seconds') {
+        return `${count} ${count === 1 ? 'second' : 'seconds'}`;
+    }
+    if (unit === 'm' || unit === 'min' || unit === 'minute' || unit === 'minutes') {
+        return `${count} ${count === 1 ? 'minute' : 'minutes'}`;
+    }
+    if (unit === 'h' || unit === 'hour' || unit === 'hours') {
+        return `${count} ${count === 1 ? 'hour' : 'hours'}`;
+    }
+    if (unit === 'd' || unit === 'day' || unit === 'days') {
+        return `${count} ${count === 1 ? 'day' : 'days'}`;
+    }
+    return `${count} ${count === 1 ? 'tick' : 'ticks'}`;
+}
+
+/** Stable Stays Between / Goes Outside sentence. Clock contracts do not say "ticks". */
+function rangeContractLongcode(
+    contractType: string,
+    symbol: string,
+    duration: number,
+    durationUnit: string | undefined,
+    barrier?: number | string,
+    barrier2?: number | string,
+    proposal?: string
+): string {
+    const phrase = durationPhrase(duration, durationUnit);
+    const isTicks = /\bticks?\b/i.test(phrase);
+    const proposalText = proposal?.trim() || '';
+    if (proposalText && !(!isTicks && /\bticks?\b/i.test(proposalText))) return proposalText;
+    const name = symbolDisplayName(symbol);
+    const verb = contractType === 'UPORDOWN' ? 'goes outside' : 'stays between';
+    const hasLevels =
+        barrier !== undefined &&
+        barrier !== null &&
+        `${barrier}` !== '' &&
+        barrier2 !== undefined &&
+        barrier2 !== null &&
+        `${barrier2}` !== '';
+    const levels = hasLevels ? `${barrier} and ${barrier2}` : 'the barriers';
+    const when = isTicks ? `after ${phrase}` : `at ${phrase} after contract start time`;
+    return `Win payout if ${name} ${verb} ${levels} ${when}.`;
 }
 
 /** Seconds until expiry for a clock-based contract. Tick durations stay on the tick counter. */
@@ -227,7 +279,8 @@ function buildContracts(
     currency: string,
     duration: number,
     barrier?: number | string,
-    durationUnit?: string
+    durationUnit?: string,
+    barrier2?: number | string
 ): Pick<BotEngineCrShadowPurchaseResult, 'buyResponse' | 'pendingContract' | 'openContract' | 'soldContract'> {
     const buyTx = nextVirtualBuyTransactionId();
     const sellTx = nextVirtualSellTransactionId(buyTx);
@@ -250,7 +303,10 @@ function buildContracts(
         shortcode = fallbackShortcode;
     }
     // Prefer proposal longcode so journal matches real demo buys (Bought: … (ID: …)).
-    const longcode = fill.longcode || buildFallbackLongcode(contractType, symbol, duration, hlBarrier ?? barrier);
+    const longcode =
+        contractType === 'RANGE' || contractType === 'UPORDOWN'
+            ? rangeContractLongcode(contractType, symbol, duration, durationUnit, barrier, barrier2, fill.longcode)
+            : fill.longcode || buildFallbackLongcode(contractType, symbol, duration, hlBarrier ?? barrier);
     const isStaysInOut = contractType === 'RANGE' || contractType === 'UPORDOWN';
     const expirySeconds = isStaysInOut ? durationToExpirySeconds(duration, durationUnit) : null;
     const buyResponse = {
@@ -284,6 +340,7 @@ function buildContracts(
             ? { date_expiry: purchaseTime + expirySeconds }
             : { tick_count: Math.max(1, duration) }),
         barrier: hlBarrier ?? barrier ?? 0,
+        ...(barrier2 !== undefined && barrier2 !== null && `${barrier2}` !== '' ? { barrier2 } : {}),
         is_sold: false,
         is_expired: false,
         is_valid_to_sell: false,
@@ -471,7 +528,7 @@ export async function executeBotEngineCrShadowPurchase(args: {
             },
         });
 
-        const built = buildContracts(fill, contractType, symbol, currency, duration, barrier, durationUnit);
+        const built = buildContracts(fill, contractType, symbol, currency, duration, barrier, durationUnit, barrier2);
         return {
             ...built,
             fill,

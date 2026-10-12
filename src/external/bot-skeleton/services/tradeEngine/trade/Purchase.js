@@ -7,6 +7,7 @@ import { isBotEmbed } from '@/utils/bot-embed';
 import {
     beginCrShadowHedgeRound,
     executeBotEngineCrShadowPurchase,
+    getCrShadowLatestQuote,
     resolveCrShadowWalletLoginid,
     shouldUseCrShadowLiveFills,
 } from '@/utils/botEngineCrShadowPurchase';
@@ -278,16 +279,71 @@ export default Engine =>
                 const settleMs = ticks * msPerUnit; // exit + P/L after full duration
                 const startedAt = Date.now();
                 const stake = Number(shadow.openContract?.buy_price) || 0;
+                const payout = Number(shadow.openContract?.payout) || 0;
                 const terminal = Number(shadow.soldContract?.sell_price);
                 const roundMoney = value => Math.round(Number(value) * 100) / 100;
+                const contractType = String(shadow.openContract?.contract_type || '');
+                const isRangeContract = contractType === 'RANGE' || contractType === 'UPORDOWN';
                 let markClosed = false;
+                let smoothedValue = stake;
+                let lastPublishedKey = '';
 
-                // Open contract: contract value walks from the stake to the close, once a second.
-                // P/L is that value minus the stake. The wallet credit still waits for settleSold.
+                const barrierLevel = (entry, raw) => {
+                    if (raw === undefined || raw === null || raw === '') return null;
+                    const text = String(raw).trim();
+                    const n = Number(text);
+                    if (!Number.isFinite(n)) return null;
+                    if (/^[+-]/.test(text)) return entry + n;
+                    if (Math.abs(entry) > 1 && Math.abs(n) < Math.abs(entry) * 0.5) return entry + n;
+                    return n;
+                };
+
+                // Contract value from where the spot sits against the two barriers.
+                // Winning side moves toward the payout. Losing side can fall to 0 (P/L negative).
+                const rangeContractValue = spot => {
+                    const entry = Number(shadow.openContract?.entry_spot);
+                    if (!Number.isFinite(entry) || !Number.isFinite(spot)) return null;
+                    const lowHighA = barrierLevel(entry, shadow.openContract?.barrier);
+                    const lowHighB = barrierLevel(entry, shadow.openContract?.barrier2);
+                    if (lowHighA == null || lowHighB == null) return null;
+                    const low = Math.min(lowHighA, lowHighB);
+                    const high = Math.max(lowHighA, lowHighB);
+                    const width = Math.max(high - low, 1e-8);
+                    const inside = spot > low && spot < high;
+                    const winning = contractType === 'UPORDOWN' ? !inside : inside;
+                    if (winning) {
+                        const edge = inside
+                            ? Math.min(spot - low, high - spot)
+                            : spot >= high
+                              ? spot - high
+                              : low - spot;
+                        const comfort = Math.min(1, edge / (width * 0.2));
+                        return stake + (payout - stake) * comfort;
+                    }
+                    const depth = inside
+                        ? Math.min(spot - low, high - spot) / (width / 2)
+                        : Math.min(1, (spot >= high ? spot - high : low - spot) / (width * 0.2));
+                    return Math.max(0, stake * (1 - Math.min(1, depth)));
+                };
+
+                // Open contract: other types walk from the stake to the close once a second.
+                // Stays Between / Goes Outside follow the spot, smoothed so one tick cannot
+                // strobe the summary. P/L can go negative. The sold row is still the win.
                 const markedContract = () => {
                     const elapsed = Date.now() - startedAt;
                     const progress = Math.min(1, Math.max(0, elapsed / Math.max(1, settleMs)));
-                    const value = roundMoney(stake + (terminal - stake) * progress);
+                    let value = stake + (terminal - stake) * progress;
+                    if (isRangeContract) {
+                        const spot = getCrShadowLatestQuote();
+                        const fromSpot = rangeContractValue(spot);
+                        let target = fromSpot == null ? value : fromSpot;
+                        if (progress > 0.88) {
+                            target += (terminal - target) * ((progress - 0.88) / 0.12);
+                        }
+                        smoothedValue = smoothedValue * 0.62 + target * 0.38;
+                        value = smoothedValue;
+                    }
+                    value = roundMoney(value);
                     const profit = roundMoney(value - stake);
                     const revealed = elapsed >= entryRevealMs;
                     const base = revealed ? shadow.openContract : shadow.pendingContract || shadow.openContract;
@@ -303,7 +359,11 @@ export default Engine =>
 
                 const publishMark = () => {
                     if (markClosed) return;
-                    publish(markedContract());
+                    const next = markedContract();
+                    const key = `${next.profit}|${next.bid_price}`;
+                    if (key === lastPublishedKey) return;
+                    lastPublishedKey = key;
+                    publish(next);
                 };
 
                 // Immediate row: stake, with P/L at 0 and contract value at the stake.
