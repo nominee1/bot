@@ -213,7 +213,7 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                                 'acc-info__select-arrow--invert': is_dropdown_open,
                             })}
                         >
-                            <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='16' height='16'>
+                            <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='24' height='24'>
                                 <path d='M16.43 21.969a.66.66 0 0 1-.899 0l-7.5-7.5a.66.66 0 0 1 0-.899.66.66 0 0 1 .899 0L16 20.64l7.031-7.07a.66.66 0 0 1 .899 0 .66.66 0 0 1 0 .899z' />
                             </svg>
                         </div>

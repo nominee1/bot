@@ -136,9 +136,16 @@
     &__balance {
         @include typeface(--title-center-bold-green, default);
 
-        line-height: 2.4rem;
+        // Official bot.deriv.com keeps the header amount at 14px / 21px and
+        // inside the account-type row, so a large balance cannot widen it.
+        font-size: 1.4rem;
+        line-height: 2.1rem;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         pointer-events: none;
-        margin-right: 0.8rem;
+        margin-right: 0;
     }
 
     &__account-type-and-balance {
@@ -151,6 +158,7 @@
 
     &__select-arrow {
         pointer-events: none;
+        margin-inline-start: auto;
         transform: rotate(0);
         transform-origin: 50% 45%;
         transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -195,13 +203,18 @@
     &__content {
         display: flex;
         flex-direction: column;
+        align-items: flex-start;
         justify-content: center;
         margin-inline-start: 1rem;
+        max-width: 100%;
+        min-width: 0;
     }
 
     &__account-type-header {
         display: flex;
         align-items: center;
+        flex: 0 0 auto;
+        width: 100%;
         margin: 0 0 0.2rem;
     }
 
@@ -226,7 +239,12 @@
     &__balance-section {
         display: flex;
         align-items: center;
+        align-self: stretch;
+        box-sizing: border-box;
         min-height: 1.6rem;
+        min-width: 100%;
+        padding-inline-end: 2.4rem;
+        overflow: hidden;
     }
 
     &__balance-skeleton {
