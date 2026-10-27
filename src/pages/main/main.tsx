@@ -36,7 +36,6 @@ import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial = lazy(() => import('../tutorials'));
-const FreeBots = lazy(() => import('../aaabots'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -69,7 +68,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'free_bots', 'chart', 'tutorial'];
+    const hash = ['dashboard', 'bot_builder', 'chart', 'tutorial'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -343,27 +342,6 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-bot-builder'
                             />
-                            <div
-                                label={
-                                    <>
-                                        <span aria-hidden='true' style={{ fontSize: 18, lineHeight: 1 }}>
-                                            🎲
-                                        </span>
-                                        <Localize i18n_default_text='Free bots' />
-                                    </>
-                                }
-                                id='id-free-bots'
-                            >
-                                <div className='tutorials-wrapper tutorials-wrapper--free-bots'>
-                                    <Suspense
-                                        fallback={
-                                            <ChunkLoader message={localize('Please wait, loading Free bots...')} />
-                                        }
-                                    >
-                                        <FreeBots />
-                                    </Suspense>
-                                </div>
-                            </div>
                             <div
                                 label={
                                     <>
