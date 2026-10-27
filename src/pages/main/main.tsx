@@ -36,6 +36,7 @@ import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial = lazy(() => import('../tutorials'));
+const FreeBots = lazy(() => import('../aaabots'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -68,7 +69,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'tutorial'];
+    const hash = ['dashboard', 'bot_builder', 'free_bots', 'chart', 'tutorial'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -116,15 +117,37 @@ const AppWrapper = observer(() => {
     }, []);
 
     React.useEffect(() => {
-        if (connectionStatus !== CONNECTION_STATUS.OPENED) {
-            const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
-            if (is_bot_running) {
-                clear();
-                stopBot();
-                api_base.setIsRunning(false);
-                setWebSocketState(false);
-            }
+        // Match Denarabot: stay running while api_base reconnects. Only stop after a long outage.
+        if (connectionStatus === CONNECTION_STATUS.OPENED) {
+            setWebSocketState(true);
+            return undefined;
         }
+
+        if (connectionStatus !== CONNECTION_STATUS.CLOSED) {
+            return undefined;
+        }
+
+        const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
+        if (!is_bot_running) {
+            return undefined;
+        }
+
+        const reconnect_grace_ms = 60_000;
+        const stop_timer = window.setTimeout(() => {
+            if (document.getElementById('db-animation__stop-button') === null) {
+                return;
+            }
+            if (api_base.api?.connection?.readyState === 1) {
+                setWebSocketState(true);
+                return;
+            }
+            clear();
+            stopBot();
+            api_base.setIsRunning(false);
+            setWebSocketState(false);
+        }, reconnect_grace_ms);
+
+        return () => window.clearTimeout(stop_timer);
     }, [clear, connectionStatus, setWebSocketState, stopBot]);
 
     // Update tab shadows height to match bot builder height
@@ -320,6 +343,27 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-bot-builder'
                             />
+                            <div
+                                label={
+                                    <>
+                                        <span aria-hidden='true' style={{ fontSize: 18, lineHeight: 1 }}>
+                                            🎲
+                                        </span>
+                                        <Localize i18n_default_text='Free bots' />
+                                    </>
+                                }
+                                id='id-free-bots'
+                            >
+                                <div className='tutorials-wrapper tutorials-wrapper--free-bots'>
+                                    <Suspense
+                                        fallback={
+                                            <ChunkLoader message={localize('Please wait, loading Free bots...')} />
+                                        }
+                                    >
+                                        <FreeBots />
+                                    </Suspense>
+                                </div>
+                            </div>
                             <div
                                 label={
                                     <>
